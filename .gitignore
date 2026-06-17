@@ -1,0 +1,10 @@
+build/
+.build/
+cmake-build-*/
+
+.cursor/
+.idea/
+.vscode/
+
+*.user
+*.autosave

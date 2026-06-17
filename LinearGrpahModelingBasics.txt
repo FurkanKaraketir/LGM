@@ -1,0 +1,4160 @@
+MASSACHUSETTS INSTITUTE OF TECHNOLOGY
+DEPARTMENT OF MECHANICAL ENGINEERING
+
+2.151 Advanced System Dynamics and Control
+
+Linear Graph Modeling: State Equation Formulation1
+1
+
+State Variable System Representation
+
+Linear graph system models provide a graphical representation of a system model and the interconnection of its elements. A set of differential and algebraic equations which completely define
+the system may be derived directly from the linear graph model. In this handout we develop a
+procedure for deriving a specific set of differential equations, known as the state equations, from the
+system linear graph. These equations are expressed in terms of a set of state variables and provide
+a basis for determining the system response to external inputs.
+
+1.1
+
+State Equation Based Modeling Procedure
+
+The complete system model for a linear time-invariant system consists of (i) a set of n state
+equations, defined in terms of the matrices A and B, and (ii) a set of output equations that relate
+any output variables of interest to the state variables and inputs, and expressed in terms of the C
+and D matrices. The task of modeling the system is to derive the elements of the matrices, and to
+write the system model in the form:
+ẋ = Ax + Bu
+
+(1)
+
+y = Cx + Du.
+
+(2)
+
+The matrices A and B are properties of the system and are determined by the system structure
+and elements. The output equation matrices C and D are determined by the particular choice of
+output variables.
+The overall modeling procedure developed in this chapter is based on the following steps:
+1. Determination of the system order n and selection of a set of state variables from the linear
+graph system representation.
+2. Generation of a set of state equations and the system A and B matrices using a well defined
+methodology. This step is also based on the linear graph system description.
+3. Determination of a suitable set of output equations and derivation of the appropriate C and
+D matrices.
+
+2
+
+Linear Graphs and System Structural Properties
+
+2.1
+
+Linear Graph Properties
+
+The derivation of the state equations in this chapter is based on the use of the system linear graph
+model. A linear graph with B branches represents B system elements, each with a known elemental
+1
+
+D. Rowell - Revised: 9/16/04
+
+1
+
+(a)
+
+(b)
+
+Figure 1: Examples of (a) a connected system graph, and (b) an unconnected system graph.
+equation or source function. The graph also represents the structure of the element interconnections,
+in terms of the continuity and compatibility constraint equations. In the following sections we use
+the properties of linear graphs to (i) derive the system structural constraints, (ii) define the set
+of state variables, and (iii) provide a systematic technique for deriving the system state equations
+[4–8]. The following definitions are introduced:
+System Graph: The oriented linear graph model of a system.
+Connected Graph A system graph in which a path exists between all pairs of nodes. A path is
+said to exist if the node pair is joined by a series of branches.
+Figure 1 shows a connected graph along with a system graph which is not connected. System
+graphs for systems consisting of one-port elements are usually connected graphs, while systems
+that the include two-port elements introduced in a separate handout may not generate connected
+graphs. In this chapter we assume that all system graphs are connected graphs.
+Consider a system represented by a connected linear graph with B branches of which S are
+active source elements and the remaining B − S branches represent passive one-port elements.
+Each branch has an across-variable and a through-variable, giving a total of 2B variables within
+the system. Of these S are prescribed source variables, so that there are 2B − S unknowns in the
+system; we therefore require a total of 2B − S independent equations in these unknowns in order
+determine all system variables.
+There are B − S elemental equations relating the across and through-variables for the passive
+branches. In addition the system structure, defined by the compatibility and continuity conditions,
+may be used to generate an additional B linearly independent constraint equations. The total set
+of 2B − S elemental and structural equations may be algebraically manipulated to produce the
+state and output equations. The following example illustrates these relationships for an electrical
+system model:
+
+Example
+The electrical system shown in Fig. 2 consists of a capacitor C, inductor L, and a resistor
+R connected as shown and driven by a voltage source Vs (t). Its linear graph contains
+four branches each of which has an across-variable and a through-variable, giving a total
+of eight system variables of which seven (iC , vC , iL , vL , iR , vR , and is ) are unknown.
+Each of the three passive elements is described by an elemental equation:
+dvC
+dt
+
+=
+2
+
+1
+iC
+C
+
+(3)
+
+R
+
+R
+
++
+Vs (t)
+
+C
+
+L
+
+C
+
+-
+
+Vs (t)
+
+L
+
+Figure 2: An electrical system and its linear graph
+diL
+dt
+
+1
+vL
+L
+1
+vR
+R
+
+=
+
+iR =
+
+(4)
+(5)
+
+giving three equations in six unknowns. The system structure defined by the linear
+graph imposes additional constraints; the three variables on the right-hand side may be
+eliminated by using (i) a continuity equation
+iC = iR − iL
+
+(6)
+
+to define iC , and (ii) two compatibility equations
+vL = vC
+
+(7)
+
+vR = Vs − vC
+
+(8)
+
+to define vL and vR . Substitution of Eqs. (iv) through (vi) into Eqns. (i) through (iii)
+and some algebraic manipulation, produces a pair of coupled differential equations:
+dvC
+dt
+diL
+dt
+
+= −
+=
+
+1
+1
+1
+vC + iL +
+Vs
+RC
+C
+RC
+
+(9)
+
+1
+vC
+L
+
+(10)
+
+which are a pair of coupled first-order differential equations in the form of Eqs. (??).
+These are a set of two state equations for this system in terms of state variables vC and
+iL . Eqs. (vii) and (viii) allow the system A and B matrices to be written:
+"
+
+A=
+
+−1/RC −1/C
+1/L
+0
+
+#
+
+"
+
+,
+
+B=
+
+1/RC
+0
+
+#
+
+.
+
+(11)
+
+Equations (i) through (vi) may be used to generate output equations in the form of
+Eqs. (??). For example, if the variables iR , vR , vL , and iC are of interest:
+1
+1
+iR = − vC + Vs
+R
+R
+vR = −vC + Vs
+vL = vC
+1
+1
+iC = − vC − iL + Vs
+R
+R
+3
+
+(12)
+(13)
+(14)
+(15)
+
+Figure 3: A system graph with four nodes and five branches, and several trees derived from the
+graph.
+so that if the output vector is defined to be y = [iR , vR , vL , iC ]T , the C and D matrices
+are:
+
+
+
+
+−1/R 0
+1/R
+ −1
+ 1 
+0 
+
+
+
+
+C=
+D=
+(16)
+,
+.
+
+ 0 
+1
+0 
+−1/R −1
+1/R
+
+2.2
+
+Graph Trees
+
+The procedure for generating the system equations is based on relationships defined by a graph
+tree. A tree is defined to be a subgraph of the system graph which contains:
+(1) all of the graph nodes, and
+(2) the maximum number of branches of the system graph that be included without creating any
+closed loops.
+Branches of the system graph that are not included in a tree are known as links. In general several
+different graph trees may be formed from any linear graph, as shown in Fig. 3. The number of
+branches in a tree BT , and the number of tree links BL , depends on the number of nodes N and
+the number of branches B in the graph. For a connected graph, the first branch entered into a
+tree connects two nodes, while all of the subsequent branches connect one additional node until the
+maximum number (N − 1) of branches is entered without forming any closed loops. The number
+of tree links is simply the total number of branches less those in the graph tree:
+BT
+
+= N −1
+
+BL = B − BT = B − N + 1
+Each tree link is a system graph branch that forms a closed loop when added to a graph tree.
+4
+
+(17)
+(18)
+
+4
+
+2
+
+5
+3
+1
+
+Contours used to
+generate continuity
+equations
+
+6
+
+Figure 4: A system graph tree, with the links shown as dotted lines, and a set of contours used to
+generate continuity equations.
+
+2.3
+
+System Graph Structural Constraints
+
+A graph tree may be used to generate a set of B linearly independent compatibility and continuity
+equations that are particularly useful in system equation development. We define the following
+classes of variables based on a given tree:
+Primary variables: The system primary variables are the across-variables on tree branches, and
+the through-variables on the tree links.
+Secondary variables: Conversely, the secondary variables are the through-variables on the tree
+branches, and the across-variables on tree links.
+The compatibility constraint equations relate across-variables around any closed loop in the system
+graph. Consider the tree of a linear graph with N = 5 and B = 6 shown in Fig. 4. There are
+N − 1 = 4 branches and B − N + 1 = 2 links in any tree of this graph. Each time a link is placed
+in the tree a closed loop is formed, and a compatibility equation may be written for the loop. For
+the tree shown in Fig. 4 the two compatibility equations generated by replacing the links are:
+v2 = v1 − v3
+v4 = v3 − v5 − v6 .
+In this tree structure v2 and v4 are secondary variables; each of the above compatibility equation
+specifies one of these secondary variables in terms of the primary across-variables. In general, each
+time a loop is formed by placing a link in a tree, the across-variable on that link may be written
+in terms of the across-variables on the tree branches; in other words the resulting compatibility
+equation contains only one secondary variable.
+The continuity equations represent a set of constraints on through-variables passing through
+any closed contour on the graph. If a closed contour is drawn on a tree such that it cuts only one
+tree branch, then the through-variable on that branch (a secondary variable), may be expressed
+in terms of the through-variables on tree links, which are primary variables. In Fig. 4 a set of
+four contours has been drawn so that each cuts a single tree branch. For the contours shown the
+following continuity equations may be written:
+f1 = −f2
+f3 = f2 − f4
+f5 = f4
+f6 = f4 .
+
+5
+
+System Linear Graph:
+B branches
+N nodes
+
+N-1 tree
+BRANCHES
+
+N-1 primary
+across-variables
+
+B-N-1 tree
+LINKS
+
+N-1 secondary
+through-variables
+
+B-N+1 primary
+through-variables
+
+B-N+1 secondary
+across-variables
+
+Totals: B primary variables
+B secondary variables
+
+Figure 5: System graph variables.
+The secondary through-variables on the tree branches f1 , f3 , f5 , and f6 are expressed directly in
+terms of the through-variables on the links (f2 and f4 ). This particular set of contours has generated
+a set of continuity equations that express the secondary through-variables in terms of the primary
+through-variables.
+In summary, each of the B−N +1 tree links generates a compatibility equation involving a single
+secondary across-variable, and each of the N − 1 tree branches generates a continuity equation that
+expresses its secondary through-variable in terms of the link primary through-variables. The tree
+therefore generates a set of B constraint equations that can be used in the equation formulation
+method to eliminate secondary variables from elemental equations. Figure 5 shows the division of
+the system variables into primary and secondary variables using a graph tree.
+
+2.4
+
+The System Normal Tree
+
+We may form a special graph tree, known as a normal tree, and use it to define (i) the system
+primary and secondary variables, (ii) the system order n, (iii) the state variables, and (iv) a set of
+independent compatibility and continuity equations. A normal tree for a connected system graph
+is formed by the following steps:
+Step 1: Draw the system graph nodes.
+Step 2: Include all across-variable sources as tree branches. (If all across-variable sources cannot be included in the normal tree, then the across-variable sources must form a loop and
+compatibility is violated.)
+Step 3: Include as many as possible of the A-type energy storage elements as tree branches. (Any
+6
+
+A-type element which cannot be included in the normal tree is a dependent energy storage
+element as described below.)
+Step 4: Attempt to complete the tree, which must contain N − 1 branches, by including as many
+as possible D-type dissipative elements in the tree. It may not be possible to include all
+D-type elements.
+Step 5: If the tree is not complete after the addition of D-type elements, add the minimum number of T-type energy storage elements required to complete the tree. (Any T-type element
+included in the tree at this point is a dependent energy storage element.)
+Step 6: Examine the tree to determine if any through-variable sources are required to complete
+the tree. If any through-variable source can be inserted into the normal tree, then that source
+cannot be independently specified and continuity is violated.
+The normal tree effectively defines a set of independent energy storage elements, that is the set
+of elements whose stored energy may be independently set and controlled. If in step (3) above,
+an A-type element cannot be included in a normal tree it implies that a loop has been formed
+from a combination of across-variable sources and A-type elements. The compatibility equation
+for that loop specifies that the across-variable on the A-type element link is dependent on that
+of across-variables on other A-type elements and sources. This is illustrated in Fig. 6a, where an
+electrical system and a normal tree are shown. It is not possible to include both capacitors in the
+normal tree; if capacitor C2 is placed in the tree the resulting compatibility equation is:
+vC2 = Vs − vC1 .
+The energy storage variables (voltage) on the two capacitors are therefore linearly dependent. In
+this case either C1 or C2 , but not both can be included in the normal tree.
+Similarly, in step (5) any T-type element that is a branch of a normal tree is a dependent
+energy storage element. When the tree is complete the resulting continuity equation generated by
+a contour cutting this branch expresses its through-variable in terms of link primary variables. The
+continuity equation for that branch therefore specifies a linear dependence between its throughvariable and other T-type or source through-variables. This is illustrated for a mechanical system
+in Fig. 6b where a spring K is used to transmit energy between a force source Fs (t) and a mass m.
+The spring can be inserted into the normal tree. Continuity applied to the spring element requires
+that:
+fk = Fs (t),
+or in other words the energy stored in the spring is defined entirely by the force source Fs (t). The
+spring K is a dependent energy storage element.
+Dependent energy storage elements do not generate independent state equations. From the
+normal tree we make the following definitions:
+(a) The system primary variables are the across-variables on the normal tree branches and the
+through-variables on its links.
+(b) The system secondary variables are the through-variables on the normal tree branches and the
+across-variables on its links.
+(c) The system order is the number of independent energy storage elements in the system, that
+is the sum of the number of A-type elements in the normal tree branches and the number of
+T-type elements among the links.
+7
+
+vm(t)
+
+C2
+Vs (t)
+
+linear graph
+
+Vs (t)
+
+-
+
+Fs(t)
+
+m
+
+C1
+
+C2
+
+linear graph
+
+K
+
+B
+
+C1
+
+Fs(t)
+
+R
+
+normal tree
+
+Vs (t)
+
+B
+
+K
+
++
+
+normal tree
+
+m
+
+K
+
+C1
+m
+
+Figure 6: Two systems with dependent energy storage elements and their normal trees; (a) an
+electrical system with dependent capacitors, and (b) a mechanical system with a dependent spring.
+(d) The n state variables are selected as the energy storage variables among the primary variables,
+that is the across-variables on A-type elements in the normal tree branches, and the throughvariables on T-type elements in the links.
+Figure 7 shows two systems along with their system graphs and normal trees. The mechanical
+system in Fig. 7a has four energy storage elements, the normal tree indicates that they are all
+independent, and the system order is four. The normal tree defines the state variables to be the
+velocities (vm1 and vm2 ) of the two mass elements, and the forces (fK1 and fK2 ) on the two springs.
+The electrical system in Fig. 7b contains five energy storage elements, but the normal tree indicates
+that capacitors C2 and C3 are dependent. The order of this system is four, and the state variables
+for the normal tree shown are vC1 , vC2 , iL1 , and iL2 .
+2.4.1
+
+Special Cases in which the Procedure Results in “Excess” State Variables
+
+Two special cases in which the procedure outlined above 2 results in a formulation in which the
+number of state variables exceeds the number of independent energy storage elements are:
+(1) Systems which contain two or more A-type elements in direct series connection.
+(2) Systems which contain two or more T-type elements in direct parallel connection.
+Illustration of these two special cases is provided in Fig. 8. In the two cases the number of state
+2
+
+In these special cases, the procedure results in a state variable formulation which is uncontrollable, that is the
+across-variables on each of the direct series A-type elements and the through-variable on each of the direct parallel
+T-type elements may not be independently specified and controlled [2,3].
+
+8
+
+Fs(t)
+
+v
+2
+
+m2
+R1
+
+B2
+K2
+
+Vs(t)
+
+Linear graph
+R1
+
+B2
+
+B1
+
+Normal tree
+
+C2
+
+C3
+
+L1
+
+R2
+
+L2
+
+K1
+
+K2
+
+m1
+
+C1
+
+-
+
+Linear graph
+
+K1
+
+R2
+
++
+
+v1
+
+m1
+B1
+
+L1
+
+m2
+
+C1
+
+Fs(t)
+
+C2
+
+C3
+
+L2
+
+Vs(t)
+
+B2
+
+R2
+
+Normal tree
+
+C1
+
+m2
+
+C2
+
+Vs (t)
+
+m1
+
+Figure 7: Two systems with their linear graphs and normal trees.
+
+9
+
+Fs (t)
+
+v
+
+R1
+
+K1
+
+C1
+
++
+
+m
+
+Vs (t)
+
+B
+
+-
+
+K2
+
+Linear graph
+
+Linear graph
+
+R2
+
+C2
+
+R1
+C1
+
+Fs (t)
+
+B
+m
+
+K1 K 2
+
+V (t)
+s
+
+Normal tree
+
+2
+
+C2
+
+Normal tree
+C1
+Vs(t)
+
+m
+
+C2
+
+Figure 8: Examples of two systems with “excess” state variables.
+
+10
+
+variables identified by forming a normal tree exceeds the number of independent energy storage
+elements. The difficulty represented by the two special cases described may be avoided by combining
+all A-type energy storage elements directly in series into a single equivalent A-type element, and all
+T-type elements directly in parallel into a single equivalent element. The general expressions for the
+equivalent elements are indicated in Fig. 9. When the elements are combined and the equivalent
+system linear graph is used to generate the normal tree, the number of state variables in the
+combined system is equal to the number of independent energy storage elements in the combined
+system. Since controllable representations of systems are desired, all A-type elements directly in
+series and all T-type elements directly in parallel should be combined before determining the system
+normal tree.
+
+3
+
+State Equation Formulation
+
+The system normal tree may be used to generate a set of state equations in terms of the energy
+storage variables on the n independent energy storage elements. In a system graph with B branches,
+of which S represent ideal source elements, there are 2(B − S) system variables associated with
+the passive branches; one across and one through-variable on each branch. On each branch one of
+these variables is a primary variable while the other is a secondary variable. The desired n state
+variables are a subset of the B − S primary variables. There are (B − S) elemental equations
+relating these primary and secondary variables for the passive branches; the normal tree is used to
+generate B − S continuity and compatibility equations that can be used to eliminate the secondary
+variables associated with the passive elements.
+The state equations are formulated in two steps:
+(1) Derivation of a set of B − S differential and algebraic equations in terms of primary variables
+only by starting with the passive elemental equations, and using B − S compatibility and
+continuity equations to eliminate all secondary variables.
+(2) Algebraic manipulation of this set of B − S equations to produce n differential equations in
+the n state variables and the S specified source variables.
+Since sources have one variable independently specified, only B − S elemental equations for the
+passive elements need to be written. It is convenient to divide the number of sources S into acrossvariable sources SA and through-variable sources ST , so that S = SA +ST . The secondary variables
+may be eliminated from these equations by using a total of B − S independent compatibility and
+continuity equations formed from (i) N − 1 − SA continuity equations, and (ii) B − N + 1 − ST
+compatibility equations. (The secondary variables associated with sources do not enter directly
+into the state equation formulation, therefore SA continuity and ST compatibility equations do not
+need to be considered.)
+A systematic procedure for deriving the n state equations is given below:
+Step 1: Generate a normal tree from the connected system graph.
+Step 2: From the branches and links of the normal tree identify the primary and secondary variables. Define the system order n as the number of independent energy storage elements.
+Select the state variables as across-variables on A-type energy storage elements in the normal
+tree branches, and through-variables on T-type energy storage elements in the links.
+Step 3: Write the B − S elemental equations for the passive (non-source) elements explicitly in
+terms of their primary variables, that is with the primary variable on the left-hand side of the
+11
+
+equations. Note that the derivatives of the n state variables should appear on the left-hand
+side of the elemental equations for all independent energy storage elements.
+Step 4: Write N − 1 − SA independent continuity equations involving only one secondary throughvariable (a tree branch through-variable) by applying the continuity condition to a set of
+N − 1 − SA contours that each “cut” only one passive branch of the normal tree. Express
+each equation explicitly in terms of the secondary through-variable.
+Step 5: Write B − N + 1 − ST independent compatibility equations involving only one secondary
+across-variable (a tree link across-variable) by placing each of the passive links back in the
+tree to form a loop and writing the resulting compatibility equation. Express each equation
+explicitly in terms of the secondary across variable.
+Step 6: Use the N − 1 − SA continuity and the B − N + 1 − ST compatibility equations (a total
+of B − S equations) to eliminate all secondary variables from the B − S elemental equations
+by direct substitution.
+Step 7: Reduce the resulting B − S equations in the primary variables to n state equations in the
+n state variables and the S source variables.
+Step 8: Write the resulting state equations in the standard form.
+The application of this procedure is illustrated in the examples that follow, which show that after
+the normal tree is formed the subsequent steps in the procedure may be completed in a straight
+forward manner.
+
+Example
+A set of state equations describing the mechanical system shown in Fig. 10 may be
+derived directly from the system graph. The system graph has three branches (B = 3),
+two nodes (N = 2), and a single force source (S = 1). The normal tree therefore
+contains N − 1 = 1 branch. The rules for constructing the tree specify that the branch
+should contain the mass element m. The spring element K and the source element F
+therefore form the tree links. From the normal tree in Fig. 10c:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Fs (t),
+vs ,
+2
+vm ,
+
+vm ,
+Fm ,
+
+FK
+vK
+
+FK
+
+1. The B−S = 2 elemental equations may be written in terms of the primary variables
+as:
+
+
+
+
+dv
+1
+
+
+m
+
+
+
+=
+Fm 
+dt
+m
+primary variables
+secondary variables
+(19)
+
+
+dF
+
+
+K
+
+
+
+= KvK 
+dt
+2. The single continuity equation (N − 1 − SA = 2 − 1 − 0 = 1) required to eliminate
+Fm may be written using the closed contour shown on Fig. 10c:
+Fm = Fs − FK .
+12
+
+(20)
+
+3. The single compatibility equation (B − N + 1 − ST = 3 − 2 + 1 − 1 = 1) required to
+eliminate the secondary variable vK may be found by placing the spring element
+in the normal tree, Fig. 10c, and writing the loop equation:
+vK = vm .
+
+(21)
+
+4. The secondary variables Fm and vK may be eliminated by substituting Eqs. (ii)
+and (iii) into the the elemental equations to yield:
+dvm
+dt
+dFK
+dt
+
+1
+(Fs − FK )
+m
+
+=
+
+= kvm
+
+(22)
+
+Equations (iv) express the derivatives of the state variables directly in terms of the
+state variables and the input. They are the desired pair of state equations.
+5. The pair of state equations may be written in the standard matrix notation as:
+"
+
+v˙m
+F˙K
+
+#
+
+"
+
+=
+
+#"
+
+0 −1/m
+K
+0
+
+vm
+FK
+
+#
+
+"
+
++
+
+1/m
+0
+
+#
+
+Fs .
+
+(23)
+
+If the output variable of interest is the velocity of the mass, then an output equation
+may be written in matrix form:
+h
+
+y=
+
+i
+
+"
+
+1 0
+
+vm
+FK
+
+#
+
++ [0] Fs
+
+(24)
+
+Example
+A mechanical system and its oriented linear graph are shown in Fig. 11. In the graph two
+T-type energy storage elements are connected directly in parallel; therefore to eliminate
+the generation of an excess state variable, the two spring elements are combined into one
+equivalent spring with an effective spring constant K = K1 + K2 . The equivalent linear
+graph is shown in Fig. 11b, with the system normal tree in Fig. 11c with N − 1 = 1
+branch containing the mass m. From the normal tree:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Fs (t),
+vs ,
+2
+vm ,
+
+vm ,
+Fm ,
+
+FK ,
+vK ,
+
+FB
+vB
+
+FK
+
+1. The B − S = 3 elemental equations written in terms of the primary variables are:
+
+
+dvm
+
+
+
+
+
+dt
+
+
+
+primary variables
+
+
+
+
+
+
+
+
+
+
+dFK
+dt
+
+
+
+=
+
+
+1
+
+Fm 
+
+
+
+m
+
+
+
+= KvK  secondary variables
+
+
+FB = BvB
+13
+
+
+
+
+
+
+
+
+(25)
+
+2. The single (N −1−SA = 1) continuity equation required to eliminate the secondary
+through variable, Fm , is found by drawing a closed contour that cuts the mass tree
+branch as shown in Fig. 11:
+Fm = Fs − FB − FK
+
+(26)
+
+3. The B−N +1−ST = 2 compatibility equations required to eliminate the secondary
+variables vK and vB are written by considering the loops formed by adding the
+two links back into the tree shown in Fig. 11c:
+vK = vm
+
+(27)
+
+vB = vm
+
+(28)
+
+4. All secondary variables may be eliminated from the elemental equations by direct
+substitution of the three continuity and compatibility equations to yield:
+1
+dvm
+=
+(Fs − FB − FK )
+dt
+m
+dFK
+= Kvm
+dt
+FB = Bvm
+
+(29)
+(30)
+(31)
+
+5. These B − S = 3 equations in terms of primary variables may be combined to give
+the two desired state equations:
+dvm
+dt
+dFK
+dt
+
+=
+
+1
+(−Bvm − FK + Fs )
+m
+
+(32)
+
+= Kvm
+
+(33)
+(34)
+
+6. Finally the pair of state equations may be written in the standard matrix form:
+"
+
+v˙m
+F˙K
+
+#
+
+"
+
+=
+
+−B/m −1/m
+K
+0
+
+#"
+
+vm
+FK
+
+#
+
+"
+
++
+
+1/m
+0
+
+#
+
+Fs (t)
+
+(35)
+
+Example
+A mechanical rotational system has the linear graph shown in Fig. 12b. The linear
+graph contains four elements (B = 4) and three nodes (N = 3). The normal tree,
+shown in Fig. 12c, contains the angular velocity source and the rotary inertia. From
+the normal tree:
+Primary variables:
+Secondary variables:
+System order:
+State variable:
+
+Ωs (t),
+Ts ,
+1
+ΩJ
+
+ΩJ ,
+TJ ,
+
+TB1 ,
+ΩB1 ,
+
+14
+
+TB2
+ΩB2
+
+1. The B − S = 4 − 1 = 3 elemental equations written in terms of the primary
+variables are:
+
+
+dΩJ
+
+
+
+
+
+dt
+
+
+
+primary variables
+
+TB1
+
+
+
+
+
+
+
+ TB
+2
+
+=
+
+1
+TJ
+J
+
+
+
+
+
+
+
+
+
+
+
+= B1 ΩB1  secondary variables
+= B2 ΩB2
+
+
+
+
+
+
+
+
+
+(36)
+
+2. The secondary variable TJ may be eliminated by the single (N − 1 − SA = 1)
+continuity equation found from the closed contour shown in Fig. 12c:
+TJ = TB2 − TB1 .
+
+(37)
+
+3. The two secondary variables ΩB1 and ΩB2 may be eliminated from the B − N +
+1 − ST = 2 compatibility equations formed by placing the two links in the normal
+tree:
+ΩB1
+
+= Ωs − ΩJ
+
+ΩB2
+
+= ΩJ .
+
+(38)
+
+4. The secondary variables may be eliminated from the elemental equations (i) using
+(ii) and (iii):
+dΩJ
+dt
+TB1
+
+1
+(TB2 − TB1 )
+J
+= B1 ΩJ .
+
+TB2
+
+= B2 (Ωs − ΩJ )
+
+=
+
+(39)
+
+5. By combining the elemental equations in (iv) to eliminate TB1 and TB2 , the single
+state equation may be written:
+dΩJ
+1
+= [− (B1 + B2 ) ΩJ + B2 Ωs ]
+dt
+J
+
+(40)
+
+6. The state equation may be expressed in matrix form as:
+h
+
+i
+
+·
+
+Ω̇J = −
+
+¸
+
+·
+
+¸
+
+(B1 + B2 )
+B2
+[ΩJ ] +
+[ΩS ] .
+J
+J
+
+(41)
+
+7. If the flywheel angular velocity ΩJ is selected as the output variable, the output
+equation in matrix form is:
+ΩJ = [1] [ΩJ ] + [0] [ΩS ] .
+
+15
+
+(42)
+
+Example
+An electrical circuit is shown in Fig. 13a together with its oriented linear graph model
+in Fig. 13b. For the model the number of nodes and branches are N = 4 and B = 4.
+The normal tree, shown in Fig. 13c, has N − 1 = 3 branches which include, the voltage
+source Vs , the capacitor C and the resistor R. The inductor branch L remains in the
+tree links.
+From the normal tree:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Vs (t),
+is ,
+2
+vC ,
+
+vC ,
+iC ,
+
+vR ,
+iR ,
+
+iL
+vL
+
+iL
+
+The state equations may be derived in the following steps:
+1. The B − S = 3 elemental equations written in terms of the primary variables:
+
+
+
+
+dvC
+
+
+
+
+
+dt
+
+
+
+primary variables
+
+
+
+
+
+
+
+
+
+
+=
+
+diL
+dt
+
+=
+
+
+1
+
+iC 
+
+
+
+C
+
+
+1
+vL  secondary variables
+
+L
+
+
+
+(43)
+
+
+
+
+
+vR = RiR 
+
+2. The N − 1 − SA = 2 continuity equations required to eliminate the two secondary
+through variables, iC , and iR , are found by drawing a pair of closed contours that
+cut only one normal tree branch, giving:
+iC
+
+= iL
+
+(44)
+
+iR = iL
+
+(45)
+
+3. The B − N + 1 − ST = 1 compatibility equation to eliminate the secondary variable
+vL is written by adding the inductor back into the tree and writing the equation:
+vL = Vs − vR − vC
+
+(46)
+
+4. The secondary variables may be eliminated from the right hand side of the elemental equations by direct substitution from the continuity and compatibility
+equations to generate three equations in the primary variables:
+1
+dvC
+=
+iL
+dt
+C
+diL
+1
+=
+(Vs − vR − vC )
+dt
+L
+vR = RiL
+
+(47)
+(48)
+(49)
+
+5. The B − S = 3 equations in the primary variables may be combined to yield two
+first-order differential equations in terms of the state and source variables:
+dvC
+dt
+diL
+dt
+
+=
+=
+
+1
+iL
+C
+1
+(−vC − RiL + Vs )
+L
+16
+
+(50)
+(51)
+
+6. The pair of state equations may be written in the standard matrix form:
+"
+
+v˙C
+i˙L
+
+#
+
+"
+
+=
+
+0
+1/C
+−1/L −R/L
+
+#"
+
+vC
+iL
+
+#
+
+"
+
++
+
+0
+1/L
+
+#
+
+Vs (t)
+
+(52)
+
+If the system variables vL , iC , and vc are defined to be output variables for this example,
+a set of algebraic output equations may be formed in the state and input variables by
+using the elemental, compatibility, and continuity equations. In particular:
+vL = Vs − vR − vC
+= Vs − RiL − vC
+
+(53)
+
+iC
+
+= iL
+
+(54)
+
+vC
+
+= vC
+
+(55)
+
+The output equations y = Cx + Du become:
+
+
+
+
+
+
+
+
+
+
+
+
+#
+vL
+−1 −R "
+1
+
+ 
+ vC
+
+
+1 
++  0  Vs (t)
+ iC  =  0
+iL
+vC
+1
+0
+0
+
+(56)
+
+Example
+A fluid system is shown in Fig. 14 together with its linear graph.
+The linear graph contains five elements (B = 5) with two energy storage elements and
+one source (SA = 1). The graph contains four nodes (N = 4), thus N − 1 = 3 elements
+must be placed in the normal tree. The order of placement of elements into the tree
+is (i) the pressure source (an across variable source), (ii) the fluid capacitance C (an
+A-type element), and (iii) the resistive element Rp . At this point the tree is complete,
+and is as shown in Fig. 14c. The independent energy storage elements are then the fluid
+capacitance C and the fluid inertance of the pipe Ip :
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Ps (t),
+Qs ,
+2
+PC ,
+
+PC ,
+QC ,
+
+PRp ,
+iR p ,
+
+QIp ,
+PIp ,
+
+QRf
+PRf
+
+QIp
+
+1. The B − S = 4 elemental equations are:
+
+
+dPC
+
+
+
+
+
+dt
+
+
+
+
+dQ
+
+Ip
+
+
+
+
+primary variables
+
+dt
+
+
+
+
+
+PRp
+
+
+
+
+
+
+
+
+
+ QRf
+
+=
+=
+
+1
+QC
+C
+1
+PI
+Ip p
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+= Rp QRp 
+
+
+
+
+
+
+1
+
+
+PRf 
+=
+
+
+Rf
+
+17
+
+secondary variables
+
+(57)
+
+2. The two secondary flow variables, QC and QRp may be expressed in terms of
+primary variables using the N − 1 − SA = 2 continuity equations. Using the
+contours shown in Fig. 14c:
+QC
+
+= QIp − QRf
+
+QRp
+
+= QIp
+
+(58)
+
+3. The two secondary pressure variables PIp and PRp may be expressed in terms of
+primary variables from the B − N + 1 − ST = 2 compatibility equations formed by
+placing the links back into the tree:
+PIp
+
+= Ps − PRp − PC
+
+PRf
+
+= PC
+
+(59)
+
+4. The secondary variables in the elemental equations (i) may be eliminated by direct
+substitution from the continuity and compatibility equations:
+dPC
+dt
+dQIp
+dt
+PRp
+QRf
+
+´
+1 ³
+QIp − QRf
+C
+¢
+1 ¡
+=
+Ps − PRp − PC
+Ip
+= Rp QIp
+1
+PC
+=
+Rf
+
+(60)
+
+=
+
+(61)
+(62)
+(63)
+
+5. Equations (vi) and (vii) may be used to eliminate PRp and QRf from Eqs. (iv) and
+(v) to yield two state equations:
+dPC
+dt
+dQIp
+dt
+
+Ã
+
+1
+QIp −
+Pc
+Rf
+
+!
+
+=
+
+1
+C
+
+=
+
+¢
+1 ¡
+Ps − PC − Rp QIp
+Ip
+
+(64)
+(65)
+
+6. The pair of state equations may be written in the standard matrix form:
+"
+
+ṖC
+Q̇Ip
+
+#
+
+"
+
+=
+
+−1/Rf C
+1/C
+−1/Ip
+−Rp /Ip
+
+#"
+
+PC
+QIp
+
+#
+
+"
+
++
+
+0
+1/Ip
+
+#
+
+Ps (t)
+
+(66)
+
+Example
+A thermal system model and its linear graph shown in Fig. 15. the graph consists of
+four elements (B = 4) with one energy storage element (a thermal capacitance) and a
+through-variable source (ST = 1), and three nodes N = 3.
+The order of entry of elements into the normal tree is (i) the capacitance C, and (ii)
+one of the two thermal resistances R1 or R2 . It is arbitrary which one is chosen; in this
+example we select R2 as a normal tree branch.
+18
+
+Primary variables:
+Secondary variables:
+System order:
+State variable:
+
+Qs (t),
+Ts ,
+1
+TC
+
+TC ,
+qC ,
+
+qR1 ,
+TR1 ,
+
+TR2
+qR2
+
+1. The B − S = 3 elemental equations are:
+
+primary variables
+
+
+
+dTC
+
+
+
+
+
+dt
+
+
+
+
+
+
+
+
+
+
+
+
+
+=
+
+TR2
+
+
+
+
+
+
+
+ qR1
+
+= R2 qR2  secondary variables
+
+
+
+
+
+1
+
+=
+TR1 
+R1
+
+1
+qC
+C
+
+(67)
+
+2. The secondary heat flow variables, qC and qR2 may be expressed in terms of primary
+variables using the N − 1 − SA = 2 continuity equations derived from the contours
+shown in Fig. 15c:
+qC
+
+= qR1
+
+qR2
+
+= qs − qR1
+
+(68)
+
+3. The secondary temperature variable TR1 may be expressed in terms of primary
+variables from the B − N + 1 − ST = 1 compatibility equations formed by placing
+the link back into the tree:
+TRI = TR2 − TC
+(69)
+4. Using the continuity (ii) and compatibility (iii) equations the secondary variables
+may be eliminated from the elemental equations (i):
+dTC
+dt
+TR2
+qR1
+
+1
+qR
+C 1
+= R2 (Qs − qR1 )
+1
+=
+(TR2 − TC )
+R1
+
+=
+
+(70)
+(71)
+(72)
+
+5. Equations (v) and (vi) may be used to eliminate all but state and source variables
+from (iv). Combining (v) and (vi):
+qR1 =
+
+1
+(R2 Qs − TC )
+R1 + R2
+
+(73)
+
+and substituting into Eq. (iv):
+dTC
+1
+=
+(R2 Qs − TC )
+dt
+C (R1 + R2 )
+
+(74)
+
+6. If temperature is selected as the output variable, the matrix form of the state and
+output equations are:
+h
+
+i
+
+ṪC
+TC
+
+·
+
+¸
+
+·
+
+¸
+
+−1
+R2
+TC +
+Qs (t)
+C (R1 + R2 )
+C (R1 + R2 )
+= [1] TC + [0] Qs (t)
+=
+
+19
+
+(75)
+(76)
+
+4
+
+Systems with Non-standard State Equations
+
+4.1
+
+Input Derivative Form
+
+Occasionally system models generate a set of state and output equations that contain terms in
+the derivative of the system inputs. In such cases, which generally result from models containing
+dependent energy storage elements, the standard form of the state equations must be extended to
+include these derivative terms:
+ẋ = Ax + Bu + Eu̇
+
+(77)
+
+y = Cx + Du + Fu̇.
+
+(78)
+
+The n × r matrix E and the m × r matrix F are introduced to include the input derivative terms
+u̇(t).
+Assume, for example, that a system contains a dependent T-type element L. The element is a
+branch in the normal tree and its primary variable is the across-variable v. The elemental equation
+is written with the derivative of the through-variable f on the right hand side:
+v=L
+
+df
+.
+dt
+
+(79)
+
+If the continuity equation used to eliminate the secondary variable f contains any through-variable
+source terms Fs (t), substitution into Eq. (79) generates a term involving the derivative of the input:
+v=L
+
+d
+(. . . + Fs + . . .) .
+dt
+
+(80)
+
+This input derivative term remains throughout the subsequent algebraic manipulations that generate the state and output equations.
+The most common situations that generate the extended form of the state equations are:
+1. When a compatibility equation includes the across-variable on a dependent A-type element,
+and an across-variable source term, or
+2. When a continuity equation includes the through-variable on a dependent T-type element and
+a through-variable source term.
+
+Example
+A “lead-lag” electrical circuit, used in control systems, is shown in Fig. 16 together with
+its system graph and normal tree. Find a state equation describing the system and an
+output equation for the current in the capacitor C1 .
+Solution: The system is first-order, and contains a dependent capacitor. Two normal
+trees are possible; with the choice of the normal tree as shown:
+Primary variables:
+Secondary variables:
+System order:
+State variable:
+
+Vs (t),
+is ,
+1
+vC2
+
+vC2 ,
+iC 2 ,
+
+iR 1 ,
+vR1 ,
+
+20
+
+iR2 ,
+vR2 ,
+
+iC1
+vC1
+
+The elemental equations are:
+
+primary variables
+
+
+
+dvC2
+
+
+
+
+
+dt
+
+
+
+
+
+
+ i
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+=
+
+R1
+
+=
+
+iR2
+
+=
+
+iC1
+
+=
+
+
+1
+
+
+iC
+
+
+C2 2 
+
+
+
+
+1
+
+
+vR1 
+R1
+secondary variables.
+
+
+1
+
+
+vR
+
+
+R2 2 
+
+
+
+dvC1 
+
+C1
+. 
+dt
+
+(81)
+
+The normal tree generates one continuity equation:
+iC2 = iR1 + iC1 − iR2
+
+(82)
+
+and three compatibility equations:
+vR2
+
+= vC2
+
+(83)
+
+vR1
+
+= Vs (t) − vC2
+
+(84)
+
+vC1
+
+= Vs (t) − vC2 .
+
+(85)
+
+When Eq. (v) is substituted into Eqs. (i) to eliminate the secondary variable vC1 , the
+elemental equation becomes:
+·
+
+iC1 = C1
+
+¸
+
+dVs (t) dvC2
+−
+.
+dt
+dt
+
+(86)
+
+The derivative propagates through the subsequent algebraic steps and the state equation
+is:
+R1 + R2
+1
+C1
+v̇C2 = −
+vC2 +
+Vs (t) +
+V̇s (t).
+(87)
+R1 R2 (C1 + C2 )
+R1 (C1 + C2 )
+C1 + C2
+The output equation for iC1 may be found from Eqs. (i) and (v):
+d
+(Vs (t) − vC2 )
+dt
+
+(88)
+
+C1
+C1 C2
+(R1 + R2 ) C1
+vC2 −
+Vs (t) +
+V̇s (t).
+R1 R2 (C1 + C2 )
+R1 (C1 + C2 )
+C1 + C2
+
+(89)
+
+iC1 = C1
+and substituting Eq. (vii)
+iC1 =
+
+Both the state and output equations include the derivative of the input Vs (t).
+
+4.2
+
+Transformation to the Standard Form
+
+If the modeling procedure generates state equations in the form of Eq. (77) an algebraic transformation may be used to generate a new set of state variables and state equations that are in the
+standard form of Eq. (??). For a system with state equations:
+ẋ = Ax + Bu + Eu̇
+21
+
+(90)
+
+a new set of state variables x0 may be defined:
+x0 = x − Eu.
+
+(91)
+
+Differentiation of Eq. (91) gives:
+ẋ0 = ẋ − Eu̇ = (Ax + Bu + Eu̇) − Eu̇
+¡
+
+¢
+
+= A x0 + Eu + Bu
+= Ax0 + B0 u
+
+(92)
+
+where B0 = AE + B. Although the elements of the new state vector x0 are no longer the physical
+variables that were used to generate the original equations, the complete vector x0 satisfies all of the
+requirements of a state vector. Any physical variable in the system may be found from a modified
+set of output equations written in terms of the transformed state vector:
+y = Cx + Du + Fu̇
+¡
+
+¢
+
+= C x0 + Eu + Du + Fu̇
+= Cx0 + D0 u + Fu̇
+
+(93)
+
+where D0 = CE + D.
+
+Example
+Figure 17 illustrates a mechanical translational system. The system graph and normal
+tree demonstrate that although there are three energy storage elements, the two springs
+are dependent and the system order is two. Find a set of state equations that does not
+involve the derivative of the input vector and an accompanying output equation for the
+velocity of the dashpot B1 .
+Solution: With the choice of normal tree as shown, the state variables are vm and FK1
+and the elemental equations are:
+1
+Fm
+m
+
+(94)
+
+= K1 vK1
+
+(95)
+
+= B2 vB2
+1
+=
+FB
+B1 1
+1 dFK2
+=
+.
+K2 dt
+
+(96)
+
+vK1
+
+= vK2 − vB1
+
+(99)
+
+vB2
+
+= vm ,
+
+(100)
+
+FK2
+
+= Fs (t) − FK1
+
+(101)
+
+FB1
+
+= FK1
+
+(102)
+
+dvm
+dt
+dFK1
+dt
+FB2
+
+=
+
+vB1
+vK2
+
+(97)
+(98)
+
+There are two compatibility equations:
+
+and three continuity equations:
+
+Fm = Fs (t) − FB2 .
+22
+
+(103)
+
+Equation (viii) relates the through variable FK2 on a dependent T-type element K2
+to the input Fs (t). When the secondary variables are eliminated and the two state
+equations are written in matrix form, the result is:
+"
+
+v̇m
+f˙K
+
+#
+
+"
+
+#"
+
+−B2 /m
+0
+0
+−K1 K2 / (B1 (K1 + K2 ))
+
+=
+
+1
+
+"
+
+0
+K1 / (K1 + K2 )
+
++
+
+#
+
+#
+
+vm
+FK1
+
+"
+
++
+
+1/m
+0
+
+#
+
+Fs (t)
+
+Ḟs (t)
+
+(104)
+
+showing the dependence on the derivative of the input Fs (t). The output equation for
+vB1 is found from Eqs. (iv) and (ix):
+vB1 =
+and in matrix form
+h
+
+i
+
+0 1/B1
+
+vB1 =
+
+"
+
+1
+FK
+B1 1
+
+(105)
+
+#
+
+vm
+FK1
+
+h
+
++
+
+i
+
+0
+
+Fs (t).
+
+(106)
+
+The state variables may be transformed using Eq. (91), that is:
+ẋ0 = Ax0 + (AE + B) u
+or:
+
+"
+
+ẋ01
+ẋ02
+
+#
+
+"
+
+=
+
+−B2 /m
+0
+0
+−K1 K2 / (B1 (K1 + K2 ))
+"
+
++
+
+#"
+
+#
+
+³ 1/m
+
+K12 K2 / B1 (K1 + K2 )2
+
+´
+
+x01
+x02
+
+#
+
+Fs (t)
+
+(107)
+
+and the corresponding output equation in terms of the transformed state vector is found
+directly from Eq. (93):
+vB1
+
+= Cx0 + (CE + D) u + Fu̇
+i
+
+h
+
+=
+
+0 1/B1
+h
+
++
+=
+
+5
+
+i
+
+0
+
+"
+
+x01
+x02
+
+#
+
+"
+
++
+
+i
+
+h
+
+0 1/B1
+
+"
+
+0
+K1 / (K1 + K2 )
+
+#
+
+#
+i
+
+h
+
++
+
+0
+
+Fs (t)
+
+Fs˙(t)
+
+1 0
+K1
+x2 +
+Fs (t).
+B1
+B1 (K1 + K2 )
+
+(108)
+
+State Equation Generation Using Linear Algebra
+
+For linear systems, the state equations may be found directly from the equations in the primary
+variables and inputs by matrix methods. After the elemental equations have been written with
+causality define by the normal tree, and the substitutions for the secondary variables made through
+the continuity and compatibility equations, the primary variables may be divided into three groups,
+and expressed in three vectors:
+23
+
+• x - the vector of state variables (primary variables associated with independent energy storage
+elements).
+• d - the vector of primary variables associated with dependent energy storage elements.
+• p - the vector of primary variables associated with non-energy storage elements (D-type
+elements and two-port branches (Chapter 6)).
+The set of equations in the primary variables and inputs can be written as three matrix equations
+in x, d, and p.
+ẋ = Px + Qp + Rd + Su
+
+(109)
+
+d = Mẋ + Nu̇
+
+(110)
+
+p = Hx + Jp + Kd + Lu
+
+(111)
+
+The state equations are found by solving explicitly for p and d and substitution into Eq. (109).
+If there are no dependent energy storage elements in the system, that is d = 0 and M = N =
+K = R = 0 , the state equations are found by solving Eq. (111) for p and substituting into Eq.
+(109). In the simplest case, the matrix J = 0 and the state equations may be found by substituting
+Eq. (111) directly into Eq. (109)
+ẋ = [P + QH] x + [S + QL] u.
+
+(112)
+
+Otherwise p must be found by rearranging and solving Eq. (111):
+[I − J] p = Hx + Lu
+
+(113)
+
+p = [I − J]−1 Hx + [I − J]−1 Lu
+
+(114)
+
+where I is the identity matrix, or
+0
+
+0
+
+= Hx+Lu
+
+(115)
+
+where H0 = [I − J]−1 H and L0 = [I − J]−1 L. Substitution of Eq. (115) into Eq. (109) generates
+the state equations
+¡
+¢
+¡
+¢
+ẋ = P + QH0 x + S + QL0 u.
+(116)
+
+Example
+The electrical circuit shown in Fig. 18, together with its linear graph and a normal tree,
+generates the following equations in the primary variables:
+v̇C
+
+= −
+
+1
+1
+iR1 + Is
+C
+C
+
+1
+vR
+L 2
+= R2 iR1 − R2 iL
+1
+1
+vC −
+vR
+=
+R1
+R1 2
+
+(117)
+
+i̇L =
+
+(118)
+
+vR2
+
+(119)
+
+iR1
+
+Use the matrix method to find the state equations in the variables vC and iL .
+24
+
+(120)
+
+Solution: Divide the primary variables into two vectors, x = [vC iL ]T and p =
+[vR2 iR1 ]T . Then the primary equations (Eqs. (i - iv)) can be written
+"
+"
+
+#
+
+v̇C
+i̇L
+
+"
+
+=
+#
+
+vR2
+iR1
+
+"
+
+=
+
+#"
+
+0 0
+0 0
+
+vC
+iL
+
+0
+−R2
+1/R1
+0
+
+#
+
+"
+
+0
+−1/C
+1/L
+0
+
++
+#"
+
+#
+
+vC
+iL
+
+"
+
++
+
+#"
+
+vR2
+iR 1
+
+0
+R2
+−1/R1 0
+
+#
+
+"
+
+1/C
+0
+
++
+
+#"
+
+vR2
+iR1
+
+#
+
+Is (t) (121)
+
+#
+
+(122)
+
+Equation (vi) may be rearranged
+"
+
+1
+−R2
+1/R1
+1
+
+and solved for p = [vR2
+"
+
+vR2
+iR 1
+
+#
+
+vR2
+iR 1
+
+#
+
+"
+
+=
+
+#"
+
+0
+−R2
+1/R1
+0
+
+#
+
+vC
+iL
+
+(123)
+
+iR1 ]T
+"
+
+1
+−R2
+1/R1
+1
+
+=
+=
+
+#"
+
+R1
+R1 + R2
+
+"
+
+"
+
+#−1 "
+
+0
+−R2
+1/R1
+0
+#"
+
+1
+R2
+−1/R1 1
+
+#"
+
+vC
+iL
+
+0
+−R2
+1/R1
+0
+
+(124)
+#"
+
+#"
+
+−R2 /(R1 + R2 ) R1 R2 //(R1 + R2 )
+−1/(R1 + R2 )
+−R2 /(R1 + R2 )
+
+=
+
+#
+#
+
+vC
+iL
+
+vC
+iL
+
+(125)
+
+#
+
+(126)
+
+When Eq. (ix) is substituted into Eq. (v) the state equations are found to be
+"
+
+v̇C
+i̇L
+
+#
+
+"
+
+=
+
+1/(R1 + R2 )C
+R2 /(R1 + R2 )C
+−R2 /(R1 + R2 )L R1 R2 /(R1 + R2 )L
+
+#"
+
+vC
+iL
+
+#
+
+"
+
++
+
+1/C
+0
+
+#
+
+Is (t).
+
+(127)
+
+In the most general case, when there are dependent energy storage elements in the system, so that
+d 6= 0, the state equations are found by substituting Eqs. (115) and (110) into Eq. (109), giving
+£
+
+¡
+
+¢
+
+¤
+
+¡
+
+¢
+
+¡
+
+¢
+
+¡
+
+¢
+
+I − QK0 + R M ẋ = P + QH0 x + S + QL0 u + R + QK0 Nu̇
+−1
+
+which may be solved by pre-multiplying both sides by [I − (QK0 + R) M]
+equations.
+
+6
+
+Nonlinear Systems
+
+6.1
+
+General Considerations
+
+(128)
+
+to generate the state
+
+In the general case of nonlinear state-determined system models, relationships may exist in which
+a single system variable is a nonlinear function of several other variables. For example the torque
+output of an automobile engine may be represented as a nonlinear function of the fuel/air ratio,
+spark advance and engine speed. Systematic equation formulation procedures are not generally
+available for such systems. However, for nonlinear systems which can be represented by linear graph
+models containing combinations of pure (nonlinear) and ideal (linear) one and two-port elements,
+the equation formulation procedures described in Sections 1 to 4 provide an effective starting point
+25
+
+for the formulation of a set of nonlinear state equations. For such models, the system constraints
+represented by a set of compatibility and continuity equations are valid. Thus, the procedure of
+forming a normal tree, and identifying the independent variables and state variables, is unchanged
+from the method described for linear system models, as are the procedures for generating the
+compatibility and continuity equations.
+With models containing nonlinear elements the algebraic steps in the subsequent elimination
+of secondary variables are not always straightforward, and may not always be accomplished with
+simple analytical techniques. However, for many nonlinear systems containing pure elements, the
+methods developed for linear system models may be used with some modification to derive a set of
+nonlinear state equations.
+The formulation of nonlinear state equations is illustrated in the following section, where a set
+of nonlinear state equations is derived in the general form of Eqs. (??), that is
+ẋ = f (x, u, t)
+where the derivative of each state is related by a nonlinear function to the system state variables
+and inputs. Some nonlinear systems models may not be written explicitly as a set of nonlinear
+state equations in the standard form of Eqs. (??) because it may not be possible to directly solve
+for the derivative of each state variable independently.
+
+6.2
+
+Examples of Nonlinear System Model Formulation
+
+To illustrate the equation derivation procedures for systems containing nonlinear elements, state
+equations are derived for three representative systems in the following examples. Each example
+contains one or more nonlinear dissipative or energy storage element.
+
+Example
+An automobile, with mass m, traveling on a flat, straight section of road is shown in
+Fig. 19. Derive a model for the forward speed vm of the car, in response to a time
+varying propulsive force Fp (t) generated by the engine. The model is restricted to the
+moderate to high speed range where the two primary resistance forces (in the absence
+of braking) are road resistance Fr and aerodynamic drag Fd , each approximated as:
+Fr = Fo
+Fd =
+
+cd vd2 .
+
+(129)
+(130)
+
+Solution: The road resistance is represented as a constant resistance force F0 and the
+aerodynamic drag Fd is represented as a resistive force which increases with the square
+of vehicle velocity with the constant cd dependent on the automobile drag coefficient.
+A system graph model for the car is shown in Fig. 19b, in which the car mass m is
+represented as an ideal element, the propulsive force is represented as an ideal force
+source Fp (t), the road resistance is represented as an ideal force source Fo , and the
+aerodynamic drag is represented as a nonlinear damper element. The system contains
+one independent energy storage element, as shown by the normal tree. From the normal
+tree (Fig. 19c):
+
+26
+
+Primary variables:
+Secondary variables:
+System order:
+State variable:
+
+vm ,
+Fm ,
+1
+vm .
+
+Fp ,
+vp ,
+
+Fr ,
+vr ,
+
+Fd
+vd
+
+The elemental equations for the two passive elements are:
+dvm
+1
+=
+Fm
+dt
+m
+Fd = cd Vd2
+
+(131)
+(132)
+
+The normal tree generates one continuity equation:
+Fm = FP − Fo − Fd
+
+(133)
+
+vd = vm .
+
+(134)
+
+and one compatibility equation:
+Substitution to eliminate the secondary variables from the elemental equations yields:
+dvm
+1
+=
+[Fp − Fo − Fd ]
+dt
+m
+2
+Fd = cd vm
+.
+
+(135)
+(136)
+
+Combining these two equations generates the system nonlinear state equation:
+i
+dvm
+1 h
+2
+=
+Fp − Fo − cd vm
+dt
+m
+
+(137)
+
+Example
+A part of a sensitive torque measuring instrument, shown in Fig. 20a, consists of a
+pendulum of length l with proof mass m mounted in support bearings in a gravity field
+g.
+The input to the instrument is a time varying torque Ts (t) which acts on the shaft to
+displace the pendulum by an angle θ. Under static input conditions where Ts (t) = T0 ,
+the gravitational restoring torque is a function of the angular displacement:
+T0 = mgl sin θ
+
+(138)
+
+This is a algebraic relationship between a torque (through-variable) and a displacement
+(integrated across-variable) and represents the constitutive relationship of a nonlinear
+torsional spring. The elemental equation for the equivalent spring K is found by differentiating Eq. (i)
+dTK
+dθ
+= (mgl cos θ) .
+(139)
+dt
+dt
+The support bearings for the shaft have a resistive torque TB proportional to the shaft
+angular velocity ΩB :
+TB = BΩB .
+(140)
+27
+
+In addition to the gravitational restoring torque, the pendulum also has a rotational
+inertia with a point mass m concentrated at a radius l from the center of rotation, so
+that the moment of inertia is
+J = ml2 .
+(141)
+By considering the inertia, the equivalent spring, the damper and the input source, a
+system graph model may be formulated, as shown in Fig. 20b, which has the normal
+tree shown in Fig. 20c. From the linear graph and normal tree:
+Primary variables:
+Secondary variable:
+System order:
+State variables:
+
+ΩJ ,
+TJ ,
+2
+ΩJ ,
+
+Ts ,
+Ωs ,
+
+TK ,
+ΩK ,
+
+TB
+ΩB
+
+TK .
+
+There are three elemental equations:
+dΩJ
+1
+=
+TJ
+dt
+J
+dTK
+dθ
+= (mgl cos θ)
+= (mgl cos θ) ΩK
+dt
+dt
+TB = BΩB .
+
+(142)
+(143)
+(144)
+
+The normal tree generates a single continuity equation:
+TK = TJ + TB + TS
+
+(145)
+
+ΩB = ΩJ
+
+(146)
+
+ΩK
+
+(147)
+
+and two compatibility equations:
+= ΩJ
+
+Elimination of the secondary variables yields:
+dΩJ
+dt
+dTK
+dt
+
+=
+
+1
+(Ts − BΩJ − TK )
+J
+
+= (mgl cos θ) ΩJ
+
+(148)
+(149)
+
+The equations may be expressed directly in terms of the state variables alone by substituting directly for θ from the constitutive equation (Eq. (i)):
+µ
+
+θ = sin−1
+
+TK
+mgl
+
+¶
+
+(150)
+
+and Eq. (xii) may be written
+h
+i
+dTK
+= mgl cos sin−1 (TK /mgl) ΩJ .
+dt
+
+(151)
+
+Equations (xi) and (xiv) represent a pair of state equations for the nonlinear system,
+while Eq. (xiii) allows the computation of θ, the system output. The nonlinearity in
+this system arises from the trigonometric relationship of the pendulum restoring torque
+to its displacement. While the basic derivation method used is similar to that for linear
+systems, additional manipulation is required to eliminate the secondary variables and
+to form the state equations.
+28
+
+Example
+The fluid distribution system shown in Fig. 21 consists of a flow source Qs (t) which
+feeds a storage tank with non-vertical walls. The output from the tank is distributed
+into a fluid network consisting of a short pipe discharging through an orifice, and a long
+pipe discharging through another orifice.
+The fluid flow through an orifice obeys a quadratic relationship:
+q
+
+Q = C0 |∆P |sgn (∆P )
+
+(152)
+
+where Q is the flow through the orifice, ∆P is the pressure drop across the orifice, and
+C0 is an orifice coefficient that is dependent upon the geometry of the orifice. The
+signum function, sgn (), is used to indicate that the flow changes sign when the sign of
+∆P changes.
+The tank is shaped as the frustum of a cone, and therefore has a volume which is a
+nonlinear function of the height of the fluid in the tank. From the tank geometry shown
+in Fig. 21, the volume is
+V
+
+=
+=
+
+Z h
+0
+
+Z h
+0
+
+2
+
+πr dh =
+³
+
+Z h
+0
+
+π (r1 + KC h)2 dh
+´
+
+π r12 + 2r1 KC h + KC2 h2 dh
+
+³
+
+= π r12 h + r1 KC h2 + KC2 h3 /3
+
+´
+
+(153)
+
+In an open tank in a gravity field, the pressure at the base is directly related to the
+height of fluid
+PC = ρgh
+(154)
+so that the following constitutive relationship may be written
+V
+
+πr12
+πr1 KC 2
+πKC2 3
+PC +
+PC +
+PC
+2
+ρg
+(ρg)
+3 (ρg)3
+KT 1 2 KT 2 3
+= KT 0 PC +
+P +
+P
+2 C
+3 C
+=
+
+(155)
+(156)
+
+where KT 0 = πr12 /(ρg), KT 1 = 2πr1 KC /(ρg)2 , and KT 2 = πKC2 /(ρg)3 . The tank has a
+constitutive relationship of a pure nonlinear fluid capacitance.
+The system graph model for the system, including the nonlinear capacitance, the two
+nonlinear resistances of the orifices, and a fluid inertance I of the long fluid line (assuming that the pipe resistance is small compared to the orifice resistance) is shown in Fig.
+21b. From this graph and the normal tree shown in Fig. 21c the system model includes
+the following:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+PC ,
+QC ,
+2
+PC ,
+
+PR2 ,
+QR2 ,
+
+Qs ,
+Ps ,
+
+QI ,
+PI ,
+
+QI .
+29
+
+QR1
+PR1
+
+The system has four elemental equations. For the fluid inertance
+dQI
+1
+= PI .
+dt
+I
+
+(157)
+
+For the nonlinear fluid capacitance the elemental equation must be found by differentiating the constitutive equation (v):
+h
+i dP
+dV
+C
+= QC = KT 0 + KT 1 PC + KT 2 PC2
+dt
+dt
+
+or
+
+(158)
+
+#
+
+"
+
+dPC
+1
+QC .
+=
+dt
+KT 0 + KT 1 PC + KT 2 PC2
+
+(159)
+
+For orifice R1 the elemental equation is
+q
+
+QR1 = K1 |PR1 |sgn (PR1 ) ,
+
+(160)
+
+while for orifice R2 which has the pressure drop PR2 as its primary variable the equation
+may be written:
+1
+PR2 = 2 QR2 |QR2 | ,
+(161)
+K2
+where QR2 |QR2 | is the absquare, or absolute square, which ensures that the pressure
+drop changes sign when the flow changes direction through an orifice.
+The two continuity equations are:
+QC
+
+= Qs − QR1
+
+(162)
+
+QR2
+
+= QI
+
+(163)
+
+and the two compatibility equations are:
+PR1
+
+= PC
+
+(164)
+
+PI
+
+= PC − PR2 .
+
+(165)
+
+Elimination of the secondary variables yields
+dQI
+dt
+dPC
+dt
+
+=
+=
+
+1
+[PC − PR2 ]
+"I
+
+(166)
+#
+
+1
+[Qs − QR1 ]
+KT 0 + KT 1 PC + KT 2 PC2
+
+(167)
+
+q
+
+QR1
+
+= K1 |PC |sgn (PC )
+1
+QI |QI | .
+=
+K22
+
+PR2
+
+(168)
+(169)
+
+and substituting for QR1 and PR2 results in two nonlinear state equations:
+dQI
+dt
+dPC
+dt
+
+·
+
+=
+
+"
+
+=
+
+¸
+
+1
+1
+PC − 2 QI |QI |
+I
+K2
+
+(170)
+
+1
+KT 0 + KT 1 PC + KT 2 PC2
+
+30
+
+#·
+
+q
+
+¸
+
+Qs − K1 |PC |sgn (PC ) .
+
+(171)
+
+7
+
+Linearization of State Equations
+
+A set of nonlinear state equations for a system may be linearized directly to obtain a set of linear
+state equations that approximate the system response over a limited range of operation. In the
+process of linearization a new set of variables is defined that describe the response about a system
+equilibrium point. The method is useful for systems containing nonlinear elements where the
+excursion of the system variables about the equilibrium point is small. Because the response of a
+linearized model only approximates that of the nonlinear system, care must be taken in interpreting
+any analyses and judgement must be used in defining the applicable range of operation.
+To illustrate the linearization process, it is convenient to initially consider a first-order nonlinear
+system with a single state equation
+ẋ = f (x, u).
+(172)
+Assume that with a known constant input u0 , the system ultimately reaches a steady response
+x0 , after which time the derivative ẋ is identically zero. Any such equilibrium value for the state
+variable must therefore satisfy the algebraic equation
+f (x0 , u0 ) = 0.
+
+(173)
+
+In general more than one, or no values of x may satisfy a nonlinear equilibrium equation, and
+the solution of Eq. (173) may prove to be a difficult task. However, for many nonlinear systems
+containing only ideal and pure elements an equilibrium condition can be found. The linearization
+of f (x, u) may be performed by expanding the function as a Taylor series in two variables x and u
+about the equilibrium condition as
+¯
+
+¯
+
+∂f (x, u) ¯¯
+∂f (x, u) ¯¯
+f (x, u) = f (x0 , u0 ) +
+(x − x0 ) +
+(u − u0 ) + · · ·
+¯
+x=x0
+x=x0
+∂x
+∂u ¯u=u
+u=u0
+0
+
+(174)
+
+By definition, f (x0 , u0 ) = 0. If the deviations x∗ = x − x0 , and u∗ = u − u0 are small, high order
+terms may be neglected and a linear approximation to the first-order state equation may be written
+¯
+
+ẋ∗ =
+
+¯
+
+∂f (x, u) ¯¯
+∂f (x, u) ¯¯
+∗
+x∗ +
+¯
+¯x=x0u .
+x=x0
+∂x
+∂u
+u=u0
+u=u0
+
+(175)
+
+Equation (175) is a linear first-order state equation with constant coefficients which may be written
+as a standard state equation
+ẋ∗ = ax∗ + bu∗
+(176)
+where
+
+¯
+
+a=
+
+∂f (x, u) ¯¯
+0
+∂x ¯x=x
+u=u0
+
+¯
+
+and
+
+b=
+
+∂f (x, u) ¯¯
+.
+x=x0
+∂u ¯u=u
+0
+
+(177)
+
+The procedure for linearizing a higher order system about an equilibrium point is analogous to
+that described for a first-order system. The set of n state equations with r inputs
+ẋ = f (x, u)
+
+(178)
+
+is first solved for an equilibrium state x0 with the given input u0 , by setting the derivative of the
+state vector to zero and solving the resulting set of nonlinear algebraic equations
+f (x0 , u0 ) = 0.
+31
+
+(179)
+
+Each of the n state equations
+ẋi = fi (x1 , . . . , xn , u1 , . . . , ur )
+
+(180)
+
+may then be linearized by generating a Taylor series expansion in the (n + r) variables about the
+operating point and ignoring all but the linear terms. A set of incremental variables x∗i = xi − (x0 )i
+and u∗i = ui − (u0 )i is defined. Because there are (n + r) such variables, (n + r) partial derivatives
+are required in each equation. The result is:
+¯
+
+ẋ∗i =
+
+¯
+
+¯
+
+=
+
+¯
+
+∂f1 (x, u) ¯¯
+∂f1 (x, u) ¯¯
+∂f1 (x, u) ¯¯
+∗
+x∗1 +
+x∗2 + · · · +
+¯
+¯
+¯x=x0xn
+x=x0
+x=x
+0
+∂x1
+∂x
+∂x
+2
+n
+u=u0
+u=u0
+u=u0
+¯
+
+¯
+
+∂f1 (x, u) ¯¯
+∂f1 (x, u) ¯¯
+∂f1 (x, u) ¯¯
+∗
++
+u∗1 +
+u∗2 + · · · +
+¯
+¯
+¯x=x0ur
+x=x0
+x=x0
+∂u1
+∂u
+∂u
+2
+r
+u=u0
+u=u0
+u=u0
+
+(181)
+
+which is a linear state equation of the form
+ẋ∗i = ai1 x∗1 + · · · + ain x∗n + bi1 u∗1 + · · · + bir u∗r
+
+(182)
+
+The collection of all such equations can be written in matrix form:
+ẋ∗ = Ax∗ + Bu∗
+
+(183)
+
+where the elements of the matrices A and B are:
+¯
+
+∂fi (x, u) ¯¯
+aij =
+,
+¯
+∂xj ¯x=x0
+
+¯
+
+and
+
+u=u0
+
+∂fi (x, u) ¯¯
+bij =
+.
+¯
+∂uj ¯x=x0
+
+(184)
+
+u=u0
+
+Matrices containing partial derivatives in the form of A and B above are known as Jacobian
+matrices.
+
+Example
+In Example 6.2 a nonlinear state equation was derived for a vehicle of mass m traveling
+at moderate speed vm with propulsive force Fp (t). The model, including the effects of
+2 ), and constant road resistance (F ), generated a single
+aerodynamic drag (Fd = cd vm
+r
+nonlinear state equation
+v̇m =
+
+i
+1 h
+2
+Fp − Fr − cd vm
+= F (vm , Fp , Fr ) .
+m
+
+Derive a linearized state equation to describe the dynamics of the vehicle for small
+deviations in speed from a nominal operating speed vm = v0 .
+Solution: First the equilibrium condition is found by solving the equation
+v̇m = 0 =
+and at equilibrium
+
+i
+1 h
+(Fp )0 − (Fr )0 − cd (vm )20
+m
+
+(Fp )0 = (Fr )0 + cd (vm )20 .
+
+32
+
+(185)
+
+(186)
+
+∗ , F ∗ , and
+The linearized equations may be derived in terms of incremental variables vm
+p
+∗
+Fr
+¯
+¯
+¯
+∂F ¯¯ ∗
+∂F ¯¯ ∗
+∂F ¯¯ ∗
+∗
+v̇m =
+F
++
+v
++
+F
+(187)
+¯
+∂vm ¯0 m ∂Fp ¯0 p
+∂Fr ¯0 r
+
+and when each term is evaluated and the substitution (vm )0 = v0 is made
+·
+∗
+v̇m
+=
+
+¸
+
+·
+
+¸
+
+·
+
+¸
+
+2cd v0 ∗
+1
+1
+−
+vm +
+Fp∗ +
+F ∗.
+m
+m
+m r
+
+(188)
+
+When it is noted that Fr∗ is zero because Fr is constant, the linearized equation may be
+written
+B ∗
+1
+∗
+v̇m
+= − vm
++ Fp∗
+(189)
+m
+m
+where B = 2cd v0 is the equivalent damper coefficient. In interpreting and using this
+∗ is the deviation from the equilibrium speed,
+equation, it is noted that the solution vm
+and that the input Fp∗ (t) is the deviation from the equilibrium propulsive force.
+
+References:
+1. Kalman R. E., “On the General Theory of Control Systems”, Proc. First IFAC Congress,
+Butterworth, London, 1960
+2. Schultz D. G., Melsa J. L., State Functions and Linear Control Systems, McGraw-Hill Book
+Company, New York NY, 1967
+3. Timothy L. K., Bona B. E., State Space Analysis, McGraw-Hill Book Company, New York
+NY, 1969
+4. Koenig H. E., Tokad Y., Kesavan H. K., Hedges H. G., Analysis of Discrete Physical Systems,
+McGraw-Hill Book Company, New York NY, 1967
+5. Blackwell W. A., Mathematical Modeling of Physical Networks, Macmillan Publishing Company, New York NY, 1967
+6. Chan S. P., Chan S. Y., Chan S. G., Analysis of linear Networks and Systems, Addison-Wesley
+Publishing Company, Reading MA, 1972
+7. Shearer J. L., Murphy A. T., Richardson H. H., Introduction to System Dynamics, AddisonWesley Publishing Company, Reading MA, 1967
+8. Durfee W. K., Wall M. B., Rowell D., Abott F. K., “Interactive Software for Dynamic System
+Modeling Using linear Graphs”, IEEE Control Systems Magazine, 11, 4, pp 60–66, June 1991
+
+33
+
+1
+
+1
+Ceq = _______
+n
+å 1/C i
+
+Ci
+
+L1
+
+L2 L i
+
+Ln
+
+L eq =
+
+i=1
+
+1
+_______
+n
+
+å 1/L i
+i=1
+
+Cn
+
+Figure 9: Combination of elements in series and in parallel to eliminate excess state variables.
+
+Contour used to
+generate continuity
+equation
+
+v
+F (t)
+m
+
+Fs (t)
+
+(a) Physical system
+
+Fs (t)
+
+K
+
+v
+
+K
+
+m
+
+(b) Linear graph
+
+m
+
+(c) Normal tree
+
+Figure 10: Mechanical system model and its normal tree.
+
+v
+v
+
+K1
+
+mass
+
+K2
+
+m
+
+Fs(t)
+
+Fs(t)
+
+B
+
+m
+
+K = K1 + K2
+
+Fs(t)
+B
+
+m K
+
+Total viscous friction B
+(a) Physical system
+
+(b) Linear graph
+
+(c) Normal tree
+
+Figure 11: A mechanical system with two parallel springs, its linear graph and a normal tree after
+combining the two springs.
+
+34
+
+F ly w h e e l J
+
+M o to r
+
+B e a r in g B 1
+
+W s (t)
+
+W J
+B
+
+B 2
+
+B 2
+
+B 1
+
+B 1
+J
+
+W s (t)
+
+J
+
+W s (t)
+
+2
+D ra g c u p
+
+( b ) L in e a r g r a p h
+
+( a ) P h y s ic a l s y s te m
+
+(c ) N o rm a l tre e
+
+Figure 12: A rotational system, its linear graph and normal tree.
+R
+
+C
+
+R
+
+R
+
+C
+
+C
+
++
+L
+
+Vs (t)
+
+L
+
+Vs (t)
+
+-
+
+(a) Physical system
+
+L
+
+Vs (t)
+
+(b) Linear graph
+
+(c) Normal tree
+
+Figure 13: An electrical circuit, its linear graph and normal tree.
+
+Tank
+Cf
+
+Long pipe Rp, I p
+
+Pump
+
+Valve
+Rf
+Patm
+
+Fluid reservoir
+(a) Physical system
+Rp
+
+Rp
+
+Ip
+
+Rf
+Ps (t)
+
+Ip
+
+Rf
+Ps (t)
+
+Cf
+
+(b) Linear graph
+
+Cf
+
+(c) Normal tree
+
+Figure 14: A fluid system, its system graph and normal tree.
+
+35
+
+Heating element
+Qs(t)
+Air gap
+R1
+Outer insulation
+R2
+
+Metal specimen
+C
+
+Electric
+source
+
+(a) Physical system
+R1
+
+R1
+
+R2
+Qs
+
+R2
+Qs
+
+C
+
+(b) Linear graph
+
+C
+
+(c) Normal tree
+
+Figure 15: A thermal system, its linear graph and normal tree.
+
++
+Vs(t)
+
+R1
+
+R1
+C
+
+-
+
+C1
+
+C1
+
+C1
+
+2
+
+(a) Circuit
+
+R2
+
+Vs(t)
+
+C2
+
+(b) Linear graph
+
+R1
+R2 V (t)
+s
+
+C2
+
+R2
+
+(c) Normal tree
+
+Figure 16: Simple first-order electrical lead-lag network with a dependent energy storage element.
+
+36
+
+v
+K1
+
+B1
+
+F (t)
+
+B2
+
+m
+K2
+(a) Mechanical system
+
+K1
+
+K1
+
+B1
+
+B1
+
+K2
+
+K2
+B2
+
+Fs(t)
+
+B2
+
+Fs(t)
+
+m
+
+(b) Linear graph
+
+m
+
+(c) Normal tree
+
+Figure 17: Second-order mechanical system with dependent springs.
+
+R1
+
+R1
+
+R2
+
+R2
+
+R1
+
+C
+
+Is(t)
+
+R2
+
+L
+
+(a) Electrical circuit
+
+L
+
+C
+
+Is(t)
+
+Is(t)
+
+(b) Linear graph
+
+L
+
+C
+
+(c) Normal tree
+
+Figure 18: An electrical system, its linear graph and a normal tree.
+
+v
+Fd
+Fp(t)
+
+Fp(t)
+m
+
+Fr
+(a) Nonlinear mechanical system
+
+Fd
+
+Fr
+
+(b) Linear graph
+
+Fp(t)
+
+m
+
+Fd
+
+(c) Normal tree
+
+Figure 19: Linear graph model of automobile with nonlinear drag forces.
+
+37
+
+Fr
+
+W
+T s (t)
+
+B
+
+l
+
+Ts (t)
+
+q
+
+K
+
+J
+B
+
+T s (t)
+
+K
+
+B
+
+J
+
+m
+m g
+
+( a ) N o n lin e a r p e n d u lu m
+
+( b ) L in e a r g r a p h
+
+(c ) N o rm a l tre e
+
+Figure 20: A mechanical torque measuring instrument based on a pendulum.
+
+Q s(t)
+
+r = r + Kc h
+1
+h
+r1
+
+orifice
+
+long pipe: I
+
+orifice
+R2
+
+R1
+
+(a) Nonlinear fluid system
+I
+
+I
+
+C
+
+C
+Qs (t)
+
+R1
+
+R2
+
+Qs (t)
+
+(b) Linear graph
+
+R1
+
+R2
+
+(c) Normal tree
+
+Figure 21: Fluid distribution system with nonlinear elements.
+
+38
+
+
