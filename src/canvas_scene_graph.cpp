@@ -1,4 +1,5 @@
 #include "canvas.h"
+#include "elemental_equation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -35,7 +36,7 @@ void GraphScene::notifyGraphChanged() {
 NodeItem* GraphScene::createNode(const QPointF& center) {
     auto* node = new NodeItem;
     node->setName(tr("Node %1").arg(m_nextNodeId));
-    node->setAcrossVariable(QStringLiteral("e%1").arg(m_nextNodeId++));
+    node->setAcrossVariable(lg::defaultNodeAcrossName(m_nextNodeId++));
     node->setPos(snap(center));
     addItem(node);
     notifyGraphChanged();
@@ -72,7 +73,7 @@ BranchItem* GraphScene::createBranch(NodeItem* a, NodeItem* b, qreal bow) {
     b->addBranch(branch);
     addItem(branch);
     reindexBranches(a, b);
-    branch->setName(tr("Branch %1").arg(m_nextBranchId++));
+    branch->setName(lg::defaultPassiveThroughName(m_nextBranchId++));
     if (a->twoPort()) {
         refreshTwoPortEgressAt(a);
     }
@@ -405,6 +406,7 @@ void GraphScene::clearNormalTreeHighlight() {
     }
     m_normalTreeHighlightActive = false;
     m_lastNormalTreeResult = {};
+    m_lastStateSpaceResult = {};
     for (QGraphicsItem* item : items()) {
         if (auto* branch = dynamic_cast<BranchItem*>(item)) {
             branch->setNormalTreeRole(false, false);
@@ -436,6 +438,7 @@ lg::NormalTreeResult GraphScene::findNormalTree() {
     }
     m_normalTreeHighlightActive = false;
     m_lastNormalTreeResult = {};
+    m_lastStateSpaceResult = {};
 
     lg::NormalTreeResult result = lg::computeNormalTree(nodes, branches, twoPorts);
     if (result.status != lg::NormalTreeResult::Status::Ok) {
@@ -452,6 +455,34 @@ lg::NormalTreeResult GraphScene::findNormalTree() {
         branch->setNormalTreeRole(inTree, true);
     }
     return result;
+}
+
+lg::StateSpaceResult GraphScene::computeStateSpaceRep() {
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    std::vector<TwoPortItem*> twoPorts;
+    for (QGraphicsItem* item : items()) {
+        if (auto* node = dynamic_cast<NodeItem*>(item)) {
+            nodes.push_back(node);
+        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branches.push_back(branch);
+        } else if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
+            twoPorts.push_back(twoPort);
+        }
+    }
+
+    if (!m_normalTreeHighlightActive ||
+        m_lastNormalTreeResult.status != lg::NormalTreeResult::Status::Ok) {
+        lg::StateSpaceResult result;
+        result.status = lg::StateSpaceResult::Status::NeedNormalTree;
+        result.message = QStringLiteral("Find a valid normal tree first.");
+        m_lastStateSpaceResult = result;
+        return result;
+    }
+
+    m_lastStateSpaceResult =
+        lg::computeStateSpace(m_lastNormalTreeResult, nodes, branches, twoPorts);
+    return m_lastStateSpaceResult;
 }
 
 namespace {

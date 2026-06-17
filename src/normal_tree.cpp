@@ -352,7 +352,7 @@ void extractStateVariables(NormalTreeResult& result, const std::vector<BranchIte
         }
         NormalTreeResult::StateVariable state;
         state.kind = NormalTreeResult::StateVariable::Kind::Across;
-        state.symbol = branchAcrossVariableText(*branch);
+        state.symbol = branchAcrossSymbol(*branch);
         if (!state.symbol.isEmpty()) {
             result.stateVariables.push_back(std::move(state));
         }
@@ -367,7 +367,7 @@ void extractStateVariables(NormalTreeResult& result, const std::vector<BranchIte
         }
         NormalTreeResult::StateVariable state;
         state.kind = NormalTreeResult::StateVariable::Kind::Through;
-        state.symbol = branch->name();
+        state.symbol = branchFlowSymbol(*branch);
         if (!state.symbol.isEmpty()) {
             result.stateVariables.push_back(std::move(state));
         }

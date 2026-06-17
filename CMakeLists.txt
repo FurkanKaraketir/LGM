@@ -36,6 +36,21 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(symengine)
 
+set(JKQtPlotter_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(JKQtPlotter_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(JKQtPlotter_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(JKQtPlotter_BUILD_LIB_JKQTPLOTTER OFF CACHE BOOL "" FORCE)
+set(JKQtPlotter_BUILD_LIB_JKQTFASTPLOTTER OFF CACHE BOOL "" FORCE)
+set(JKQtPlotter_BUILD_DECORATE_LIBNAMES_WITH_BUILDTYPE OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    jkqtplotter
+    GIT_REPOSITORY https://github.com/jkriege2/JKQtPlotter.git
+    GIT_TAG        v5.0.0-beta1
+)
+FetchContent_MakeAvailable(jkqtplotter)
+
 add_executable(LinearGraphModeling
     src/main.cpp
     src/canvas.h
@@ -49,10 +64,19 @@ add_executable(LinearGraphModeling
     src/elemental_equation.h
     src/normal_tree.cpp
     src/normal_tree.h
+    src/state_space.cpp
+    src/state_space.h
+    src/latex_widget.cpp
+    src/latex_widget.h
     src/mainwindow.cpp
 )
 
-target_link_libraries(LinearGraphModeling PRIVATE Qt6::Widgets symengine Boost::multiprecision)
+target_link_libraries(LinearGraphModeling PRIVATE
+    Qt6::Widgets
+    symengine
+    Boost::multiprecision
+    JKQTPlotter6::JKQTMathText6
+)
 target_include_directories(LinearGraphModeling PRIVATE
     ${symengine_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/_deps/symengine-build

@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "normal_tree.h"
+#include "state_space.h"
 
 
 
@@ -500,6 +501,10 @@ public:
 
     const lg::NormalTreeResult& lastNormalTreeResult() const { return m_lastNormalTreeResult; }
 
+    lg::StateSpaceResult computeStateSpaceRep();
+
+    const lg::StateSpaceResult& lastStateSpaceResult() const { return m_lastStateSpaceResult; }
+
 
 
     static constexpr qreal kTwoPortHalfWidth = 40.0;
@@ -555,6 +560,8 @@ private:
     bool m_normalTreeHighlightActive = false;
 
     lg::NormalTreeResult m_lastNormalTreeResult;
+
+    lg::StateSpaceResult m_lastStateSpaceResult;
 
     void notifyGraphChanged();
 

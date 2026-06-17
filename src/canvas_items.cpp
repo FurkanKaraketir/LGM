@@ -470,11 +470,13 @@ void BranchItem::setActive(bool active) {
     if (active && m_type == BranchType::D) {
         m_type = BranchType::A;
     }
+    lg::applySourceThroughNaming(this);
     updatePath();
 }
 
 void BranchItem::setBranchType(BranchType type) {
     m_type = type;
+    lg::applySourceThroughNaming(this);
     updatePath();
 }
 

@@ -42,7 +42,10 @@ public:
         if (m_exists) {
             return;
         }
-        m_scene->createNode(m_pos);
+        if (NodeItem* node = m_scene->createNode(m_pos)) {
+            m_scene->clearSelection();
+            node->setSelected(true);
+        }
         m_exists = true;
     }
 
@@ -78,6 +81,8 @@ public:
         }
         if (BranchItem* branch = m_scene->createBranch(a, b)) {
             m_key.index = branch->index();
+            m_scene->clearSelection();
+            branch->setSelected(true);
         }
         m_exists = true;
     }
@@ -109,7 +114,9 @@ public:
         if (m_exists) {
             return;
         }
-        m_scene->createTwoPort(m_key.center, m_key.kind);
+        if (TwoPortItem* item = m_scene->createTwoPort(m_key.center, m_key.kind)) {
+            m_scene->selectTwoPort(item);
+        }
         m_exists = true;
     }
 

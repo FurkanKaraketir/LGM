@@ -5,6 +5,8 @@
 #include "canvas.h"
 
 #include "elemental_equation.h"
+#include "latex_widget.h"
+#include "state_space.h"
 
 
 
@@ -469,6 +471,34 @@ void MainWindow::buildMenuBar() {
                                  : result.message);
 
         statusBar()->showMessage(tr("Normal tree search failed."), 3000);
+
+    });
+
+    auto* stateSpaceAction = analysisMenu->addAction(tr("Compute &State Space..."));
+
+    stateSpaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+
+    connect(stateSpaceAction, &QAction::triggered, this, [this]() {
+
+        const lg::StateSpaceResult result = m_scene->computeStateSpaceRep();
+
+        if (result.status == lg::StateSpaceResult::Status::Ok) {
+
+            statusBar()->showMessage(result.message, 10000);
+
+            updatePropertyPanel();
+
+            return;
+
+        }
+
+        QMessageBox::warning(this, tr("State Space"),
+
+                             result.message.isEmpty() ? tr("State-space computation failed.")
+
+                                                      : result.message);
+
+        statusBar()->showMessage(tr("State-space computation failed."), 3000);
 
     });
 
@@ -1190,6 +1220,22 @@ void MainWindow::updatePropertyPanel() {
 
 
 
+    auto addLatexRow = [this, &addLabelRow](const QString& property, const QString& latex) {
+
+        const int row = addLabelRow(property);
+
+        QWidget* widget = lg::createLatexDisplayWidget(latex, m_propertyTable);
+
+        widget->setToolTip(latex);
+
+        m_propertyTable->setCellWidget(row, 1, widget);
+
+        m_propertyTable->resizeRowToContents(row);
+
+    };
+
+
+
     auto appendNormalTreeAnalysis = [this, &addRow](const lg::NormalTreeResult& normalTree) {
 
         addRow(tr("Analysis"), tr("Normal tree"));
@@ -1216,6 +1262,59 @@ void MainWindow::updatePropertyPanel() {
                                       : tr("x%1 (through)").arg(i + 1);
 
             addRow(label, state.symbol);
+
+        }
+
+    };
+
+    auto appendStateSpaceAnalysis = [this, &addRow, &addLatexRow](const lg::StateSpaceResult& stateSpace) {
+
+        if (stateSpace.status != lg::StateSpaceResult::Status::Ok) {
+
+            return;
+
+        }
+
+        addRow(tr("Analysis"), tr("State space"));
+
+        if (!stateSpace.inputs.isEmpty()) {
+
+            const QString inputSummary =
+                stateSpace.inputLabels.isEmpty()
+                    ? stateSpace.inputs.join(QStringLiteral(", "))
+                    : stateSpace.inputLabels.join(QStringLiteral(", "));
+
+            addRow(tr("Inputs"), inputSummary);
+
+        }
+
+        for (const QString& eq : stateSpace.elementalEquations) {
+
+            addRow(tr("Elemental"), eq);
+
+        }
+
+        for (const QString& eq : stateSpace.continuityEquations) {
+
+            addRow(tr("Continuity"), eq);
+
+        }
+
+        for (const QString& eq : stateSpace.compatibilityEquations) {
+
+            addRow(tr("Compatibility"), eq);
+
+        }
+
+        for (const QString& eq : stateSpace.stateEquations) {
+
+            addRow(tr("State equation"), eq);
+
+        }
+
+        if (!stateSpace.matrixForm.isEmpty()) {
+
+            addLatexRow(tr("Matrix form"), stateSpace.matrixForm);
 
         }
 
@@ -1294,6 +1393,12 @@ void MainWindow::updatePropertyPanel() {
     if (m_scene->normalTreeHighlightActive()) {
 
         appendNormalTreeAnalysis(m_scene->lastNormalTreeResult());
+
+    }
+
+    if (m_scene->lastStateSpaceResult().status == lg::StateSpaceResult::Status::Ok) {
+
+        appendStateSpaceAnalysis(m_scene->lastStateSpaceResult());
 
     }
 
@@ -1394,7 +1499,15 @@ void MainWindow::updatePropertyPanel() {
 
             auto* branch = static_cast<BranchItem*>(ptr);
 
-            addRow(tr("Name"), branch->name(), true);
+            addRow(tr("Through variable"), branch->name(), true);
+
+            addRow(tr("Across variable"), lg::branchAcrossVariableText(*branch));
+
+            if (branch->isActive()) {
+
+                addRow(tr("Input"), lg::branchSourceInputDisplay(*branch));
+
+            }
 
             if (TwoPortItem* twoPort = m_scene->twoPortFor(branch);
                 twoPort && GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
@@ -1513,9 +1626,9 @@ void MainWindow::updatePropertyPanel() {
                 if (!branch->isActive()) {
                     if (branch->inNormalTree() && branch->branchType() == BranchType::A) {
                         addRow(tr("State variable"),
-                               lg::branchAcrossVariableText(*branch));
+                               lg::branchAcrossSymbol(*branch));
                     } else if (!branch->inNormalTree() && branch->branchType() == BranchType::T) {
-                        addRow(tr("State variable"), branch->name());
+                        addRow(tr("State variable"), lg::branchFlowSymbol(*branch));
                     }
                 }
 
