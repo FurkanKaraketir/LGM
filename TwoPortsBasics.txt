@@ -1,0 +1,2654 @@
+MASSACHUSETTS INSTITUTE OF TECHNOLOGY
+DEPARTMENT OF MECHANICAL ENGINEERING
+
+2.151 Advanced System Dynamics and Control
+
+Linear Graph Modeling: Two-Port Energy Transducing Elements1
+1
+
+Introduction
+
+One-port model elements are used to represent energy storage, dissipation, and sources within a
+single energy domain. In many engineering systems energy is transferred from one energy medium
+to another; for example in an electric motor electrical energy is converted to mechanical rotational
+energy, while in a pump mechanical energy is converted into ﬂuid energy. The process of energy
+conversion between domains is known as transduction and elements that convert the energy are
+deﬁned to be transducers. Within a single energy domain power may be transmitted from one
+part of a system to another; for example a speed reduction gear in a rotational system. In this
+chapter we deﬁne two types of ideal energy transduction elements which can be used to represent
+the process of energy transmission. We also develop methods to derive a set of state equations for
+these types of systems.
+Energy transduction devices include:
+• Rack and pinions, ball-screws, and linkages for transduction between mechanical translation
+and mechanical rotational systems.
+• Motors and generators for transformation between electrical and mechanical rotational systems.
+• Electromagnetic, magnetostrictive, and piezoelectric devices for transduction between electrical and mechanical translational systems.
+• Magnetohydrodynamic and electrohydrodynamic energy transfer for transductions between
+electrical and ﬂuid systems.
+• Pumps, compressors, and turbines for transduction between ﬂuid and mechanical rotational
+systems.
+• Ram, and piston-cylinder systems for transduction between ﬂuid and mechanical translational
+systems.
+Several of these transducers are illustrated in Fig. 1.
+Energy may also be transmitted within a single energy domain through transducers such as:
+• Levers and linkages for transmission between one part of a mechanical rotational system and
+another.
+• Gear trains for transmission between one part of a mechanical rotational system and another.
+• Electrical transformers for transmission between one part of an electrical system and another.
+• Fluid transformers for transmission between one part of a ﬂuid system and another.
+
+1
+
+v
+F
+W
+
+v
+
+T
+
+r
+
+F
+
+W
+
+T
+W
+
+Pinion
+
+F
+
+Rack
+
+v
+F
+
+r
+
+1_
+F = rT
+
+W
+V = rW
+1
+F = - _r T
+
+(a) Rack and pinion
+
+v
+
+v = -rW
+
+(b) Slider-crank
+
+Q
+
+W
+
+P
+
+T
+P
+
+E=Kv
+1
+__
+i=F
+K
+(d) Moving-coil loudspeaker
+
+Area A
+
++
+Q
+
+1
+v = - _Q
+A
+F = AP
+
+magnet
+
+coil
+
+(c) Rotary positive displacement pump
+
+F
+
+F
+
+-
+
+W = - 1_Q
+D
+T = DP
+Reservoir
+
+v
+
+v
+
+E
+
+Q
+
+W
+
+i
+
++
+
+i
+
+W
+
+v
+
+T
+
+-
+
+v = K vW
+
+1
+i = - __T
+Kv
+
+P
+
+(d) Fluid piston-cylinder
+
+(b) Electrical motor/generator
+
+Figure 1: Examples of systems and devices using two-port transducers between diﬀerent energy
+domains.
+
+2
+
+W2
+
+W1
+
+N2 teeth
+
+N1 teeth
+1
+_
+
+F = F2
+1 2
+
+N = N2 /N1
+
+v = -2 v2
+1
+
+_
+W1 = - 1
+W2
+N
+
+F2
+
+W1
+
+v2
+
+T1
+
+F1
+
+v1
+
+F2
+
+L = l2 /l 1
+1
+
+T2
+
+(b) Gear train
+
+(a) Block and tackle
+
+F
+
+T1 = N T2
+
+W2
+
+l2
+
+W
+
+l1
+
+v
+
+2
+
+W
+
+1
+_
+
+v = - v2
+1 L
+
+v1
+
+T1
+1
+
+1
+
+W
+
+W = RW
+1
+
+2
+
+T2
+
+1T
+T1 = - _
+R 2
+
+W
+
+F1 = L F2
+R = r /r
+
+r1
+
+N1 turns
+i1
+
+N2 turns
+
+v
+
+P1
+
+For a.c. inputs
+
+Area: A1
+
++
+2
+
+Area: A2
+
+P2
+
+Q1
+
+-
+
+-
+
+r
+2
+
+(d) Belt drive
+
+i2
+
++
+v1
+
+2
+
+2 1
+
+(c) Mechanical lever
+N = N2 / N
+1
+
+2
+
+v1 = 1_ 2v
+N
+i1 = - N i2
+
+Q2
+
+A = A2 /A1
+
+Po = 0
+
+P1 = A P
+2
+1
+_
+Q =- Q
+A
+
+(f) Fluid transformer
+
+(e) Electrical transformer
+
+Figure 2: Examples of two-port transducers within a single energy domain.
+
+3
+
+P1 = f1 v1
+
++
+v1
+-
+
+f2
+
+f1
+TWO-PORT
+TRANSDUCER
+
++
+v2
+-
+
+P2 = f2 v2
+
+Figure 3: Two-port element representation of an energy transducer.
+Several of these transducers are illustrated in Fig. 2. The basic energy transduction processes
+occurring in these types of devices can be represented by a two-port element, as shown in Fig.
+3, in which energy is transferred from one port to another. Each port has a through and an
+across-variable deﬁned in its own energy domain. Power may ﬂow into either port. The two-port
+transducer is a lossless element; for many physical systems it is necessary to formulate a model
+for a transducer that consists of an ideal two-port coupled with one or more one-port elements to
+account for any energy storage and dissipation that occurs in the real transducer. In the following
+sections general two ideal energy transduction processes are deﬁned, yielding two ideal two-port
+transducers following the development given by H. M. Paynter [1]. Other two-port model elements
+which represent dependent sources, and energy sources and dissipation elements have also been
+deﬁned [2,3].
+
+2
+
+Ideal Energy Transduction
+
+We deﬁne an ideal energy transduction process as one in which the transduction is:
+• Lossless — power is transmitted without loss through the transducer with no energy storage
+or dissipation associated with the transduction process.
+• Static — the relationships between power variables are algebraic and independent of time.
+There are no dynamics associated with the transduction process.
+• Linear — the relationships between power variables are represented by constant coeﬃcients
+and are linear.
+A two-port transducing element as illustrated in Fig. 3 identiﬁes a power ﬂow P1 into port #1,
+deﬁned in terms of a generalized through-variable f 1 and an across-variables v1 :
+P1 = f1 v1 ,
+
+(1)
+
+and a power ﬂow P2 into port #2, also deﬁned in terms of a pair of generalized variables f2 and v2 :
+P2 = f2 v2 .
+
+(2)
+
+The condition that the two-port transduction process is lossless requires that the net instantaneous
+power sums to zero for all time t:
+P1 (t) + P2 (t) = f1 v1 + f2 v2 = 0,
+where it is noted that power ﬂow is deﬁned to be positive into both ports.
+1
+
+D. Rowell - Revised: 2/22/03
+
+4
+
+(3)
+
+The most general linear relationship between the two pairs of across and through-variables for
+the two-port transducer may be written in the following matrix form:
+
+
+v1
+f1
+
+
+
+
+
+=
+
+c11 c12
+c21 c22
+
+
+
+v2
+f2
+
+
+
+(4)
+
+where c11 , c12 , c21 and c22 are constants that depend on the particular transducer. With the
+speciﬁcation of the constants in this form, a unique relationship is established between the power
+variables. When the additional condition is imposed that the transduction be lossless as well as
+linear and static, Eqs. (3) and (4) may be combined to yield a single equation in terms of the
+variables f2 and v2 (or equivalently in terms of f1 and v1 ) and the four transducer parameters:
+c11 c22 v22 + (1 + c11 c22 + c12 c21 )v2 f2 + c12 c22 f22 = 0.
+
+(5)
+
+(If the condition were derived in terms of f1 and v1 , it would be of the same form as Eq. (5).)
+Only two nontrivial solutions exist in which Eq. (5) is satisﬁed for arbitrary values of f2 and v2 ,
+and which correspond to power transfer between ports #1 and #2. By appropriate selection of the
+constants c11 , c12 , c21 , and c22 these solutions yield two possible ideal two-port transducers:
+Transforming Transducer:
+c12 = c21 = 0
+
+and
+
+c22 = −1/c11 ,
+
+(6)
+
+c11 = c22 = 0
+
+and
+
+c21 = −1/c12 .
+
+(7)
+
+Gyrating Transducer:
+
+These two general solutions are the only nontrivial solutions with power transfer, and give two
+distinct forms of ideal two-port transduction.
+The ideal two-port transformer relationship, deﬁned by the conditions of Eq. (6), may be written
+by substituting c11 = TF :
+
+ 
+
+
+v1
+TF
+0
+v2
+=
+(8)
+0 −1/TF
+f1
+f2
+where TF is deﬁned to be the transformer ratio. Equation (8) states that in a transformer the across
+variable v1 is related by a constant, TF , to the across-variable v2 on the other side, and throughvariable f1 is related by the negative reciprocal of the same constant (−1/TF ) to through-variable
+f2 :
+v1 = TF v2
+
+
+1
+f1 = −
+f2 .
+TF
+
+(9)
+(10)
+
+This transduction process is called a transformer because it relates across-variables to acrossvariables and through-variables to through-variables at the two ports. The symbol for the ideal
+transformer is shown in Fig. 4.
+Similarly the ideal two-port gyrating transducer, described by the conditions of Eq. (7), may
+be written by substituting c12 = GY :
+
+
+v1
+f1
+
+
+
+
+
+=
+
+0
+−1/GY
+5
+
+GY
+0
+
+
+
+v2
+f2
+
+
+
+(11)
+
++
+v1
+
+f2
+
+f1
+
+V2
+
++
+v1
+
+-
+
+-
+
++
+
+-
+
+f2
+
+f1
+
++
+
+v2
+-
+
+(a) Transformer
+
+(b) Gyrator
+
+Figure 4: Symbolic representation of transforming and gyrating transducers.
+W2
+
+W1
+
+r2
+
+r1
+
+W1
+
+W2
+
+T1
+
+T2
+
+Figure 5: A gear train as a transforming transducer.
+where GY is deﬁned to be the gyrator modulus. Equation (11) states that the across-variable v1 at
+port #1 is related by a constant, GY , to the through-variable f2 at port #2, and the through-variable
+f1 is related by the negative reciprocal constant −1/GY to the across-variable v2 :
+v1 = GY f2
+
+
+1
+f1 = −
+v2
+GY
+
+(12)
+(13)
+
+The transduction process is termed gyration because it relates across-variables to through-variables
+and vice versa. The two-port symbol for the gyrator is shown in Fig. 4.
+
+2.1
+
+Transformer Models
+
+Many engineering transduction devices and mechanisms are transformers. In this section we examine ideal models of a gear train, a rack and pinion drive (commonly employed in automotive
+steering systems), and a permanent magnet electric motor/generator (commonly used in control
+systems).
+2.1.1
+
+The Gear Train
+
+A pair of mechanical gears, used to change the torque and speed relationship between two rotational
+power shafts is illustrated in Fig. 5.
+If gear #1 has n1 teeth at an eﬀective radius r1 , and meshes with gear #2 which has n2 teeth
+at a radius r2 , the gear ratio N for the two gears is deﬁned to be the ratio of the number of teeth
+6
+
+on the two gears, or equivalently the ratio of the two radii:
+N=
+
+r1
+n1
+= .
+n2
+r2
+
+(14)
+
+The torque and angular velocity sign convention for each gear is deﬁned in Fig. 5, with the assumption that power ﬂow is deﬁned as positive into each power port. For rotation of the two gears
+without slippage, the linear velocity vt tangent to the pitch radius at the meshing teeth must be
+identical for each gear:
+vt = r1 Ω1 = −r2 Ω2 .
+(15)
+Therefore the angular velocity of the two shafts must be related:
+Ω1 = −
+
+r2
+1
+Ω2 = − Ω2
+r1
+N
+
+(16)
+
+where the sign conventions are chosen according to the deﬁnitions of positive angular velocity for
+each gear. Furthermore, at equilibrium the linear force F1 tangent to the pitch radius on the
+meshing teeth of gear #1 must be equal and opposite to the linear force F2 tangent to the pitch
+radius on gear #2:
+T1
+T2
+= −F2 =
+(17)
+F1 =
+r1
+r2
+consistent with the deﬁnition of torques identiﬁed in Fig. 5, or
+
+
+T1 =
+
+
+
+r1
+T2 = N T 2
+r2
+
+(18)
+
+Equations (16) and (18) deﬁne a transformer relationship, which may be written in the matrix form
+of Eq. (8) as:
+
+ 
+
+
+Ω1
+−1/N 0
+Ω2
+=
+(19)
+0
+N
+T1
+T2
+where it is noted that to establish consistency with the torque and angular velocity sign conventions
+in Fig. 5, the transformer modulus TF is −1/N .
+2.1.2
+
+A Rack and Pinion Drive
+
+Rack and pinion drive systems are used to convert rotary motion to translational motion and vice
+versa as shown in Fig. 6. The rotary input at the pinion shaft is expressed in terms of its angular
+velocity Ω and the applied torque T , while the translational power associated with the rack is
+expressed in terms of its linear velocity v and force F . The analysis of the system as an ideal
+transducer assumes that both elements are massless, and that no frictional losses occur at the
+contact between the teeth. With the further assumption that no slippage occurs between the rack
+and pinion, the linear velocity of the rack is related to the angular velocity of the pinion directly
+by the pinion radius, r, that is
+v = rΩ
+(20)
+For equilibrium, the force F on the rack must be related to the torque on the pinion shaft T at the
+meshing teeth by the relationship
+ 
+1
+T,
+(21)
+F =−
+r
+where a negative force is required to balance the positive torque as shown in Fig. 6. Equations (20)
+and (21) deﬁne the rack and pinion as a transformer because of the direct relationship between the
+7
+
+v
+F
+W
+T
+
+r
+
+W
+
+Pinion
+
+Rack
+
+v
+F
+
+Figure 6: A rack and pinion drive system.
+B
+Charge q
+
+q
+
+Electrical
+conductor
+
+v
+
+F
+
+Figure 7: Electromagnetic forces on a moving charged particle.
+across-variables v and Ω, and between the through variables F and T at the two ports. In this case
+the transformer ratio TF is simply the pinion radius, r, and the transduction equations are:
+
+
+v
+F
+
+
+
+
+
+=
+
+r
+0
+0 −1/r
+
+
+
+Ω
+T
+
+
+
+.
+
+(22)
+
+The rack and pinion can be used either to transform rotary motion to translational motion if the
+shaft is driven from an external source, or to transform translational motion to rotary motion if
+the rack is connected to a translational source.
+2.1.3
+
+Electromagnetic Transducers
+
+Electromagnetic transducing elements include electric motors, electrical meters, solenoids, microphones, and phonograph pick-ups. Their operation depends on two complementary laws, (i) the
+Lorentz law, which states that an electrical charge moving in a magnetic ﬁeld experiences a force,
+and (ii) Faraday’s law, which states that an electrical voltage is induced in a coil of wire that moves
+in a magnetic ﬁeld.[4] Figure 7 shows a particle with electric charge q moving with vector velocity
+v along a wire in a magnetic ﬁeld of ﬂux density B. The particle experiences a force ∆F given by
+the vector cross-product
+∆F = q (v × B) ,
+(23)
+which states that the direction of the force is at right angles to the direction of the motion v and
+the magnetic ﬂux B, and has a magnitude proportional to the component of the vector v that is
+perpendicular to B, that is to |v| sin θ in Fig. 7. If the wire has length  and there are N such
+discrete charged particles within the wire, the total transverse force is:
+F = N q (v × B)
+
+(24)
+
+= (I × B) 
+
+(25)
+
+8
+
+where the the vector current I = N qv/ is the total charge passing through any cross-section of
+the wire in unit time. If a coil is constructed by winding the wire into a circular or rectangular
+conﬁguration, the total electromagnetic force on the coil is equal to the sum of the forces acting on
+each elemental section of the coil.
+Equation (23) also implies that if a mobile charge in a conductor is transported physically with
+velocity v in a magnetic ﬁeld of uniform ﬂux density B, it experiences a force that tends to displace
+it along the conductor. The resulting migration of the charged particles induces a voltage diﬀerence
+proportional to the velocity between the two ends of the wire. The induced voltage, Vi , in a wire
+of length  travelling with velocity v perpendicular to a magnetic ﬁeld with ﬂux B is equal to:
+Vi = Bv
+
+(26)
+
+If the conductor is wound into a coil conﬁguration, the total voltage induced by motion is found
+by integrating the elemental potential diﬀerences along all sections of the coil. Motion induced
+voltages sum to zero in a coil that is subjected to a translational motion in a uniform magnetic
+ﬁeld, but sum to a ﬁnite value if the coil is rotated in the same ﬁeld.
+Equations (25) and (26) indicate that there is a direct relationship between force (or torque)
+and current, and a similar relationship between velocity (or angular velocity) and voltage. Electromagnetic transducers as a class therefore may be represented as transformers. The particular
+transformer ratio for any device must be derived from the system structure and the magnetic ﬂux
+geometry.
+2.1.4
+
+The Permanent Magnet DC Electric Motor
+
+A permanent magnet direct current (DC) motor-generator transforms energy between the electrical
+and mechanical rotational energy domains. Its basic structure is illustrated in Fig. 8. In applications where the transduction is primarily electrical to mechanical rotational energy, the transducer
+is designated to be a motor, while in applications where the transduction is from mechanical to electrical energy, the transducer is usually designated a generator. In both cases the electromechanical
+coupling determines the motor-generator characteristics.
+N
++
+
+i
+
+Magnetic field B
+
+N
+i
+
+F
+
+i
+
+W
+
+v
+
+N turn coil
+
+-
+
+Commutator/
+brushes
+
+S
+
+F
+
++
+v
+-
+
+S
+
+Figure 8: The dc permanent magnet motor/generator.
+The motor-generator consists of a rotor containing an electrical coil that rotates in the magnetic
+ﬁeld produced by a pair of permanent magnets. The electromechanical coupling constant may be
+derived by assuming that the magnets generate a radial magnetic ﬂux, with constant ﬂux density
+9
+
+B which is assumed to be uniform around the circumference of the rotor. If the radius of the rotor
+is r, its length is , and it is wound with an electrical coil with N turns carrying a current i, a force
+F = Bi perpendicular to the local magnetic ﬁeld is produced on each length of wire. (No force is
+exerted on the ends of the coil.) Each of the N turns in the coil has two sides interacting with the
+ﬁeld, so that the total torque exerted on the rotor is its radius multiplied by the number of wire
+lengths, 2N , multiplied by the magnetic force on each wire, or
+T = −2rN Bi.
+
+(27)
+
+Additionally, as the rotor spins with angular velocity Ω, each wire section passes through the
+magnetic ﬁeld with a tangential velocity v = rΩ generating an induced voltage between the two
+ends of each wire. The total voltage v induced in all wire sections is equal to the total number
+of wire lengths (2N ) multiplied by the voltage induced in each wire traveling at the rotational
+velocity:
+v = 2N BrΩ
+(28)
+In summary the relationship for the transducer may be written:
+
+
+v
+i
+
+
+
+
+
+=
+
+2N Br
+0
+0
+−1/2N Br
+
+
+
+Ω
+T
+
+
+
+(29)
+
+where the transformer constant is:
+TF = 2N Br.
+
+(30)
+
+The sign convention for the motor-generator is consistent with the deﬁnition that power is deﬁned
+as positive into the transducer at both ports, and the relationship of Eq. (30) represents the energy
+transduction for both motor and generator applications. In practice, many motor manufacturers
+adopt a sign convention with electrical power into the transducer as positive and mechanical power
+out as positive and express the transduction relationships in terms of two constants as:
+T ∗ = Kt i
+
+(31)
+
+V
+
+(32)
+
+= Kv Ω
+
+where Kt is the motor torque constant, and Kv is the motor back-emf voltage constant. If the
+manufacturer’s sign convention is adopted with T ∗ = −T , these two constants may be expressed
+as:
+
+ 
+
+
+v
+Kv
+0
+Ω
+=
+(33)
+i
+0 1/KT
+T∗
+and by comparing Eqs. (33) and (29), the standard motor constants are identiﬁed as:
+Kv = Kt = 2N Br
+
+(34)
+
+If a consistent set of units such as the SI system is utilized in specifying Kv and Kt , the two
+constants are numerically equal; however common practice for manufacturers is to utilize English
+units, which are not a consistent set and thus in many motor and generator speciﬁcations the values
+for Kv and Kt are not numerically equal, and conversion to a consistent set of units is required in
+model formulation.
+
+10
+
+2.2
+
+Gyrator Models
+
+2.2.1
+
+The Hydraulic Ram
+
+A common engineering example of a gyrating transducer is the hydraulic ram, consisting of a
+cylinder and piston as shown in Fig. 9, in which conversion occurs between mechanical translational
+power and ﬂuid power. For the ram illustrated in Fig. 9, the mechanical force F on the piston is
+v
+
+Area A
+
+F
+
+Q
+
+P
+
+Figure 9: The hydraulic ram as a gyrating transducer.
+related directly to the ﬂuid pressure P by the piston area A:
+F = AP
+
+(35)
+
+and with the sign convention adopted in the ﬁgure, the velocity v of the shaft is related to the ﬂuid
+volume ﬂow rate Q by the negative reciprocal of the area:
+1
+v=− Q
+A
+
+(36)
+
+Equations (35) and (36) show the linear relationship between an across-variable in one energy
+domain and the through-variable in the other. The ram therefore acts as a gyrator, with the
+gyration constant:
+1
+(37)
+GY = − .
+A
+In matrix form the hydraulic ram equations are:
+
+
+v
+F
+
+
+
+
+
+=
+
+0 −1/A
+A
+0
+
+
+
+P
+Q
+
+
+
+.
+
+(38)
+
+The ram is one example of a class of positive displacement ﬂuid-mechanical devices that are
+represented by gyrators. Other similar transducers include gear pumps and hydraulic motors, vane
+pumps and hydraulic motors, and piston pumps and hydraulic motors.
+
+3
+
+Multiport Element Models
+
+The linear graph symbols used to represent the ideal transformer and gyrator two-port elements
+are illustrated in Fig. 10. The sign convention adopted for each of the two-port elements is that
+power ﬂowing into the element at either port is deﬁned to be positive. The graph element implies a
+direct coupling between the across and through-variables associated with each branch of the graph,
+as deﬁned by the two-port elemental equations (8) and (11).
+
+11
+
+v1
+
+f1
+
+f2
+
+v1
+
+v2
+
+(a) Transformer
+
+f1
+
+f2
+
+v2
+
+(b) Gyrator
+
+Figure 10: Linear graph representation of two-port elements.
+The two-port elements are inherently four terminal elements, and are in general connected to
+four distinct nodes in a system graph. Thus a system model containing an electromechanical transducer contains two reference nodes, one mechanical and one electrical, as illustrated in Example
+3. Similarly Example 3, which illustrates the use of a gyrating transducer to couple the ﬂuid and
+mechanical domains, contains two reference nodes. Systems with two-port transducing elements
+often generate system graphs that are not connected graphs because of the multiple energy domains
+represented.
+Many physical transducing elements cannot be modeled directly with a simple energy conserving
+two-port element. They have implicit energy dissipation and storage phenomena associated with
+the transduction, and these must be accounted for by the inclusion of additional lumped parameter
+elements in the model.
+Consider, for example, the transduction between the electrical and rotational energy domains in
+a permanent magnet dc motor/generator. The ideal energy conversion relationships are described
+by Eq. (29). The modeling of a real motor, however, may need to account for the following additional
+phenomena:
+• The windings in the motor armature will have ﬁnite electrical resistance R. The voltage drop
+vR = iR across this resistance may be signiﬁcant in a given modeling situation.
+• The motor windings consist of many turns of wire, usually on a high permeability ferrous
+core, and will therefore exhibit properties of inductance associated with energy storage in the
+magnetic ﬁeld. It may be important to account for the voltage drop vL = Ldi/dt in a given
+model.
+• The rotating armature will have a ﬁnite moment of inertia J; it may be important to include
+the kinetic energy storage in a model.
+• The internal bearings in the motor may have signiﬁcant frictional losses that need to be
+described by a viscous damping coeﬃcient B.
+The two electrical phenomena share the common motor current i, and the voltage drop may be
+represented by series lumped R and L elements in the electrical circuit. The energy storage and
+dissipation in the rotational phenomena may be represented by lumped J and B elements in parallel
+with the mechanical side of the two-port element. The complete model for the dc motor is shown
+in Fig. 11a.
+The decision whether or not to include these additional elements in a system model must be
+based on an analysis of the complete system and its expected operating mode. For example,
+a decision to include the armature inductance L in a model should be based on the estimated
+signiﬁcance of the voltage drop vL during the normal operation of the motor. If the motor is
+12
+
+i
+
++
+
+L
+
+V
+
+Motor: R, L, B, J
+
+R
+
+W
+T
+
+W
+
+V
+
+T
+
+i
+
+1
+
+-
+
+2
+
+B J
+
+(a) Electric motor with armature inductance, resistance, inertia, and friction
+Pump: B, J, Rf
+
+W
+
+P
+
+1
+J B
+
+2
+
+T
+
+Q
+
+Q
+
+P
+
+W
+
+Rf
+
+Reservoir
+
+(b) Fluid pump with rotor inertia and friction, and fluid leakage
+TW
+v
+
+Pinion: J, Br
+
+F
+
+Rack: m, B
+m B
+
+F
+
+v
+
+W
+
+1
+
+2
+Br J
+
+T
+
+(c) Rack and pinion with inertia and friction effects
+
+Figure 11: Examples of two-port energy conversion devices with associated lumped elements to
+account for internal energy storage and dissipation.
+expected to act in a mode where the torques and drive current change slowly, it may be acceptable
+to ignore the inductive eﬀects, but if the same motor is to be used in a “high performance” dynamic
+system where the voltage vL is signiﬁcant the inductance L may need to be included in the model.
+Two additional examples of elements that might be included in power conversion devices are
+shown in Fig. 11. In Fig. 11b a positive displacement ﬂuid pump is shown with additional elements
+to account for the inertia J of the shaft and rotor, viscous damping B to account for frictional eﬀects
+in the bearings and rotating ﬂuid seals, and a ﬂuid leakage resistance Rf to account for the fact
+that some ﬂow does leak past the seals. Figure 11c shows a rack and pinion drive with additional
+elements to account for the mass m and sliding friction B of the translational rack element, and
+inertia J and rotational damping coeﬃcient Br to account for the rotating pinion and its bearings.
+
+Example
+An DC electric motor is used to drive a turntable in a high quality audio reproduction
+system. Because very small variations in the turntable speed can have an audible eﬀect
+13
+
+on the sound quality, the variation in turntable speed in response to changes in the input voltage is of interest. Form a system graph model of an electro-mechanical system,
+shown in Fig. 12.
+Solution: The construction of the linear graph model begins with the selection of eleW
+Turntable
+
+J
+R
+
+Bearing B
+
++
+
+L
+
+i
+
+1
+
+Vs (t)
+
+Vs (t)
+
+L
+
+Motor
+
+2
+
+v=0
+
+R
+
+(a) System
+
+B
+
+J
+
+W=0
+
+(b) Linear graph
+
+Figure 12: Linear graph model of a electric motor drive with an inertial load.
+ments. The input to the motor is assumed to be a prescribed voltage and is represented
+as a voltage source Vs (t). The motor armature (rotor) coil has both inductive energy
+storage and energy dissipation, and is modeled by a series inductance L and resistance
+R. The electro-mechanical conversion of energy is represented by an ideal two-port
+transformer, with the electro-mechanical coupling relating torque T to current im , and
+angular velocity Ω to the motor internal voltage (back emf) Vm generated.
+The two-port transformer relationships are:
+T
+
+= Kim
+1
+Ω = − Vm
+K
+
+(39)
+(40)
+
+and are represented explicitly by the two-port linear graph element. Figure 12 shows
+the turntable to be supported in external bearings. We assume that there are signiﬁcant
+frictional eﬀects in the internal motor bearings and in the external bearing, and that
+these may be combined to form an eﬀective rotational viscous damping coeﬃcient B.
+Similarly, we assume that the moments of inertia of the armature and the turntable
+may be combined to form an equivalent inertia J.
+The construction of the system graph may start with the mechanical system. The inertia
+and damper share a common angular velocity Ω and therefore are inserted in parallel
+between a node representing the turntable angular velocity and the rotational reference
+node. The rotational side of the two-port transformer element (motor) also has the
+same angular velocity as the turntable, and is inserted in parallel with the inertia and
+damper.
+The electrical side of the two-port is placed with one node at the electrical reference
+node, and with the second node representing the internal motor voltage. The motor
+coil, represented by the inductor and resistor elements, has a common current with
+14
+
+the electrical branch of the transformer and thus is represented as a series connection.
+The voltage source acts with respect to ground, and is assigned a sign convention to
+ensure that positive input voltage generates a positive current ﬂow to the motor. The
+completed linear graph is drawn in Figure 12(b).
+The linear graph demonstrates that in normal operation the voltage v1 applied to the
+ideal transformer is not the terminal voltage Vs (t). The dynamic behavior of the drive
+system will be aﬀected by the resistance and inductance elements.
+
+Example
+Form a dynamic model of a system consisting of a positive displacement pump which
+drives a hydraulic ram to move a mass sliding on a surface as represented in Fig. 13. The
+pump is driven from a constant angular velocity source Ωs (t). The dynamic response
+of the mass to variations in the angular velocity Ωs (t) is of interest.
+Solution: The hydraulic part of the system is represented by an angular velocity
+Area A
+
+Rf
+
+v
+
+Q
+R
+P
+
+K
+
+m
+
+Ws (t)
+
+B
+
+Rl
+
+1
+
+2 B K
+
+P
+W=0
+(a) System
+
+P = Patm
+
+v=0
+
+(b) Linear graph
+
+Figure 13: Linear graph model of a hydraulic linear actuator system.
+source driving a transformer based pump model with a leakage resistance Rl included
+to account for internal ﬂuid ﬂow around the seals in the pump. A ﬂuid resistance Rf is
+included to account for pressure drops in the pipe connecting the pump and hydraulic
+ram. The hydraulic-mechanical interface is represented by a gyrator with:
+F
+V
+
+= AP
+1
+= − Q
+A
+
+(41)
+(42)
+
+where A is the piston surface area, By convention power is deﬁned as positive into
+both branches and thus a positive ﬂuid volume ﬂow Q generates a negative mechanical
+velocity.
+The system graph may be constructed by ﬁrst considering the mechanical system, in
+which the mass is referenced to the mechanical reference node. The mechanical subsystem consists of three elements: a mass m, a spring K, and a damper B all sharing a
+common velocity (across-variable) and therefore connected in parallel across the gyrator
+port.
+15
+
+m
+
+a
+
+b
+
+a
+
+2
+
+1
+
+b
+
+2
+
+1
+
+c
+
+c
+
+(a) Transformer
+
+(b) Gyrator
+
+Figure 14: Linear graph representation of two-port elements with a common node (v1 = va − vc
+and v2 = vb − vc ).
+The hydraulic branch of the gyrator (the piston/cylinder) has ﬂow supplied by the
+pump through the resistance Rf , therefore the three hydraulic branches are connected
+in series. The signs associated with the hydraulic system are selected so that positive
+pressure with respect to the hydraulic reference node generates a positive volume ﬂow
+to the ram.
+The complete linear graph is shown in Figure 13. The two-port elements divide the
+system into three sections, each with its own reference node; the system graph is not a
+connected graph.
+
+Two-port transducers which represent energy transfer within a single energy domain may share a
+common reference across-variable on each side and eﬀectively reduce from a four terminal element
+to a three terminal element. In such cases two of the nodes are implicitly joined to form a common
+reference, and a connected graph, as shown in Fig. 14. A common reference, or equivalent three
+terminal representation, is required for two-ports which represent:
+(1) mechanical translational to mechanical translational energy transfer, such as occurs in a mechanical lever, since both port velocities must be referenced to a common inertial reference
+frame;
+(2) mechanical rotational to mechanical rotational energy transfer, such as occurs in a gear train,
+since both port angular velocities must be referenced to a common frame; and
+(3) ﬂuid to ﬂuid energy transfer, such as occurs in a ﬂuid transformer, since both port pressures
+must be referenced to a common constant pressure.
+When there is a common reference node shared between the two sides of a two-port element, the
+two sides form a connected region of the overall graph. The formation of a linear graph model
+incorporating a common node is illustrated in Example 3.
+
+Example
+In many engineering applications, D.C. motors are connected to loads through a gear
+train, as shown in Fig. 15, in which a D.C. motor is coupled to an inertial load though
+a speed-reducing gear train with ratio N . It is desired to form a system model which
+16
+
++
+
+Motor
+
+R
+
+B1
+
+Vs (t)
+
+L
+
+J
+
+Gear ratio n
+
+3
+1
+
+Vs (t)
+B2
+
+2
+
+B1
+
+v=0
+
+(a) System
+
+4
+B2 J
+Wref= 0
+
+(b) Linear graph
+
+Figure 15: Electric motor - speed reducer drive system.
+relates the motor voltage to the angular speed of the ﬂywheel.
+Solution: The D.C. motor is represented as described in Example 3, using an armature
+resistance R and inductance L to account for voltage drops in the coil, and a two-port
+electrical to mechanical rotational transformer with coupling constant K to model the
+electromechanical conversion. The gear train is represented as a rotational transformer
+with a gear ratio N .
+The ﬂywheel is represented as a rotational inertia J. All the shafts in the system are
+assumed to be rigid and two sets of bearings represented by rotational dampers B1 and
+B2 are shown in Fig. 15. The system has an electrical reference node and an angular
+velocity reference node. On the electrical side, the voltage source deﬁnes the voltage
+between the reference node and the series connection of the resistance, inductance and
+the electrical side of the two-port transduction element.
+The rotational part of the graph contains the inertia J and bearing damper element
+B2 , in parallel with branch 2 of the gear train. Branch 1 of the gear train is in parallel
+with bearing damper B1 and branch 2 of the electric motor element.
+The linear graph model is shown in Fig. 15, where the two-port transducer for the
+electrical motor is connected to four distinct nodes, and is eﬀectively a four-terminal
+device, while the two-port element representing the gear train is connected eﬀectively
+as a three-terminal element since two terminals are joined at a common reference node.
+The overall graph is not a connected graph because the electromechanical two-port has
+two separate reference nodes.
+
+Example
+A single massless, frictionless pulley with radius r is attached to a mechanical system
+as shown in Fig. 16(a), and is driven through a ﬂexible line of ﬁxed length L. The
+two ends of the line are connected to two independent velocity sources Va (t) and Vb (t).
+Derive a linear graph based model that will describe the system dynamics.
+Solution: The kinematics of the pulley drive system are shown in Fig. 16(a). If the
+
+17
+
+vc
+vc
+a
+
+Va(t)
+Vb(t)
+
+vd
+c
+
+K1
+
+d
+
+Va(t)
+
+K2
+
+1
+
+K1
+
+2
+
+m
+
+b
+
+xb
+
+xa
+
+xc
+
+vd
+
+B
+Vb(t)
+
+3
+
+4
+
+K2
+
+B
+
+m
+
+Figure 16: A mechanical system driven through a ﬂoating pulley.
+distances of the two ends of the line from a reference point are xa (t) and xb (t), then
+L = (xa − xc ) + (xb − xc ) + πr
+which when diﬀerentiated and rearranged gives the velocity of point (c) as
+1
+vc = (va + vb ).
+2
+
+(43)
+
+Because the pulley is massless and there are no frictional forces in the bearings, the
+force in the line FL is continuous. The net force acting on the mechanical system at
+point (c) is therefore
+(44)
+F = 2FL
+The system linear graph must embody Eqs. (i) and (ii). The linear graph is constructed
+by realizing that the velocity (across-variable) of point (c) is the sum of two components,
+Va /2 and Vb /2, and that the force (through-variable) is twice that associated with either
+source, that is 2F . These facts indicate that a pair of transformer relationships exist
+between the forces and the velocity components associated with the sources and that
+experienced by the mechanical system. Figure 16(b) shows how these relationships may
+be expressed by the use of two transformers, each driven by a velocity source, and
+with the two branches 2 and 4 connected in series. Note that for drawing convenience
+the reference node v = 0 has been drawn as three separate nodes; they should all be
+considered as one node.
+
+4
+
+State Equation Formulation
+
+The generation of state equations for systems containing two-port transduction elements is similar
+to the method described for systems of one-port elements. The major diﬀerence lies in the stepwise procedure for constructing the normal tree because of the four terminal nature of the two-port
+elements.
+
+18
+
+1
+
+1
+
+2
+
+Primary Variables:
+
+2
+
+Primary Variables:
+
+v1 , f2
+
+f1, v
+
+2
+
+Secondary variables: v1 , f2
+
+Secondary variables: f1, v2
+
+Figure 17: The two allowable tree conﬁgurations for a transformer. The links are shown as dotted
+lines.
+
+4.1
+
+Graph Trees for Systems of Two-Port Transduction Elements
+
+Two-port elements are essentially four terminal elements, and in general are connected to four
+distinct nodes on the system graph. When there is no common reference node between the two
+sides of a two-port element the system graph is eﬀectively partitioned into two distinct connected
+graphs, each with a separate reference node.
+If a system graph with a total of N nodes and B branches is divided into Nd separate connected
+linear graphs by two-port elements, the overall system tree consists of Nd section trees. If the ith
+such section contains Ni nodes, the tree for that section contains Ni −1 branches. The total number
+of branches BT in any tree of the system graph is then:
+BT =
+
+Nd
+
+
+(Ni − 1) = N − Nd ,
+
+(45)
+
+i=1
+
+and the number of links BL in any system tree is:
+BL = B − BT = B − N + Nd .
+
+(46)
+
+For a system graph containing SA across-variable sources and ST through-variable sources, and
+containing Nd distinct connected graphs, there are a total of B − SA − ST passive branches, each
+with an elemental equation. The B − SA − ST constraint equations required to solve the system
+may be found from BL − ST = B − N + Nd − ST compatibility equations formed by replacing the
+passive links in the tree, and BT − SA = N − Nd − SA continuity equations formed by creating
+contours that cut a single tree branch.
+
+4.2
+
+Speciﬁcation of Causality for Two-Port Elements
+
+The elemental equations for transformers and gyrators impose causality constraints across the twoport element and generate a pair of rules that specify how the branches of a two-port element may
+be entered into a tree. Furthermore the primary variables are deﬁned to be the across-variables on
+tree branches and the through-variables on tree links. The elemental equations for the two-port
+elements relate variables across the element, so that when the condition is imposed that only one of
+the two variables on each branch may be considered as primary, only two possible causal conditions
+may be deﬁned for a two-port element:
+The Transformer:
+
+For the transformer shown in Fig. 17, branch #1 has across and through19
+
+1
+
+1
+
+2
+
+Primary Variables:
+
+v1, v
+
+2
+
+Secondary variables: f1, f2
+
+2
+
+Primary Variables:
+
+f1, f
+
+Secondary variables:
+
+v1, v2
+
+2
+
+Figure 18: The two allowable tree conﬁgurations for a gyrator. The links are shown as dotted lines.
+variables v1 and f1 , while branch #2 has variables v2 and f2 . The transformer equations
+v1 = TF v2
+
+
+1
+f1 = −
+f2
+TF
+
+(47)
+(48)
+
+specify that if v1 (or v2 ) is considered to be a primary variable, then v2 (or v1 ) must be a secondary
+variable. Similarly, if f1 (or f2 ) is chosen as a primary variable, f2 (or f1 ) is by deﬁnition a secondary
+variable. The transformer equations allow only one across-variable and one through-variable to be
+used as primary variables.
+Since only one across-variable may be a primary variable for a transformer, only one branch of
+a transformer may appear as a tree branch. In other words either:
+(1) branch # 1 appears in the tree and branch # 2 is a link, in which case v1 and f2 are the two
+primary variables, and v2 and f1 are secondary variables, or
+(2) branch # 2 appears in the tree and branch # 1 is a link, so that v2 and f1 are the two primary
+variables and v1 and f2 are secondary variables.
+These two allowable causalities are shown in Fig. 17a and 17b.
+The Gyrator: The generation of a set of independent compatibility and continuity equations
+from a tree structure containing a gyrator requires a diﬀerent set of causal conditions. For an ideal
+gyrator, such as shown in Fig. 18, with elemental equations:
+v1 = GY f2
+
+
+1
+v2
+f1 = −
+GY
+
+(49)
+(50)
+
+it can be seen that:
+(1) if v1 is taken as a primary variable, then v2 must also be considered a primary variable, since
+f2 is a secondary variable, or
+(2) if f1 is considered to be a primary variable, then because v2 is then by deﬁnition a secondary
+variable, f2 is also a primary variable.
+To satisfy the ﬁrst case, with two primary across-variables, both gyrator branches must be placed in
+a tree. To satisfy the second possibility, where both through-variables are primary, the two gyrator
+branches must both be tree links. The two allowable tree structure for gyrators are illustrated in
+Fig. 18a and Fig. 18b.
+20
+
+4.3
+
+Derivation of the Normal Tree
+
+The derivation of a normal tree for a system containing two-port elements is an extension of the
+procedure for systems of one-port elements. The system normal tree for a system graph model
+containing two-port transducers should be formed in the following steps:
+Step 1: Draw the system graph nodes.
+Step 2: Include all across-variable sources as tree branches. (If all across-variable sources cannot
+be included in the normal tree, then the sources must form a loop and compatibility is
+violated.)
+Step 3: Include as many as possible of the A-type elements as tree branches such that the completion of the tree does not require the placement of both branches of a transformer or one
+branch of a gyrator in the tree. (Any A-type element which cannot be included in the normal
+tree is a dependent energy storage element.)
+Step 4: Include one branch of each transformer, and both or neither branch of each gyrator, in the
+tree so that the maximum number of T-type energy storage elements remain out of the tree.
+If this step cannot be completed, the system model is invalid.
+Step 5: Attempt to complete the tree by including as many as possible D-type dissipative elements
+in the tree. It may not be possible to include all D-type elements.
+Step 6: If the tree is not complete after the addition of D-type elements, add the minimum number of T-type energy storage elements required to complete the tree. (Any T-type element
+included in the tree at this point is a dependent energy storage element.)
+Step 7: Examine the tree to determine if any through-variable sources are required to complete
+the tree. If any through-variable source can be inserted into the normal tree, then that source
+cannot be independently speciﬁed and continuity is violated.
+System graphs and their normal trees for some simple systems containing one-port energy storage
+elements and an ideal two-port are illustrated in Fig. 20. In some cases a choice of two-port
+causality exists in formulating the normal tree. For example, in cases 2, 3, and 4 in Fig. 20 either
+causality results in the identiﬁcation of only one state variable. The two energy storage elements are
+dependent, and the energy storage variable on either may be used as the state variable. In cases 1,
+5, and 6, however, the choice of two-port causality leads either to two state variables or none. The
+procedure outlined above usually chooses the conﬁguration that maximizes the number of selected
+state variables. In more complex systems, with many sources and energy storage elements, system
+structural constraints may require the use of the representations 1B, 5A, and 6B in order to identify
+the maximum number of independent energy storage elements in the complete system.
+
+Example
+Derive the normal tree for the system shown in Fig. 19a in which an electric motor is
+coupled to an inertial load through a speed reducing gear train.
+Solution: The system linear graph in Fig. 19b contains two, two-port elements to
+represent the motor and the gear train. The motor is represented as a four terminal
+transducer, while the gear train has each branch referenced to a common reference
+21
+
+Motor
+
++
+
+B1
+
+Vs (t)
+
+J
+
+Gear ratio n
+
+B2
+
+(a) System
+R
+
+R
+
+L
+3
+
+Vs (t)
+
+1
+
+2
+
+L
+3
+
+4
+
+B1
+
+v=0
+(b) Linear graph
+
+B2 J
+
+Vs (t)
+
+1
+
+2
+
+B1
+
+v=0
+
+Wref= 0
+
+(c) Normal tree
+
+4
+B2 J
+Wref= 0
+
+Figure 19: Generation of the normal tree for a electromechanical system consisting of an electric
+motor driving an inertial load through a gear train.
+angular velocity and is represented as a three terminal element. The system graph
+consists of two connected graphs and has N = 7 nodes, and two distinct sections
+(Nd = 2). The number of branches in the two sections of the system graph normal
+tree is therefore BT = N − Nd = 5. The normal tree is constructed by inserting ﬁrst
+the voltage source Vs , followed by the inertia element J. In this case there is no choice
+on the causality assignment, for branch 2 of the gear train transformer must be in the
+links, requiring that branch 1 be a normal tree branch. With this assignment, branch 2
+of the motor must also be in the links. The only D-type element which may be included
+in the tree branches is the electrical resistor R.
+
+4.4
+
+State Equation Generation
+
+With the normal tree, we can begin the derivation of the state equations for systems with two-port
+elements by choosing the primary variables as the across-variables on all branches of the normal
+tree and the through-variables on all normal tree links, including those associated with the two-port
+elements. The system state variables are those primary variables associated with the n independent
+energy storage elements deﬁned by the normal tree, that is:
+(a) the across-variables of the A-type energy storage elements in the normal tree, and
+(b) the through-variables of the T-type energy storage elements in the normal tree links.
+The procedure for deriving n state equations in terms of the n state variables and S source variables
+is similar to that for systems of one-port elements, with the addition that the two elemental equa22
+
+A:
+
+Case 1:
+
+1
+
+2
+
+3
+
+T-type
+
+4
+
+1
+
+A-type
+
+L
+
+Case 2:
+
+1
+
+2
+
+3
+
+A-type
+
+2
+
+3
+
+T-type
+
+1
+
+2
+
+3
+
+T-type
+
+1
+
+2
+
+3
+
+A-type
+
+1
+T-type
+
+2
+
+3
+
+1
+
+C
+
+L
+
+2
+
+3
+
+4
+
+C
+
+B:
+
+C
+
+2
+
+3
+
+4
+
+1
+
+C
+
+C
+
+2
+
+3
+
+4
+C
+
+State variables: v4
+
+State variables: v1
+
+A:
+
+B:
+
+4
+
+1
+
+T-type
+
+L
+
+2
+
+3
+
+4
+
+1
+
+L
+
+L
+
+2
+
+3
+
+4
+
+L
+
+State variables: f1
+
+State variables: f
+
+A:
+
+B:
+
+4
+
+1
+
+A-type
+
+L
+
+2
+
+3
+
+4
+
+4
+
+1
+
+C
+
+L
+
+2
+
+3
+
+4
+C
+
+State variables: f1
+
+State variables: v 4
+
+A:
+
+B:
+
+4
+
+1
+
+A-type
+
+C
+
+Case 6:
+
+4
+
+A:
+
+A-type
+
+Case 5:
+
+3
+
+State variables: none
+
+1
+
+Case 4:
+
+2
+
+State variables: f1, v4
+
+4
+
+Case 3:
+
+1
+
+B:
+
+2
+
+3
+
+4
+
+1
+
+C
+
+C
+
+2
+
+3
+
+4
+C
+
+State variables: none
+
+State variables: v1, v4
+
+A:
+
+B:
+
+4
+
+1
+
+T-type
+
+L
+
+2
+
+3
+
+4
+
+1
+
+L
+
+L
+
+State variables: f1, f4
+
+2
+
+3
+
+4
+L
+
+State variables: none
+
+Figure 20: Examples of two-port system normal trees when energy storage elements are connected
+across both branches. The links are shown as dotted lines.
+
+23
+
+tions for each two-port element must be included in the derivation. The procedure is illustrated in
+the following examples:
+
+Example
+A sketch of a ﬁxed ﬁeld D.C. motor drive system, with its system graph model containing
+B = 7 branches and N = 6 nodes, is shown in Fig. 21. The motor is represented as a
+four terminal element, generating two distinct connected graph sections in the system
+graph (Nd = 2), so that there is BT = N − Nd = 4 branches in the normal tree, and
+two branches in the links. The system normal tree is shown in Fig. 21c.
+W
+Turntable
+
+J
+
+Bearing B
+
+i
+
++
+Vs (t)
+
+L
+
+-
+
+R
+
+Motor
+
+(a) System
+R
+
+L
+
+R
+
+1
+
+2
+
+Vs (t)
+
+B
+
+1
+J
+
+Vs (t)
+
+W=0
+
+v=0
+
+L
+
+v=0
+
+(b) Linear graph
+
+2
+
+B
+
+J
+
+W=0
+
+(c) Normal tree
+
+Figure 21: An electric motor drive, system graph, and normal tree.
+From the normal tree in Fig. 21c:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Vs (t),
+Is (t),
+2
+ΩJ ,
+
+ΩJ ,
+TJ ,
+
+vR ,
+iR ,
+
+iL ,
+vL ,
+
+TB ,
+ΩB ,
+
+v1 ,
+i1 ,
+
+T2
+Ω2
+
+iL
+
+The B − S = 6 elemental equations written in terms of primary variables are:
+dΩJ
+dt
+diL
+dt
+
+=
+=
+24
+
+1
+TJ
+J
+1
+vL
+L
+
+(51)
+(52)
+
+vR = RiR
+
+(53)
+
+TB = BΩB
+1
+Ω2
+v1 =
+Ka
+1
+T2 = −
+i1
+Ka
+
+(54)
+(55)
+(56)
+
+The N − Nd − SA = 3 continuity equations are:
+TJ
+
+= −T2 − TB
+
+(57)
+
+iR = iL
+
+(58)
+
+i1 = iL .
+
+(59)
+
+The B − N + Nd − ST = 3 compatibility equations are:
+vL = V s − v R − v 1
+
+(60)
+
+ΩB = ΩJ
+
+(61)
+
+Ω2 = ΩJ
+
+(62)
+
+The secondary variables may be directly eliminated from the elemental equations:
+1
+dΩJ
+=
+(−T2 − TB )
+dt
+J
+1
+diL
+=
+(Vs − vR − v1 )
+dt
+L
+vR = RiL
+
+(63)
+(64)
+(65)
+
+TB = BΩJ
+1
+ΩJ
+v1 =
+Ka
+1
+iL
+T2 = −
+Ka
+
+(66)
+(67)
+(68)
+
+By direct substitution the six elemental equations may be reduced to two state equations
+and placed in the standard form:
+
+
+Ω˙J
+i˙L
+
+
+
+
+
+=
+
+−B/J
+1/ (Ka J)
+−R/L
+−1/ (Ka L)
+
+
+
+ΩJ
+iL
+
+
+
+
+
++
+
+0
+1/L
+
+
+
+Vs (t)
+
+(69)
+
+If the dynamic study required the computation of the torque to accelerate the inertia
+TJ , the motor current iL , and the viscous bearing torque TB as output variables, the
+elemental and constraint equations may be used to write a set of three output equations
+in terms of the state and input variables:
+TJ
+
+= −T2 − TB =
+
+(70)
+
+iL = iL
+
+(71)
+
+TB = BΩJ .
+
+(72)
+
+In output matrix form these are written:
+
+
+1
+iL − BΩJ
+Ka
+
+
+
+
+
+
+
+
+
+
+
+
+TJ
+−B 1/Ka 
+0
+
+ 
+ ΩJ
+
+
+1 
++  0  Vs (t)
+ iL  =  0
+iL
+0
+B
+0
+TB
+
+25
+
+(73)
+
+Example
+A sketch of a hydraulically actuated mechanical system and its linear graph model are
+shown in Fig. 22. The hydraulic actuator is a gyrator and divides the system into the
+ﬂuid and mechanical domains. On each side a separate reference node is established.
+The system graph has B = 7 branches and N = 5 nodes. The gyrator, representing
+the hydraulic ram, divides the overall graph into two distinct connected graphs Nd = 2.
+The normal tree for the system has BT = 5 − 2 = 3 branches: the pressure source, the
+mechanical mass and the ﬂuid resistor are shown in Fig. 22c. The two gyrator branches,
+together with the spring and mechanical damper form the links of the tree.
+v
+
+Area A
+Pump Ps (t)
+
+Q
+R
+
+K
+
+m
+f
+
+B
+P
+
+Patm
+
+(a) System
+Rf
+
+Rf
+
+1
+
+Ps (t)
+
+2 B K
+
+P=P
+atm
+
+2 B K
+
+1
+
+Ps (t)
+
+m
+
+P=P
+atm
+
+v=0
+
+(b) Linear graph
+
+m
+
+v=0
+
+(c) Normal tree
+
+Figure 22: Hydraulic actuator system, its linear graph and normal tree.
+From the normal tree shown in Fig. 22c:
+Primary variables:
+Secondary variables:
+System order:
+State variables:
+
+Ps (t),
+Qs (t),
+2
+vm ,
+
+PR ,
+QR ,
+
+vm ,
+Fm ,
+
+FK ,
+vK ,
+
+FB ,
+vB ,
+
+Q1 ,
+P1 ,
+
+F2
+v2
+
+FK
+
+The B − S = 6 elemental equations written in terms of primary variables are:
+dvm
+1
+=
+Fm
+dt
+m
+dFk
+= KvK
+dt
+PR = RQR
+26
+
+(74)
+(75)
+(76)
+
+FB = BvB
+
+(77)
+
+Q1 = −Av2
+
+(78)
+
+F2 = AP1
+
+(79)
+
+From the normal tree the N − Nd − SA = 2 continuity equations are:
+Fm = −F2 − FK − FB
+
+(80)
+
+QR = Q1 .
+
+(81)
+
+and the B − N + Nd − ST = 4 compatibility equations are:
+= vm
+
+(82)
+
+v B = vm
+
+(83)
+
+v 2 = vm
+
+(84)
+
+P1 = Ps − PR
+
+(85)
+
+vK
+
+The secondary variables may be eliminated from the elemental equations to yield:
+1
+dvm
+=
+(F2 − FK − FB )
+dt
+m
+dFk
+= KFK
+dt
+PR = RQ1
+
+(86)
+(87)
+(88)
+
+FB = Bvm
+
+(89)
+
+Q1 = −Avm
+
+(90)
+
+F2 = A (Ps − PR )
+
+(91)
+
+By direct substitution, the six elemental equations may be reduced to two state equations:
+dvm
+dt
+dFk
+dt
+
+=
+
+1
+− A2 R + B vm − Fk − APs
+m
+
+= Kvm
+
+(93)
+
+with the matrix form
+
+
+v˙m
+F˙K
+
+
+
+
+
+=
+
+
+
+(92)
+
+
+
+− A2 R + B /m −1/m
+K
+0
+
+
+
+vm
+FK
+
+
+
+
+
++
+
+−A/m
+0
+
+
+
+Ps (t)
+
+(94)
+
+References:
+1. Koenig H. E., Tokad Y., Kesavan H. K., Hedges H. G., Analysis of Discrete Physical Systems,
+McGraw-Hill Book Company, New York NY, 1967
+2. Blackwell W. A., Mathematical Modeling of Physical Networks, Macmillan Publishing Company, New York NY, 1967
+27
+
+3. Shearer J. L., Murphy A. T., Richardson H. H., Introduction to System Dynamics, AddisonWesley Publishing Company, Reading MA, 1967
+4. Kuo B. C., Linear Networks and Systems, McGraw-Hill Book Company, New York NY, 1967
+5. Chan S. P., Chan S. Y., Chan S. G., Analysis of linear Networks and Systems, Addison-Wesley
+Publishing Company, Reading MA, 1972
+6. Paynter H. M., Analysis and Design of Engineering Systems, MIT Press, Cambridge MA,
+1961
+
+28
+
+

@@ -1,11 +1,32 @@
 #include "canvas.h"
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
+
+#include <QMessageBox>
+#include <QSet>
+
+namespace {
+
+void refreshTwoPortEgressAt(NodeItem* port) {
+    if (!port || !port->twoPort()) {
+        return;
+    }
+    TwoPortItem* twoPort = port->twoPort();
+    for (BranchItem* branch : port->branches()) {
+        if (!GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
+            branch->updatePath();
+        }
+    }
+}
+
+}  // namespace
 
 GraphScene::GraphScene(QObject* parent) : QGraphicsScene(-2000, -2000, 4000, 4000, parent) {}
 
 void GraphScene::notifyGraphChanged() {
+    clearNormalTreeHighlight();
     if (!m_suppressGraphChange) {
         emit graphChanged();
     }
@@ -13,7 +34,8 @@ void GraphScene::notifyGraphChanged() {
 
 NodeItem* GraphScene::createNode(const QPointF& center) {
     auto* node = new NodeItem;
-    node->setName(tr("Node %1").arg(m_nextNodeId++));
+    node->setName(tr("Node %1").arg(m_nextNodeId));
+    node->setAcrossVariable(QStringLiteral("e%1").arg(m_nextNodeId++));
     node->setPos(snap(center));
     addItem(node);
     notifyGraphChanged();
@@ -51,11 +73,18 @@ BranchItem* GraphScene::createBranch(NodeItem* a, NodeItem* b, qreal bow) {
     addItem(branch);
     reindexBranches(a, b);
     branch->setName(tr("Branch %1").arg(m_nextBranchId++));
+    if (a->twoPort()) {
+        refreshTwoPortEgressAt(a);
+    }
+    if (b->twoPort() && b != a) {
+        refreshTwoPortEgressAt(b);
+    }
     notifyGraphChanged();
     return branch;
 }
 
-TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind) {
+TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind, const QString& modulus,
+                                       const QString& name) {
     const QPointF c = snap(center);
     const QPointF v1Pos = c + QPointF(-kTwoPortHalfWidth, -kTwoPortHalfHeight);
     const QPointF v2Pos = c + QPointF(kTwoPortHalfWidth, -kTwoPortHalfHeight);
@@ -67,25 +96,24 @@ TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind) 
     auto* v2 = createNode(v2Pos);
     auto* g1 = createNode(g1Pos);
     auto* g2 = createNode(g2Pos);
-    v1->setName(tr("V₁"));
-    v2->setName(tr("V₂"));
-    g1->setName(tr("G₁"));
-    g2->setName(tr("G₂"));
     g1->setGround(true);
     g2->setGround(true);
 
     auto* left = createBranch(v1, g1, -14.0);
     auto* right = createBranch(v2, g2, 14.0);
-    left->setName(tr("Left branch"));
-    right->setName(tr("Right branch"));
 
     const QString twoPortName =
-        kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
-                                         : tr("Gyrator %1").arg(m_nextTwoPortId);
+        name.isEmpty() ? (kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
+                                                           : tr("Gyrator %1").arg(m_nextTwoPortId))
+                       : name;
     ++m_nextTwoPortId;
 
     auto* item = new TwoPortItem(kind, c, v1, v2, g1, g2, left, right);
     item->setName(twoPortName);
+    item->applyPortDefaults();
+    if (!modulus.isEmpty()) {
+        item->setModulus(modulus);
+    }
     for (NodeItem* node : {v1, v2, g1, g2}) {
         node->setTwoPort(item);
     }
@@ -105,6 +133,18 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
     NodeItem* nodes[] = {item->v1(), item->v2(), item->g1(), item->g2()};
     BranchItem* branches[] = {item->leftBranch(), item->rightBranch()};
 
+    std::vector<BranchItem*> externalBranches;
+    for (NodeItem* node : nodes) {
+        if (!node) {
+            continue;
+        }
+        for (BranchItem* branch : node->branches()) {
+            if (!isInternalTwoPortBranch(item, branch)) {
+                externalBranches.push_back(branch);
+            }
+        }
+    }
+
     for (NodeItem* node : nodes) {
         if (node) {
             node->setTwoPort(nullptr);
@@ -115,6 +155,7 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
     removeItem(item);
     delete item;
 
+    m_suppressGraphChange = true;
     for (BranchItem* branch : branches) {
         if (!branch) {
             continue;
@@ -126,14 +167,41 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
         removeItem(branch);
         delete branch;
     }
+    for (BranchItem* branch : externalBranches) {
+        NodeItem* a = branch->from();
+        NodeItem* b = branch->to();
+        branch->setSelected(false);
+        if (a) {
+            a->removeBranch(branch);
+        }
+        if (b) {
+            b->removeBranch(branch);
+        }
+        removeItem(branch);
+        delete branch;
+    }
+    m_suppressGraphChange = false;
 
+    QSet<NodeItem*> uniqueNodes;
     for (NodeItem* node : nodes) {
-        if (node && node->scene()) {
+        if (node) {
+            uniqueNodes.insert(node);
+        }
+    }
+    for (NodeItem* node : uniqueNodes) {
+        if (node->scene()) {
             removeItem(node);
             delete node;
         }
     }
     notifyGraphChanged();
+}
+
+void GraphScene::flipBranch(BranchItem* branch) {
+    if (!branch) {
+        return;
+    }
+    branch->flip();
 }
 
 void GraphScene::destroyBranch(BranchItem* branch) {
@@ -156,6 +224,12 @@ void GraphScene::destroyBranch(BranchItem* branch) {
     if (a->scene() && b->scene()) {
         reindexBranches(a, b);
     }
+    if (a->twoPort()) {
+        refreshTwoPortEgressAt(a);
+    }
+    if (b->twoPort() && b != a) {
+        refreshTwoPortEgressAt(b);
+    }
     notifyGraphChanged();
 }
 
@@ -167,6 +241,11 @@ void GraphScene::destroyBranchAt(const BranchKey& key) {
     }
     for (BranchItem* branch : branchesBetween(a, b)) {
         if (branch->index() == key.index) {
+            if (TwoPortItem* twoPort = twoPortFor(branch)) {
+                if (isInternalTwoPortBranch(twoPort, branch)) {
+                    return;
+                }
+            }
             destroyBranch(branch);
             return;
         }
@@ -223,6 +302,15 @@ void GraphScene::selectTwoPort(TwoPortItem* item) {
     if (item) {
         item->selectMembers(true);
     }
+}
+
+void GraphScene::selectTwoPortNode(NodeItem* node) {
+    if (!node || !node->twoPort()) {
+        return;
+    }
+    clearSelection();
+    node->setSelected(true);
+    node->twoPort()->setSelected(true);
 }
 
 QRectF GraphScene::contentBounds() const {
@@ -297,9 +385,10 @@ BranchItem* GraphScene::branchAt(const QPointF& scenePos) const {
     return nullptr;
 }
 
-NodeItem* GraphScene::nodeAt(const QPointF& scenePos) const {
+NodeItem* GraphScene::nodeAt(const QPointF& scenePos, const NodeItem* except) const {
     for (QGraphicsItem* item : items(scenePos)) {
-        if (auto* node = dynamic_cast<NodeItem*>(item)) {
+        auto* node = dynamic_cast<NodeItem*>(item);
+        if (node && node != except) {
             return node;
         }
     }
@@ -308,4 +397,352 @@ NodeItem* GraphScene::nodeAt(const QPointF& scenePos) const {
 
 QPointF GraphScene::snap(QPointF point) const {
     return {std::round(point.x() / kGrid) * kGrid, std::round(point.y() / kGrid) * kGrid};
+}
+
+void GraphScene::clearNormalTreeHighlight() {
+    if (!m_normalTreeHighlightActive) {
+        return;
+    }
+    m_normalTreeHighlightActive = false;
+    m_lastNormalTreeResult = {};
+    for (QGraphicsItem* item : items()) {
+        if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branch->setNormalTreeRole(false, false);
+        }
+    }
+}
+
+lg::NormalTreeResult GraphScene::findNormalTree() {
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    std::vector<TwoPortItem*> twoPorts;
+    nodes.reserve(static_cast<size_t>(items().size()));
+    branches.reserve(static_cast<size_t>(items().size()));
+    twoPorts.reserve(static_cast<size_t>(items().size()));
+    for (QGraphicsItem* item : items()) {
+        if (auto* node = dynamic_cast<NodeItem*>(item)) {
+            nodes.push_back(node);
+        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branches.push_back(branch);
+        } else if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
+            twoPorts.push_back(twoPort);
+        }
+    }
+
+    for (QGraphicsItem* item : items()) {
+        if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branch->setNormalTreeRole(false, false);
+        }
+    }
+    m_normalTreeHighlightActive = false;
+    m_lastNormalTreeResult = {};
+
+    lg::NormalTreeResult result = lg::computeNormalTree(nodes, branches, twoPorts);
+    if (result.status != lg::NormalTreeResult::Status::Ok) {
+        return result;
+    }
+
+    lg::populateNormalTreeStateVariables(result, branches);
+    m_normalTreeHighlightActive = true;
+    m_lastNormalTreeResult = result;
+    for (BranchItem* branch : branches) {
+        const bool inTree =
+            std::find(result.treeBranches.begin(), result.treeBranches.end(), branch) !=
+            result.treeBranches.end();
+        branch->setNormalTreeRole(inTree, true);
+    }
+    return result;
+}
+
+namespace {
+
+int twoPortRole(const TwoPortItem* tp, const NodeItem* node) {
+    if (!tp || !node) {
+        return 0;
+    }
+    if (node == tp->v1()) {
+        return 1;
+    }
+    if (node == tp->v2()) {
+        return 2;
+    }
+    if (node == tp->g1()) {
+        return 3;
+    }
+    if (node == tp->g2()) {
+        return 4;
+    }
+    return 0;
+}
+
+NodeItem* chooseMergeKeep(NodeItem* a, NodeItem* b) {
+    TwoPortItem* tpA = a->twoPort();
+    TwoPortItem* tpB = b->twoPort();
+    if (tpA && tpA == tpB) {
+        if (a == tpA->g1() || b == tpA->g2()) {
+            return tpA->g1();
+        }
+        if (b == tpA->g1() || a == tpA->g2()) {
+            return tpA->g1();
+        }
+    }
+    if (tpA && !tpB) {
+        return a;
+    }
+    if (tpB && !tpA) {
+        return b;
+    }
+    return a;
+}
+
+GraphScene::BranchKey branchKeyOf(const BranchItem* branch) {
+    return {branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
+}
+
+void reassignTwoPortEndpoint(TwoPortItem* tp, NodeItem* from, NodeItem* to) {
+    if (!tp || !from || !to || from == to) {
+        return;
+    }
+    if (tp->v1() == from) {
+        tp->setV1(to);
+    } else if (tp->v2() == from) {
+        tp->setV2(to);
+    } else if (tp->g1() == from) {
+        tp->setG1(to);
+    } else if (tp->g2() == from) {
+        tp->setG2(to);
+    }
+    tp->refresh();
+}
+
+}  // namespace
+
+bool GraphScene::canMergeNodes(const NodeItem* a, const NodeItem* b, QString* reason) const {
+    if (!a || !b || a == b) {
+        if (reason) {
+            *reason = tr("Select two distinct nodes.");
+        }
+        return false;
+    }
+    const TwoPortItem* tpA = a->twoPort();
+    const TwoPortItem* tpB = b->twoPort();
+    if (tpA && tpB) {
+        if (tpA != tpB) {
+            const int roleA = twoPortRole(tpA, a);
+            const int roleB = twoPortRole(tpB, b);
+            const bool acrossA = roleA >= 1 && roleA <= 2;
+            const bool acrossB = roleB >= 1 && roleB <= 2;
+            const bool refA = roleA >= 3 && roleA <= 4;
+            const bool refB = roleB >= 3 && roleB <= 4;
+            if ((acrossA && acrossB) || (refA && refB)) {
+                return true;
+            }
+            if (reason) {
+                *reason = tr("Cascade merge: combine across with across, or reference with reference.");
+            }
+            return false;
+        }
+        if (twoPortRole(tpA, a) < 3 || twoPortRole(tpA, b) < 3) {
+            if (reason) {
+                *reason = tr("Within one two-port, only the two reference nodes may be combined.");
+            }
+            return false;
+        }
+        if (tpA->hasSharedReference()) {
+            if (reason) {
+                *reason = tr("This two-port already uses a shared reference node.");
+            }
+            return false;
+        }
+        return true;
+    }
+    if (tpA && twoPortRole(tpA, a) <= 2 && !tpB) {
+        return true;
+    }
+    if (tpB && twoPortRole(tpB, b) <= 2 && !tpA) {
+        return true;
+    }
+    if (tpA || tpB) {
+        if (reason) {
+            *reason = tr("This two-port node cannot be removed by combining.");
+        }
+        return false;
+    }
+    return true;
+}
+
+void GraphScene::mergeNodes(NodeItem* keep, NodeItem* remove, MergeUndoData* undo) {
+    if (!keep || !remove || keep == remove) {
+        return;
+    }
+
+    TwoPortItem* tpKeep = keep->twoPort();
+    TwoPortItem* tpRemove = remove->twoPort();
+    const bool sharedRef = tpKeep && tpKeep == tpRemove && twoPortRole(tpKeep, keep) >= 3 &&
+                           twoPortRole(tpKeep, remove) >= 3;
+
+    if (undo) {
+        undo->removePos = remove->scenePos();
+        undo->removeName = remove->name();
+        undo->removeAcross = remove->isGround() ? QStringLiteral("0") : remove->acrossVariable();
+        undo->removeGround = remove->isGround();
+        undo->twoPort = tpRemove;
+        undo->removeRole = twoPortRole(tpRemove, remove);
+        undo->collapsedSharedRef = sharedRef;
+        undo->rewired.clear();
+        undo->destroyed.clear();
+    }
+
+    const std::vector<BranchItem*> branches = remove->branches();
+    for (BranchItem* branch : branches) {
+        if (tpKeep && tpKeep == tpRemove && isInternalTwoPortBranch(tpKeep, branch) && sharedRef) {
+            continue;
+        }
+        NodeItem* other = branch->from() == remove ? branch->to() : branch->from();
+        if (other == keep) {
+            if (undo) {
+                MergeUndoData::Destroyed snap;
+                snap.key = branchKeyOf(branch);
+                snap.name = branch->name();
+                snap.active = branch->isActive();
+                snap.type = branch->branchType();
+                snap.constant = branch->elementConstant();
+                undo->destroyed.push_back(snap);
+            }
+            destroyBranch(branch);
+            continue;
+        }
+        if (undo) {
+            MergeUndoData::Rewire snap;
+            snap.removeWasFrom = branch->from() == remove;
+            undo->rewired.push_back(snap);
+        }
+        branch->replaceEndpoint(remove, keep);
+        if (undo && !undo->rewired.empty()) {
+            undo->rewired.back().key = branchKeyOf(branch);
+        }
+    }
+
+    if (sharedRef) {
+        tpKeep->collapseSharedRef(keep, remove);
+    } else if (tpRemove) {
+        reassignTwoPortEndpoint(tpRemove, remove, keep);
+    }
+
+    remove->setTwoPort(nullptr);
+    removeItem(remove);
+    delete remove;
+
+    QSet<NodeItem*> touched;
+    for (BranchItem* branch : keep->branches()) {
+        if (branch->from()) {
+            touched.insert(branch->from());
+        }
+        if (branch->to()) {
+            touched.insert(branch->to());
+        }
+    }
+    for (NodeItem* node : touched) {
+        for (BranchItem* branch : node->branches()) {
+            if (branch->from() && branch->to()) {
+                reindexBranches(branch->from(), branch->to());
+            }
+        }
+    }
+    if (keep->twoPort()) {
+        refreshTwoPortEgressAt(keep);
+    }
+    notifyGraphChanged();
+}
+
+void GraphScene::unmergeNodes(NodeItem* keep, const MergeUndoData& undo) {
+    if (!keep) {
+        return;
+    }
+
+    m_suppressGraphChange = true;
+    auto* remove = createNode(undo.removePos);
+    remove->setName(undo.removeName);
+    if (undo.removeGround) {
+        remove->setGround(true);
+    } else {
+        remove->setAcrossVariable(undo.removeAcross);
+    }
+
+    if (undo.twoPort && undo.removeRole > 0) {
+        remove->setTwoPort(undo.twoPort);
+        switch (undo.removeRole) {
+        case 1:
+            undo.twoPort->setV1(remove);
+            break;
+        case 2:
+            undo.twoPort->setV2(remove);
+            break;
+        case 3:
+            undo.twoPort->setG1(remove);
+            break;
+        case 4:
+            undo.twoPort->setG2(remove);
+            break;
+        default:
+            break;
+        }
+        if (undo.collapsedSharedRef) {
+            if (undo.removeRole == 4) {
+                undo.twoPort->rightBranch()->replaceEndpoint(keep, remove);
+            } else if (undo.removeRole == 3) {
+                undo.twoPort->leftBranch()->replaceEndpoint(keep, remove);
+            }
+        }
+        undo.twoPort->refresh();
+    }
+
+    for (const MergeUndoData::Rewire& snap : undo.rewired) {
+        NodeItem* a = nodeAtPos(snap.key.from);
+        NodeItem* b = nodeAtPos(snap.key.to);
+        if (!a || !b) {
+            continue;
+        }
+        for (BranchItem* branch : branchesBetween(a, b)) {
+            if (branch->index() != snap.key.index) {
+                continue;
+            }
+            if (snap.removeWasFrom) {
+                if (branch->from() == keep) {
+                    branch->replaceEndpoint(keep, remove);
+                }
+            } else if (branch->to() == keep) {
+                branch->replaceEndpoint(keep, remove);
+            }
+            break;
+        }
+    }
+
+    for (const MergeUndoData::Destroyed& snap : undo.destroyed) {
+        NodeItem* a = nodeAtPos(snap.key.from);
+        NodeItem* b = nodeAtPos(snap.key.to);
+        if (a && b) {
+            BranchItem* branch = createBranch(a, b);
+            if (branch) {
+                branch->setName(snap.name);
+                branch->setActive(snap.active);
+                branch->setBranchType(snap.type);
+                branch->setElementConstant(snap.constant);
+            }
+        }
+    }
+
+    m_suppressGraphChange = false;
+    notifyGraphChanged();
+}
+
+void GraphScene::tryMergeOverlappingNodes(NodeItem* moved) {
+    if (!moved || m_mode != Mode::Select) {
+        return;
+    }
+    NodeItem* other = nodeAt(moved->scenePos(), moved);
+    if (!other) {
+        return;
+    }
+    pushMergeNodes(moved, other);
 }

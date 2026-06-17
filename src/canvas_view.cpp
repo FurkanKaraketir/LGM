@@ -26,10 +26,6 @@ void GraphView::setToolMode(GraphScene::Mode mode) {
         setCursor(Qt::PointingHandCursor);
         setDragMode(QGraphicsView::NoDrag);
         break;
-    case GraphScene::Mode::Delete:
-        setCursor(Qt::ForbiddenCursor);
-        setDragMode(QGraphicsView::NoDrag);
-        break;
     }
 }
 
@@ -102,6 +98,28 @@ void GraphView::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
+    if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
+        graph->pushDeleteSelection();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_F && graph->mode() == GraphScene::Mode::Select) {
+        BranchItem* branch = nullptr;
+        for (QGraphicsItem* item : graph->selectedItems()) {
+            if (auto* selectedBranch = dynamic_cast<BranchItem*>(item)) {
+                if (branch) {
+                    branch = nullptr;
+                    break;
+                }
+                branch = selectedBranch;
+            }
+        }
+        if (branch) {
+            graph->pushFlipBranch(branch);
+            event->accept();
+            return;
+        }
+    }
     if (event->key() == Qt::Key_T && graph->mode() == GraphScene::Mode::Select) {
         for (QGraphicsItem* item : graph->selectedItems()) {
             if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
@@ -118,6 +136,21 @@ void GraphView::keyPressEvent(QKeyEvent* event) {
             }
         }
     }
+    if (event->key() == Qt::Key_M && graph->mode() == GraphScene::Mode::Select) {
+        QList<NodeItem*> nodes;
+        for (QGraphicsItem* item : graph->selectedItems()) {
+            if (auto* node = dynamic_cast<NodeItem*>(item)) {
+                if (!nodes.contains(node)) {
+                    nodes.push_back(node);
+                }
+            }
+        }
+        if (nodes.size() == 2) {
+            graph->pushMergeNodes(nodes[0], nodes[1]);
+            event->accept();
+            return;
+        }
+    }
     switch (event->key()) {
     case Qt::Key_N:
         setToolMode(GraphScene::Mode::AddNode);
@@ -129,10 +162,6 @@ void GraphView::keyPressEvent(QKeyEvent* event) {
         return;
     case Qt::Key_P:
         setToolMode(GraphScene::Mode::AddTwoPort);
-        event->accept();
-        return;
-    case Qt::Key_D:
-        setToolMode(GraphScene::Mode::Delete);
         event->accept();
         return;
     case Qt::Key_Escape:

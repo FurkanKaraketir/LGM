@@ -66,12 +66,6 @@ void GraphScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         return;
     }
 
-    if (m_mode == Mode::Delete) {
-        pushDeleteAt(event->scenePos());
-        event->accept();
-        return;
-    }
-
     if (m_pending) {
         clearBranchPending();
     }

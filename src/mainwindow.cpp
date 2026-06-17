@@ -4,17 +4,23 @@
 
 #include "canvas.h"
 
+#include "elemental_equation.h"
+
 
 
 #include <QActionGroup>
 
 #include <QApplication>
 
+#include <QComboBox>
+
 #include <QDockWidget>
 
 #include <QHeaderView>
 
 #include <QLabel>
+
+#include <QLineEdit>
 
 #include <QListWidget>
 
@@ -23,6 +29,12 @@
 #include <QTreeWidgetItemIterator>
 
 #include <QMenuBar>
+
+#include <QMessageBox>
+
+#include <QSignalBlocker>
+
+#include <QPushButton>
 
 #include <QStatusBar>
 
@@ -69,6 +81,32 @@ void* objectPtr(const QTreeWidgetItem* item) {
 GraphObjectKind objectKind(const QTreeWidgetItem* item) {
 
     return static_cast<GraphObjectKind>(item->data(0, kObjectKindRole).toInt());
+
+}
+
+
+
+BranchItem* singleSelectedBranch(const GraphScene* scene) {
+
+    BranchItem* branch = nullptr;
+
+    for (QGraphicsItem* item : scene->selectedItems()) {
+
+        if (auto* selectedBranch = dynamic_cast<BranchItem*>(item)) {
+
+            if (branch) {
+
+                return nullptr;
+
+            }
+
+            branch = selectedBranch;
+
+        }
+
+    }
+
+    return branch;
 
 }
 
@@ -232,7 +270,67 @@ void MainWindow::buildMenuBar() {
 
     editMenu->addSeparator();
 
-    
+    m_flipBranchAction = editMenu->addAction(tr("Flip &Branch"));
+
+    m_flipBranchAction->setShortcut(QKeySequence(Qt::Key_F));
+
+    m_flipBranchAction->setShortcutContext(Qt::ApplicationShortcut);
+
+    connect(m_flipBranchAction, &QAction::triggered, this, [this]() {
+
+        BranchItem* branch = singleSelectedBranch(m_scene);
+
+        if (!branch && m_propertyTargetPtr &&
+
+            m_propertyTargetKind == static_cast<int>(GraphObjectKind::Branch)) {
+
+            branch = static_cast<BranchItem*>(m_propertyTargetPtr);
+
+        }
+
+        if (branch) {
+
+            m_scene->pushFlipBranch(branch);
+
+            updatePropertyPanel();
+
+        }
+
+    });
+
+    m_mergeNodesAction = editMenu->addAction(tr("Combine &Nodes"));
+
+    m_mergeNodesAction->setShortcut(QKeySequence(Qt::Key_M));
+
+    m_mergeNodesAction->setShortcutContext(Qt::ApplicationShortcut);
+
+    connect(m_mergeNodesAction, &QAction::triggered, this, [this]() {
+
+        QList<NodeItem*> nodes;
+
+        for (QGraphicsItem* item : m_scene->selectedItems()) {
+
+            if (auto* node = dynamic_cast<NodeItem*>(item)) {
+
+                if (!nodes.contains(node)) {
+
+                    nodes.push_back(node);
+
+                }
+
+            }
+
+        }
+
+        if (nodes.size() == 2) {
+
+            m_scene->pushMergeNodes(nodes[0], nodes[1]);
+
+        }
+
+    });
+
+
 
     auto* selectAllAction = editMenu->addAction(tr("Select &All"));
 
@@ -310,6 +408,84 @@ void MainWindow::buildMenuBar() {
 
 
 
+    auto* analysisMenu = menuBar()->addMenu(tr("&Analysis"));
+
+    auto* findNormalTreeAction =
+        analysisMenu->addAction(tr("Find &Normal Tree..."));
+
+    findNormalTreeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T));
+
+    connect(findNormalTreeAction, &QAction::triggered, this, [this]() {
+
+        const lg::NormalTreeResult result = m_scene->findNormalTree();
+
+        if (result.status == lg::NormalTreeResult::Status::Ok) {
+
+            const lg::NormalTreeResult& normalTree = m_scene->lastNormalTreeResult();
+
+            int branchCount = 0;
+
+            for (QGraphicsItem* item : m_scene->items()) {
+
+                if (dynamic_cast<BranchItem*>(item)) {
+
+                    ++branchCount;
+
+                }
+
+            }
+
+            QStringList stateVarText;
+            stateVarText.reserve(static_cast<int>(normalTree.stateVariables.size()));
+            for (const lg::NormalTreeResult::StateVariable& state : normalTree.stateVariables) {
+                stateVarText.push_back(state.symbol);
+            }
+
+            const QString stateVarSummary =
+                stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
+
+            statusBar()->showMessage(
+
+                tr("Normal tree — %1 branches, %2 links, order %3: %4")
+                    .arg(normalTree.treeBranches.size())
+                    .arg(branchCount - static_cast<int>(normalTree.treeBranches.size()))
+                    .arg(normalTree.stateVariables.size())
+                    .arg(stateVarSummary),
+
+                10000);
+
+            updatePropertyPanel();
+
+            return;
+
+        }
+
+        QMessageBox::warning(this, tr("Normal Tree"),
+
+                             result.message.isEmpty()
+
+                                 ? tr("Could not find a valid normal tree.")
+
+                                 : result.message);
+
+        statusBar()->showMessage(tr("Normal tree search failed."), 3000);
+
+    });
+
+    auto* clearNormalTreeAction = analysisMenu->addAction(tr("&Clear Normal Tree Highlight"));
+
+    connect(clearNormalTreeAction, &QAction::triggered, this, [this]() {
+
+        m_scene->clearNormalTreeHighlight();
+
+        updatePropertyPanel();
+
+        statusBar()->showMessage(tr("Normal tree highlight cleared."), 2000);
+
+    });
+
+
+
     auto* helpMenu = menuBar()->addMenu(tr("&Help"));
 
     
@@ -374,9 +550,9 @@ void MainWindow::buildToolbar() {
 
                                  m_view);
 
-    m_deleteAction = addTool(m_modeGroup, toolbar, themedIcon("edit-delete", QStyle::SP_TrashIcon),
-
-                             tr("Delete"), QKeySequence(Qt::Key_D), GraphScene::Mode::Delete, m_view);
+    m_deleteAction = toolbar->addAction(themedIcon("edit-delete", QStyle::SP_TrashIcon), tr("Delete"));
+    m_deleteAction->setToolTip(tr("Delete selection (Delete)"));
+    connect(m_deleteAction, &QAction::triggered, m_scene, &GraphScene::pushDeleteSelection);
 
     m_selectAction->setChecked(true);
 
@@ -451,6 +627,14 @@ void MainWindow::buildToolbar() {
     connect(m_scene->undoStack(), &QUndoStack::redoTextChanged, this, [this](const QString& text) {
 
         m_redoAction->setToolTip(text.isEmpty() ? tr("Redo") : tr("Redo %1").arg(text));
+
+    });
+
+    connect(m_scene->undoStack(), &QUndoStack::indexChanged, this, [this]() {
+
+        updateObjectList();
+
+        updatePropertyPanel();
 
     });
 
@@ -542,13 +726,19 @@ void MainWindow::buildDockPanels() {
 
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::updatePropertyPanel);
 
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::updateFlipBranchAction);
+
     connect(m_objectTree, &QTreeWidget::itemSelectionChanged, this, &MainWindow::onObjectTreeSelectionChanged);
 
     connect(m_objectTree, &QTreeWidget::itemChanged, this, &MainWindow::onObjectTreeItemChanged);
 
+    connect(m_propertyTable, &QTableWidget::itemChanged, this, &MainWindow::onPropertyTableItemChanged);
+
 
 
     updateObjectList();
+
+    updateFlipBranchAction();
 
 }
 
@@ -638,7 +828,9 @@ void MainWindow::updateObjectList() {
 
         addEditableItem(root, twoPort->g1()->name(), GraphObjectKind::Node, twoPort->g1());
 
-        addEditableItem(root, twoPort->g2()->name(), GraphObjectKind::Node, twoPort->g2());
+        if (twoPort->g1() != twoPort->g2()) {
+            addEditableItem(root, twoPort->g2()->name(), GraphObjectKind::Node, twoPort->g2());
+        }
 
         addEditableItem(root, twoPort->leftBranch()->name(), GraphObjectKind::Branch, twoPort->leftBranch());
 
@@ -694,6 +886,8 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
 
 
+    m_blockSceneSelectionSync = true;
+
     m_scene->clearSelection();
 
     switch (objectKind(item)) {
@@ -704,7 +898,7 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
         if (node->twoPort()) {
 
-            m_scene->selectTwoPort(node->twoPort());
+            m_scene->selectTwoPortNode(node);
 
         } else {
 
@@ -742,7 +936,53 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
     }
 
+    m_blockSceneSelectionSync = false;
+
     updatePropertyPanel();
+
+}
+
+
+
+void MainWindow::onPropertyTableItemChanged(QTableWidgetItem* item) {
+
+    if (m_updatingPropertyPanel || item->column() != 1 || !m_propertyTargetPtr) {
+
+        return;
+
+    }
+
+    QTableWidgetItem* propItem = m_propertyTable->item(item->row(), 0);
+
+    if (!propItem || propItem->text() != tr("Name")) {
+
+        return;
+
+    }
+
+    const QString name = item->text();
+
+    switch (static_cast<GraphObjectKind>(m_propertyTargetKind)) {
+
+    case GraphObjectKind::Node:
+
+        m_scene->pushSetNodeName(static_cast<NodeItem*>(m_propertyTargetPtr), name);
+
+        break;
+
+    case GraphObjectKind::Branch:
+
+        m_scene->pushSetBranchName(static_cast<BranchItem*>(m_propertyTargetPtr), name);
+
+        break;
+
+    case GraphObjectKind::TwoPort:
+
+        m_scene->pushSetTwoPortName(static_cast<TwoPortItem*>(m_propertyTargetPtr), name);
+
+        break;
+
+    }
 
 }
 
@@ -770,25 +1010,23 @@ void MainWindow::onObjectTreeItemChanged(QTreeWidgetItem* item, int column) {
 
     case GraphObjectKind::Node:
 
-        static_cast<NodeItem*>(ptr)->setName(name);
+        m_scene->pushSetNodeName(static_cast<NodeItem*>(ptr), name);
 
         break;
 
     case GraphObjectKind::Branch:
 
-        static_cast<BranchItem*>(ptr)->setName(name);
+        m_scene->pushSetBranchName(static_cast<BranchItem*>(ptr), name);
 
         break;
 
     case GraphObjectKind::TwoPort:
 
-        static_cast<TwoPortItem*>(ptr)->setName(name);
+        m_scene->pushSetTwoPortName(static_cast<TwoPortItem*>(ptr), name);
 
         break;
 
     }
-
-    updatePropertyPanel();
 
 }
 
@@ -796,7 +1034,7 @@ void MainWindow::onObjectTreeItemChanged(QTreeWidgetItem* item, int column) {
 
 void MainWindow::syncObjectTreeSelection() {
 
-    if (m_syncingObjectTree) {
+    if (m_syncingObjectTree || m_blockSceneSelectionSync) {
 
         return;
 
@@ -872,9 +1110,39 @@ void MainWindow::syncObjectTreeSelection() {
 
 
 
+void MainWindow::updateFlipBranchAction() {
+
+    if (!m_flipBranchAction) {
+
+        return;
+
+    }
+
+    BranchItem* branch = singleSelectedBranch(m_scene);
+
+    if (!branch && m_propertyTargetPtr &&
+
+        m_propertyTargetKind == static_cast<int>(GraphObjectKind::Branch)) {
+
+        branch = static_cast<BranchItem*>(m_propertyTargetPtr);
+
+    }
+
+    m_flipBranchAction->setEnabled(branch != nullptr);
+
+}
+
+
+
 void MainWindow::updatePropertyPanel() {
 
+    m_updatingPropertyPanel = true;
+
     m_propertyTable->setRowCount(0);
+
+    m_propertyTargetPtr = nullptr;
+
+    m_propertyTargetKind = -1;
 
 
 
@@ -884,7 +1152,11 @@ void MainWindow::updatePropertyPanel() {
 
         m_propertyTable->insertRow(row);
 
-        m_propertyTable->setItem(row, 0, new QTableWidgetItem(property));
+        auto* nameItem = new QTableWidgetItem(property);
+
+        nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
+
+        m_propertyTable->setItem(row, 0, nameItem);
 
         auto* valueItem = new QTableWidgetItem(value);
 
@@ -900,15 +1172,50 @@ void MainWindow::updatePropertyPanel() {
 
 
 
-    auto addReadOnlyRows = [this]() {
+    auto addLabelRow = [this](const QString& property) {
 
-        for (int row = 0; row < m_propertyTable->rowCount(); ++row) {
+        const int row = m_propertyTable->rowCount();
 
-            if (auto* item = m_propertyTable->item(row, 0)) {
+        m_propertyTable->insertRow(row);
 
-                item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        auto* nameItem = new QTableWidgetItem(property);
 
-            }
+        nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
+
+        m_propertyTable->setItem(row, 0, nameItem);
+
+        return row;
+
+    };
+
+
+
+    auto appendNormalTreeAnalysis = [this, &addRow](const lg::NormalTreeResult& normalTree) {
+
+        addRow(tr("Analysis"), tr("Normal tree"));
+
+        addRow(tr("Tree branches"), QString::number(normalTree.treeBranches.size()));
+
+        addRow(tr("System order"), QString::number(normalTree.stateVariables.size()));
+
+        if (normalTree.stateVariables.empty()) {
+
+            addRow(tr("State variables"), tr("none"));
+
+            return;
+
+        }
+
+        for (int i = 0; i < static_cast<int>(normalTree.stateVariables.size()); ++i) {
+
+            const lg::NormalTreeResult::StateVariable& state =
+                normalTree.stateVariables[static_cast<size_t>(i)];
+
+            const QString label = state.kind == lg::NormalTreeResult::StateVariable::Kind::Across
+                                      ? tr("x%1 (across)").arg(i + 1)
+                                      : tr("x%1 (through)").arg(i + 1);
+
+            addRow(label, state.symbol);
 
         }
 
@@ -916,21 +1223,156 @@ void MainWindow::updatePropertyPanel() {
 
 
 
+    void* ptr = nullptr;
+
+    GraphObjectKind kind = GraphObjectKind::Node;
+
+
+
     QTreeWidgetItem* treeItem = m_objectTree->currentItem();
 
     if (treeItem && objectPtr(treeItem)) {
 
-        void* ptr = objectPtr(treeItem);
+        ptr = objectPtr(treeItem);
 
-        switch (objectKind(treeItem)) {
+        kind = objectKind(treeItem);
+
+    } else {
+
+        TwoPortItem* twoPort = nullptr;
+
+        BranchItem* branch = nullptr;
+
+        NodeItem* node = nullptr;
+
+        for (QGraphicsItem* item : m_scene->selectedItems()) {
+
+            if (auto* tp = dynamic_cast<TwoPortItem*>(item)) {
+
+                twoPort = tp;
+
+                break;
+
+            }
+
+            if (auto* br = dynamic_cast<BranchItem*>(item)) {
+
+                branch = br;
+
+            } else if (auto* nd = dynamic_cast<NodeItem*>(item)) {
+
+                node = nd;
+
+            }
+
+        }
+
+        if (twoPort) {
+
+            ptr = twoPort;
+
+            kind = GraphObjectKind::TwoPort;
+
+        } else if (branch) {
+
+            ptr = branch;
+
+            kind = GraphObjectKind::Branch;
+
+        } else if (node) {
+
+            ptr = node;
+
+            kind = GraphObjectKind::Node;
+
+        }
+
+    }
+
+
+
+    if (m_scene->normalTreeHighlightActive()) {
+
+        appendNormalTreeAnalysis(m_scene->lastNormalTreeResult());
+
+    }
+
+
+
+    if (ptr) {
+
+        m_propertyTargetPtr = ptr;
+
+        m_propertyTargetKind = static_cast<int>(kind);
+
+
+
+        switch (kind) {
 
         case GraphObjectKind::Node: {
 
             auto* node = static_cast<NodeItem*>(ptr);
 
-            addRow(tr("Type"), node->isGround() ? tr("Ground Node") : tr("Node"));
-
             addRow(tr("Name"), node->name(), true);
+
+            if (node->isGround()) {
+                addRow(tr("Across variable"), node->acrossVariable());
+            } else {
+                const int acrossRow = addLabelRow(tr("Across variable"));
+                auto* acrossEdit = new QLineEdit(node->acrossVariable(), m_propertyTable);
+                connect(acrossEdit, &QLineEdit::editingFinished, this, [this, node, acrossEdit]() {
+                    if (m_updatingPropertyPanel) {
+                        return;
+                    }
+                    const QString symbol = acrossEdit->text().trimmed();
+                    if (!lg::isValidVariableSymbol(symbol)) {
+                        acrossEdit->setText(node->acrossVariable());
+                        return;
+                    }
+                    m_scene->pushSetNodeAcrossVariable(node, symbol);
+                });
+                m_propertyTable->setCellWidget(acrossRow, 1, acrossEdit);
+            }
+
+            const int typeRow = addLabelRow(tr("Node Type"));
+
+            if (node->twoPort()) {
+
+                auto* valueItem = new QTableWidgetItem(
+
+                    node->isGround() ? tr("Reference (Ground) Node") : tr("Normal Node"));
+
+                valueItem->setFlags(valueItem->flags() & ~Qt::ItemIsEditable);
+
+                m_propertyTable->setItem(typeRow, 1, valueItem);
+
+            } else {
+
+                auto* combo = new QComboBox(m_propertyTable);
+
+                combo->addItem(tr("Normal Node"));
+
+                combo->addItem(tr("Reference (Ground) Node"));
+
+                combo->setCurrentIndex(node->isGround() ? 1 : 0);
+
+                connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+                        [this, node](int index) {
+
+                            if (m_updatingPropertyPanel) {
+
+                                return;
+
+                            }
+
+                            m_scene->pushSetNodeGround(node, index == 1);
+
+                        });
+
+                m_propertyTable->setCellWidget(typeRow, 1, combo);
+
+            }
 
             const QPointF pos = node->scenePos();
 
@@ -952,31 +1394,174 @@ void MainWindow::updatePropertyPanel() {
 
             auto* branch = static_cast<BranchItem*>(ptr);
 
-            addRow(tr("Type"), tr("Branch"));
-
             addRow(tr("Name"), branch->name(), true);
 
-            const QString typeLabel = branch->isActive() ? tr("Active") : tr("Passive");
+            if (TwoPortItem* twoPort = m_scene->twoPortFor(branch);
+                twoPort && GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
+                addRow(tr("Parent"), twoPort->name());
+                addRow(tr("Through variable"), branch->name());
+                addRow(tr("Element"), tr("T-type (port branch)"));
+                addRow(tr("Elemental equation"), branch->elementalEquationText());
+                addRow(tr("Two-port equations"), twoPort->elementalEquationText());
+                addRow(tr("From"), branch->from()->name());
+                addRow(tr("To"), branch->to()->name());
+                break;
+            }
 
-            addRow(tr("Category"), typeLabel);
+            const int categoryRow = addLabelRow(tr("Category"));
 
-            QString elementType;
+            auto* categoryCombo = new QComboBox(m_propertyTable);
 
-            switch (branch->branchType()) {
+            categoryCombo->addItem(tr("Passive"), false);
 
-            case BranchType::A: elementType = tr("A-type"); break;
+            categoryCombo->addItem(tr("Active"), true);
 
-            case BranchType::T: elementType = tr("T-type"); break;
+            categoryCombo->setCurrentIndex(branch->isActive() ? 1 : 0);
 
-            case BranchType::D: elementType = tr("D-type"); break;
+            const int elementRow = addLabelRow(tr("Element"));
+
+            auto* elementCombo = new QComboBox(m_propertyTable);
+
+            auto refreshElementOptions = [elementCombo, branch]() {
+
+                const bool isActive = branch->isActive();
+
+                const BranchType current = branch->branchType();
+
+                QSignalBlocker blocker(elementCombo);
+
+                elementCombo->clear();
+
+                elementCombo->addItem(tr("A-type"), static_cast<int>(BranchType::A));
+
+                elementCombo->addItem(tr("T-type"), static_cast<int>(BranchType::T));
+
+                if (!isActive) {
+
+                    elementCombo->addItem(tr("D-type"), static_cast<int>(BranchType::D));
+
+                }
+
+                int idx = 0;
+
+                switch (current) {
+
+                case BranchType::A:
+
+                    idx = 0;
+
+                    break;
+
+                case BranchType::T:
+
+                    idx = 1;
+
+                    break;
+
+                case BranchType::D:
+
+                    idx = isActive ? 0 : 2;
+
+                    break;
+
+                }
+
+                elementCombo->setCurrentIndex(idx);
+
+            };
+
+            refreshElementOptions();
+
+            connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+                    [this, branch, categoryCombo](int index) {
+
+                        if (m_updatingPropertyPanel) {
+
+                            return;
+
+                        }
+
+                        m_scene->pushSetBranchActive(branch, categoryCombo->itemData(index).toBool());
+
+                    });
+
+            connect(elementCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+                    [this, branch, elementCombo](int index) {
+
+                        if (m_updatingPropertyPanel) {
+
+                            return;
+
+                        }
+
+                        m_scene->pushSetBranchType(
+
+                            branch, static_cast<BranchType>(elementCombo->itemData(index).toInt()));
+
+                    });
+
+            m_propertyTable->setCellWidget(categoryRow, 1, categoryCombo);
+
+            m_propertyTable->setCellWidget(elementRow, 1, elementCombo);
+
+            if (m_scene->normalTreeHighlightActive() && branch->normalTreeRoleKnown()) {
+
+                addRow(tr("Normal tree"), branch->inNormalTree() ? tr("Tree branch") : tr("Link"));
+
+                if (!branch->isActive()) {
+                    if (branch->inNormalTree() && branch->branchType() == BranchType::A) {
+                        addRow(tr("State variable"),
+                               lg::branchAcrossVariableText(*branch));
+                    } else if (!branch->inNormalTree() && branch->branchType() == BranchType::T) {
+                        addRow(tr("State variable"), branch->name());
+                    }
+                }
 
             }
 
-            addRow(tr("Element"), elementType);
+            if (!branch->isActive()) {
+                const QString equation = branch->elementalEquationText();
+                if (!equation.isEmpty()) {
+                    addRow(tr("Elemental equation"), equation);
+                }
+
+                const int constantRow = addLabelRow(tr("Constant"));
+
+                auto* constantEdit = new QLineEdit(branch->elementConstant(), m_propertyTable);
+
+                connect(constantEdit, &QLineEdit::editingFinished, this, [this, branch, constantEdit]() {
+
+                    if (m_updatingPropertyPanel) {
+
+                        return;
+
+                    }
+
+                    m_scene->pushSetBranchConstant(branch, constantEdit->text());
+
+                });
+
+                m_propertyTable->setCellWidget(constantRow, 1, constantEdit);
+
+            }
 
             addRow(tr("From"), branch->from()->name());
 
             addRow(tr("To"), branch->to()->name());
+
+            const int flipRow = addLabelRow(tr("Orientation"));
+
+            auto* flipBtn = new QPushButton(tr("Flip"), m_propertyTable);
+
+            connect(flipBtn, &QPushButton::clicked, this, [this, branch]() {
+
+                m_scene->pushFlipBranch(branch);
+
+            });
+
+            m_propertyTable->setCellWidget(flipRow, 1, flipBtn);
 
             break;
 
@@ -986,11 +1571,62 @@ void MainWindow::updatePropertyPanel() {
 
             auto* twoPort = static_cast<TwoPortItem*>(ptr);
 
-            addRow(tr("Type"),
-
-                   twoPort->kind() == TwoPortKind::Transformer ? tr("Transformer") : tr("Gyrator"));
-
             addRow(tr("Name"), twoPort->name(), true);
+
+            const int kindRow = addLabelRow(tr("Kind"));
+
+            auto* kindCombo = new QComboBox(m_propertyTable);
+
+            kindCombo->addItem(tr("Transformer"), static_cast<int>(TwoPortKind::Transformer));
+
+            kindCombo->addItem(tr("Gyrator"), static_cast<int>(TwoPortKind::Gyrator));
+
+            kindCombo->setCurrentIndex(twoPort->kind() == TwoPortKind::Gyrator ? 1 : 0);
+
+            connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+                    [this, twoPort, kindCombo](int index) {
+
+                        if (m_updatingPropertyPanel) {
+
+                            return;
+
+                        }
+
+                        m_scene->pushSetTwoPortKind(
+
+                            twoPort, static_cast<TwoPortKind>(kindCombo->itemData(index).toInt()));
+
+                        updatePropertyPanel();
+
+                    });
+
+            m_propertyTable->setCellWidget(kindRow, 1, kindCombo);
+
+            const QString modulusLabel =
+                twoPort->kind() == TwoPortKind::Transformer ? tr("Transformer ratio (TF)")
+                                                            : tr("Gyrator modulus (GY)");
+            const int modulusRow = addLabelRow(modulusLabel);
+            auto* modulusEdit = new QLineEdit(twoPort->modulus(), m_propertyTable);
+            connect(modulusEdit, &QLineEdit::editingFinished, this, [this, twoPort, modulusEdit]() {
+                if (m_updatingPropertyPanel) {
+                    return;
+                }
+                m_scene->pushSetTwoPortModulus(twoPort, modulusEdit->text());
+                updatePropertyPanel();
+            });
+            m_propertyTable->setCellWidget(modulusRow, 1, modulusEdit);
+
+            addRow(tr("Elemental equations"), twoPort->elementalEquationText());
+
+            if (twoPort->hasSharedReference()) {
+                addRow(tr("Reference"), tr("Shared (3-terminal)"));
+            }
+
+            addRow(tr("Port 1"), QStringLiteral("v\u2081 = %1, f\u2081 = %2")
+                                      .arg(twoPort->v1()->acrossVariable(), twoPort->leftBranch()->name()));
+            addRow(tr("Port 2"), QStringLiteral("v\u2082 = %1, f\u2082 = %2")
+                                      .arg(twoPort->v2()->acrossVariable(), twoPort->rightBranch()->name()));
 
             const QPointF center = twoPort->center();
 
@@ -1002,15 +1638,7 @@ void MainWindow::updatePropertyPanel() {
 
         }
 
-        addReadOnlyRows();
-
-        return;
-
-    }
-
-
-
-    if (m_objectTree->topLevelItemCount() == 0) {
+    } else if (m_objectTree->topLevelItemCount() == 0) {
 
         addRow(tr("Type"), tr("Graph Scene"));
 
@@ -1018,9 +1646,11 @@ void MainWindow::updatePropertyPanel() {
 
         addRow(tr("Grid"), tr("Enabled"));
 
-        addReadOnlyRows();
-
     }
+
+    m_updatingPropertyPanel = false;
+
+    updateFlipBranchAction();
 
 }
 
@@ -1054,12 +1684,6 @@ void MainWindow::syncModeUi(GraphScene::Mode mode) {
 
         break;
 
-    case GraphScene::Mode::Delete:
-
-        m_deleteAction->setChecked(true);
-
-        break;
-
     }
 
 }
@@ -1072,7 +1696,8 @@ QString MainWindow::modeStatusText(GraphScene::Mode mode) {
 
     case GraphScene::Mode::Select:
 
-        return tr("Select — drag to move; double-click node/branch for properties, two-port or press T to switch transformer/gyrator");
+        return tr("Select — drag port nodes to reshape two-port; drag coupler to move whole element; "
+                  "M combine nodes; F flip branch; T switch transformer/gyrator");
 
     case GraphScene::Mode::AddNode:
 
@@ -1084,11 +1709,7 @@ QString MainWindow::modeStatusText(GraphScene::Mode mode) {
 
     case GraphScene::Mode::AddTwoPort:
 
-        return tr("Add two-port — click empty grid; two branches, four nodes (V₁/V₂ top, ground below)");
-
-    case GraphScene::Mode::Delete:
-
-        return tr("Delete — click a node, branch, or two-port to remove it");
+        return tr("Add two-port — click empty grid; drag port nodes to reshape; combine ref nodes (M) for shared reference");
 
     }
 

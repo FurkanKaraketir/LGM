@@ -18,6 +18,8 @@
 
 #include <vector>
 
+#include "normal_tree.h"
+
 
 
 class QGraphicsSceneMouseEvent;
@@ -67,9 +69,29 @@ public:
 
     void setName(const QString& name) { m_name = name; }
 
+    QString elementConstant() const { return m_elementConstant; }
+
+    void setElementConstant(const QString& constant);
+
+    QString elementalEquationText() const;
+
+    void flip();
+
+    void replaceEndpoint(NodeItem* oldNode, NodeItem* newNode);
+
+    bool inNormalTree() const { return m_inNormalTree; }
+
+    bool normalTreeRoleKnown() const { return m_normalTreeRoleKnown; }
+
+    void setNormalTreeRole(bool inTree, bool known);
+
 
 
 protected:
+
+    QRectF boundingRect() const override;
+
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
     QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
@@ -94,6 +116,14 @@ private:
     BranchType m_type = BranchType::A;
 
     QString m_name;
+
+    QString m_elementConstant = QStringLiteral("1");
+
+    bool m_inNormalTree = false;
+
+    bool m_normalTreeRoleKnown = false;
+
+    void updateBranchPen();
 
 };
 
@@ -123,11 +153,15 @@ public:
 
     TwoPortItem* twoPort() const { return m_twoPort; }
 
-    void setTwoPort(TwoPortItem* twoPort) { m_twoPort = twoPort; }
+    void setTwoPort(TwoPortItem* twoPort);
 
     QString name() const { return m_name; }
 
     void setName(const QString& name) { m_name = name; }
+
+    QString acrossVariable() const { return m_ground ? QStringLiteral("0") : m_acrossVariable; }
+
+    void setAcrossVariable(const QString& symbol) { m_acrossVariable = symbol; }
 
 
 
@@ -156,6 +190,8 @@ private:
     TwoPortItem* m_twoPort = nullptr;
 
     QString m_name;
+
+    QString m_acrossVariable;
 
 };
 
@@ -192,6 +228,14 @@ public:
 
     void setName(const QString& name) { m_name = name; }
 
+    QString modulus() const { return m_modulus; }
+
+    void setModulus(const QString& modulus);
+
+    QString elementalEquationText() const;
+
+    void applyPortDefaults();
+
 
 
     void refresh();
@@ -199,6 +243,18 @@ public:
     void moveBy(const QPointF& delta);
 
     bool isSyncing() const { return m_syncing; }
+
+    bool hasSharedReference() const { return m_g1 == m_g2; }
+
+    bool collapseSharedRef(NodeItem* gKeep, NodeItem* gRemove);
+
+    void setG1(NodeItem* node) { m_g1 = node; }
+
+    void setG2(NodeItem* node) { m_g2 = node; }
+
+    void setV1(NodeItem* node) { m_v1 = node; }
+
+    void setV2(NodeItem* node) { m_v2 = node; }
 
     void selectMembers(bool selected);
 
@@ -212,6 +268,10 @@ public:
 
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
+    void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
+
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
+
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) override;
 
 
@@ -221,6 +281,12 @@ private:
     QPointF couplerLeft() const;
 
     QPointF couplerRight() const;
+
+    QPointF m_dragScenePos;
+
+    QPointF m_dragCenterStart;
+
+    bool m_dragMoved = false;
 
 
 
@@ -240,6 +306,7 @@ private:
     BranchItem* m_right;
     bool m_syncing = false;
     QString m_name;
+    QString m_modulus;
 };
 
 
@@ -252,7 +319,7 @@ class GraphScene : public QGraphicsScene {
 
 public:
 
-    enum class Mode { Select, AddNode, AddBranch, AddTwoPort, Delete };
+    enum class Mode { Select, AddNode, AddBranch, AddTwoPort };
 
 
 
@@ -266,9 +333,11 @@ public:
 
     void pushConnectNodes(NodeItem* a, NodeItem* b);
 
+    void pushFlipBranch(BranchItem* branch);
+
     void pushToggleTwoPortKind(TwoPortItem* item);
 
-    void pushDeleteAt(const QPointF& scenePos);
+    void pushDeleteSelection();
 
     void undo();
 
@@ -294,7 +363,10 @@ public:
 
     void destroyBranch(BranchItem* branch);
 
-    TwoPortItem* createTwoPort(const QPointF& center, TwoPortKind kind);
+    void flipBranch(BranchItem* branch);
+
+    TwoPortItem* createTwoPort(const QPointF& center, TwoPortKind kind,
+                               const QString& modulus = QString(), const QString& name = QString());
 
     void destroyTwoPort(TwoPortItem* item);
 
@@ -316,6 +388,10 @@ public:
 
         TwoPortKind kind;
 
+        QString modulus;
+
+        QString name;
+
     };
 
 
@@ -323,6 +399,64 @@ public:
     void destroyBranchAt(const BranchKey& key);
 
     void pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& newPos);
+
+    void pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter);
+
+    struct MergeUndoData {
+        QPointF removePos;
+        QString removeName;
+        QString removeAcross;
+        bool removeGround = false;
+        TwoPortItem* twoPort = nullptr;
+        int removeRole = 0;
+        bool collapsedSharedRef = false;
+        struct Rewire {
+            BranchKey key;
+            bool removeWasFrom = false;
+        };
+        struct Destroyed {
+            BranchKey key;
+            QString name;
+            bool active = false;
+            BranchType type = BranchType::A;
+            QString constant;
+            qreal bow = 0.0;
+        };
+        std::vector<Rewire> rewired;
+        std::vector<Destroyed> destroyed;
+    };
+
+    void mergeNodes(NodeItem* keep, NodeItem* remove, MergeUndoData* undo = nullptr);
+
+    void unmergeNodes(NodeItem* keep, const MergeUndoData& undo);
+
+    void pushSetNodeName(NodeItem* node, const QString& name);
+
+    void pushSetNodeAcrossVariable(NodeItem* node, const QString& symbol);
+
+    void pushSetNodeGround(NodeItem* node, bool ground);
+
+    void pushSetBranchName(BranchItem* branch, const QString& name);
+
+    void pushSetBranchActive(BranchItem* branch, bool active);
+
+    void pushSetBranchType(BranchItem* branch, BranchType type);
+
+    void pushSetBranchConstant(BranchItem* branch, const QString& constant);
+
+    void pushBranchProperties(BranchItem* branch, bool active, BranchType type, const QString& constant);
+
+    void pushSetTwoPortName(TwoPortItem* item, const QString& name);
+
+    void pushSetTwoPortKind(TwoPortItem* item, TwoPortKind kind);
+
+    void pushSetTwoPortModulus(TwoPortItem* item, const QString& modulus);
+
+    bool canMergeNodes(const NodeItem* a, const NodeItem* b, QString* reason = nullptr) const;
+
+    void pushMergeNodes(NodeItem* a, NodeItem* b);
+
+    void tryMergeOverlappingNodes(NodeItem* moved);
 
     std::vector<BranchItem*> branchesBetween(NodeItem* a, NodeItem* b) const;
 
@@ -333,6 +467,12 @@ public:
     TwoPortItem* twoPortFor(const QGraphicsItem* item) const;
 
     void selectTwoPort(TwoPortItem* item);
+
+    void selectTwoPortNode(NodeItem* node);
+
+    static bool isInternalTwoPortBranch(TwoPortItem* twoPort, BranchItem* branch) {
+        return twoPort && (branch == twoPort->leftBranch() || branch == twoPort->rightBranch());
+    }
 
     void captureDeleteState(std::vector<QPointF>& nodes, std::vector<BranchKey>& branches,
 
@@ -351,6 +491,14 @@ public:
     NodeItem* nodeAtPos(const QPointF& pos) const;
 
     QRectF contentBounds() const;
+
+    lg::NormalTreeResult findNormalTree();
+
+    void clearNormalTreeHighlight();
+
+    bool normalTreeHighlightActive() const { return m_normalTreeHighlightActive; }
+
+    const lg::NormalTreeResult& lastNormalTreeResult() const { return m_lastNormalTreeResult; }
 
 
 
@@ -380,15 +528,11 @@ private:
 
     void reindexBranches(NodeItem* a, NodeItem* b);
 
-    static bool isInternalTwoPortBranch(TwoPortItem* twoPort, BranchItem* branch) {
-        return twoPort && (branch == twoPort->leftBranch() || branch == twoPort->rightBranch());
-    }
-
     void clearBranchPending();
 
     BranchItem* branchAt(const QPointF& scenePos) const;
 
-    NodeItem* nodeAt(const QPointF& scenePos) const;
+    NodeItem* nodeAt(const QPointF& scenePos, const NodeItem* except = nullptr) const;
 
     static constexpr qreal kGrid = 20.0;
 
@@ -407,6 +551,10 @@ private:
     int m_nextTwoPortId = 1;
 
     bool m_suppressGraphChange = false;
+
+    bool m_normalTreeHighlightActive = false;
+
+    lg::NormalTreeResult m_lastNormalTreeResult;
 
     void notifyGraphChanged();
 

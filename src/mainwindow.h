@@ -11,6 +11,7 @@ class QListWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTableWidget;
+class QTableWidgetItem;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -29,6 +30,8 @@ private:
     void syncObjectTreeSelection();
     void onObjectTreeSelectionChanged();
     void onObjectTreeItemChanged(QTreeWidgetItem* item, int column);
+    void onPropertyTableItemChanged(QTableWidgetItem* item);
+    void updateFlipBranchAction();
     static QString modeStatusText(GraphScene::Mode mode);
 
     GraphScene* m_scene = nullptr;
@@ -41,10 +44,16 @@ private:
     QAction* m_deleteAction = nullptr;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
+    QAction* m_flipBranchAction = nullptr;
+    QAction* m_mergeNodesAction = nullptr;
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;
     bool m_syncingObjectTree = false;
+    bool m_blockSceneSelectionSync = false;
+    bool m_updatingPropertyPanel = false;
+    void* m_propertyTargetPtr = nullptr;
+    int m_propertyTargetKind = -1;
 };

@@ -43,7 +43,8 @@ void GraphScene::captureDeleteState(std::vector<QPointF>& nodes, std::vector<Bra
     }
 
     for (TwoPortItem* twoPort : twoPortsToDelete) {
-        twoPorts.push_back({snap(twoPort->center()), twoPort->kind()});
+        twoPorts.push_back(
+            {snap(twoPort->center()), twoPort->kind(), twoPort->modulus(), twoPort->name()});
     }
 
     for (NodeItem* node : nodesToDelete) {
@@ -112,7 +113,7 @@ void GraphScene::executeDelete(const std::vector<QPointF>& nodes, const std::vec
 void GraphScene::restoreDelete(const std::vector<QPointF>& nodes, const std::vector<BranchKey>& branches,
                                const std::vector<TwoPortKey>& twoPorts) {
     for (const TwoPortKey& key : twoPorts) {
-        createTwoPort(key.center, key.kind);
+        createTwoPort(key.center, key.kind, key.modulus, key.name);
     }
 
     for (const QPointF& pos : nodes) {

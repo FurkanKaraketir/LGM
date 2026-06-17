@@ -1,16 +1,24 @@
 #include "canvas.h"
 
+#include "elemental_equation.h"
+
+#include "elemental_equation.h"
+
 #include <QComboBox>
+#include <QFontMetricsF>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsView>
+#include <QLineEdit>
 #include <QLabel>
 #include <QPainter>
 #include <QRadioButton>
 #include <QStyleOptionGraphicsItem>
 #include <QVBoxLayout>
+#include <QSet>
+
 #include <algorithm>
 #include <cmath>
 
@@ -18,6 +26,7 @@ namespace {
 
 constexpr qreal kBowFactor = 0.20;
 constexpr qreal kLaneSpread = 36.0;
+constexpr qreal kTwoPortEgressKick = 100.0;
 
 QPointF cubicPoint(const QPointF& p0, const QPointF& p1, const QPointF& p2, const QPointF& p3, qreal t) {
     const qreal u = 1.0 - t;
@@ -74,7 +83,9 @@ void drawDownArrow(QPainter* painter, const QPointF& tip, qreal size = 7.0) {
     painter->drawLine(tip + QPointF(0.0, size), tip + QPointF(size * 0.4, size * 0.55));
 }
 
-QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count, bool active = false, bool dashedTail = false) {
+QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count,
+                            const QPointF& kickA = {}, const QPointF& kickB = {}, bool active = false,
+                            bool dashedTail = false) {
     QPainterPath path;
     QPointF dir = b - a;
     const qreal len = std::hypot(dir.x(), dir.y());
@@ -89,8 +100,8 @@ QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int c
     const qreal lane = (count <= 1) ? 0.0 : kLaneSpread * (index - (count - 1) / 2.0);
     const QPointF bow = left * (len * kBowFactor + lane);
 
-    const QPointF c1 = a + u * (len / 3.0) + bow;
-    const QPointF c2 = b - u * (len / 3.0) + bow;
+    const QPointF c1 = a + u * (len / 3.0) + bow + kickA;
+    const QPointF c2 = b - u * (len / 3.0) + bow + kickB;
 
     if (dashedTail) {
         QPainterPath solidPart;
@@ -208,7 +219,8 @@ void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius) {
     }
 }
 
-void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right) {
+void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
+                            const QString& modulus) {
     const qreal midY = (left.y() + right.y()) / 2.0;
     const qreal padX = 6.0;
     const QRectF box(left.x() - padX, midY - 14.0, right.x() - left.x() + padX * 2.0, 28.0);
@@ -218,9 +230,22 @@ void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPoint
     const qreal span = right.x() - left.x();
     drawDownArrow(painter, QPointF(left.x() + span * 0.25, midY - 2.0));
     drawDownArrow(painter, QPointF(right.x() - span * 0.25, midY - 2.0));
+
+    QFont font = painter->font();
+    font.setPointSizeF(9.0);
+    font.setBold(true);
+    painter->setFont(font);
+    painter->drawText(box, Qt::AlignCenter, modulus);
+
+    font.setPointSizeF(8.0);
+    font.setBold(false);
+    painter->setFont(font);
+    painter->drawText(QPointF(left.x(), midY - 22.0), QStringLiteral("v\u2081"));
+    painter->drawText(QPointF(right.x() - 10.0, midY - 22.0), QStringLiteral("v\u2082"));
 }
 
-void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right) {
+void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
+                        const QString& modulus) {
     const qreal midY = (left.y() + right.y()) / 2.0;
     const qreal span = right.x() - left.x();
     const qreal h = 16.0;
@@ -237,6 +262,169 @@ void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& r
 
     drawDownArrow(painter, QPointF(left.x() + span * 0.25, midY - 2.0));
     drawDownArrow(painter, QPointF(right.x() - span * 0.25, midY - 2.0));
+
+    QFont font = painter->font();
+    font.setPointSizeF(9.0);
+    font.setBold(true);
+    painter->setFont(font);
+    painter->drawText(QRectF(left.x(), midY - 10.0, span, 20.0), Qt::AlignCenter, modulus);
+
+    font.setPointSizeF(8.0);
+    font.setBold(false);
+    painter->setFont(font);
+    painter->drawText(QPointF(left.x(), midY - 22.0), QStringLiteral("v\u2081"));
+    painter->drawText(QPointF(right.x() - 10.0, midY - 22.0), QStringLiteral("v\u2082"));
+}
+
+struct BranchArrowGeom {
+    QPointF tip;
+    QPointF tangent;
+};
+
+bool isTwoPortPortBranch(const BranchItem* branch) {
+    if (!branch || !branch->from()) {
+        return false;
+    }
+    TwoPortItem* twoPort = branch->from()->twoPort();
+    if (!twoPort) {
+        return false;
+    }
+    return branch == twoPort->leftBranch() || branch == twoPort->rightBranch();
+}
+
+qreal externalBranchLane(int index, int count) {
+    return (count <= 1) ? 0.0 : kLaneSpread * 0.55 * (index - (count - 1) / 2.0);
+}
+
+QPointF twoPortKick(const TwoPortItem* tp, const NodeItem* port, qreal lane) {
+    if (!tp || !port) {
+        return {};
+    }
+    QPointF away = port->scenePos() - tp->center();
+    const qreal len = std::hypot(away.x(), away.y());
+    if (len < 1e-6) {
+        return {};
+    }
+    away /= len;
+    const QPointF perp(-away.y(), away.x());
+    return away * kTwoPortEgressKick + perp * lane;
+}
+
+void externalLaneAtPort(const NodeItem* port, const BranchItem* branch, int& index, int& count) {
+    index = 0;
+    count = 1;
+    if (!port || !port->twoPort() || isTwoPortPortBranch(branch)) {
+        return;
+    }
+
+    std::vector<BranchItem*> external;
+    external.reserve(port->branches().size());
+    for (BranchItem* b : port->branches()) {
+        if (!isTwoPortPortBranch(b)) {
+            external.push_back(b);
+        }
+    }
+    count = static_cast<int>(external.size());
+    if (count <= 1) {
+        return;
+    }
+
+    const QPointF pos = port->scenePos();
+    const auto otherPos = [&](const BranchItem* b) {
+        return b->from() == port ? b->to()->scenePos() : b->from()->scenePos();
+    };
+    std::sort(external.begin(), external.end(), [&](const BranchItem* lhs, const BranchItem* rhs) {
+        const QPointF dl = otherPos(lhs) - pos;
+        const QPointF dr = otherPos(rhs) - pos;
+        return std::atan2(dl.y(), dl.x()) < std::atan2(dr.y(), dr.x());
+    });
+    for (int i = 0; i < count; ++i) {
+        if (external[static_cast<size_t>(i)] == branch) {
+            index = i;
+            return;
+        }
+    }
+}
+
+struct BranchEgress {
+    QPointF kickA;
+    QPointF kickB;
+};
+
+BranchEgress computeBranchEgress(const BranchItem* branch) {
+    BranchEgress egress;
+    if (!branch || isTwoPortPortBranch(branch)) {
+        return egress;
+    }
+
+    if (NodeItem* from = branch->from(); from && from->twoPort()) {
+        int index = 0;
+        int count = 1;
+        externalLaneAtPort(from, branch, index, count);
+        egress.kickA = twoPortKick(from->twoPort(), from, externalBranchLane(index, count));
+    }
+    if (NodeItem* to = branch->to(); to && to->twoPort()) {
+        int index = 0;
+        int count = 1;
+        externalLaneAtPort(to, branch, index, count);
+        egress.kickB = twoPortKick(to->twoPort(), to, externalBranchLane(index, count));
+    }
+    return egress;
+}
+
+QString branchAnnotationLabel(const BranchItem* branch) {
+    if (isTwoPortPortBranch(branch)) {
+        return branch->name();
+    }
+    const QString constant = branch->elementConstant().trimmed();
+    return constant.isEmpty() ? QStringLiteral("1") : constant;
+}
+
+BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, int count, qreal bow,
+                                const QPointF& kickA = {}, const QPointF& kickB = {}) {
+    if (std::abs(bow) > 1e-6) {
+        const QPointF ctrl = (a + b) / 2.0 + QPointF(bow, 0.0);
+        return {
+            QPointF((1 - 0.5) * (1 - 0.5) * a.x() + 2 * 0.5 * (1 - 0.5) * ctrl.x() + 0.5 * 0.5 * b.x(),
+                    (1 - 0.5) * (1 - 0.5) * a.y() + 2 * 0.5 * (1 - 0.5) * ctrl.y() + 0.5 * 0.5 * b.y()),
+            quadTangent(a, ctrl, b, 0.5),
+        };
+    }
+
+    QPointF dir = b - a;
+    const qreal len = std::hypot(dir.x(), dir.y());
+    if (len < 1e-6) {
+        return {a, QPointF(1.0, 0.0)};
+    }
+    const QPointF u(dir.x() / len, dir.y() / len);
+    const QPointF left(u.y(), -u.x());
+    const qreal lane = (count <= 1) ? 0.0 : kLaneSpread * (index - (count - 1) / 2.0);
+    const QPointF bowOffset = left * (len * kBowFactor + lane);
+    const QPointF c1 = a + u * (len / 3.0) + bowOffset + kickA;
+    const QPointF c2 = b - u * (len / 3.0) + bowOffset + kickB;
+    return {cubicPoint(a, c1, c2, b, 0.5), cubicTangent(a, c1, c2, b, 0.5)};
+}
+
+QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const QString& text,
+                         const QFont& font) {
+    constexpr qreal kPad = 6.0;
+    constexpr qreal kOffset = 18.0;
+    const qreal len = std::hypot(tangent.x(), tangent.y());
+    if (len < 1e-6) {
+        return {};
+    }
+    const QPointF u(tangent.x() / len, tangent.y() / len);
+    const QPointF n(-u.y(), u.x());
+    const QPointF center = arrowTip + n * kOffset;
+
+    const QFontMetricsF fm(font);
+    QRectF textBounds = fm.boundingRect(QRectF(), Qt::TextDontClip, text);
+    if (!textBounds.isValid() || textBounds.isEmpty()) {
+        const qreal w = fm.horizontalAdvance(text);
+        textBounds = QRectF(-w * 0.5, -fm.ascent(), w, fm.height());
+    }
+    textBounds.moveCenter(center);
+    return textBounds.adjusted(-kPad, -kPad, kPad, kPad);
 }
 
 }  // namespace
@@ -245,6 +433,7 @@ BranchItem::BranchItem(NodeItem* from, NodeItem* to, int index, int count, qreal
     : m_from(from), m_to(to), m_index(index), m_count(count), m_bow(bow) {
     setPen(QPen(Qt::black, 2));
     setFlags(QGraphicsItem::ItemIsSelectable);
+    setFlag(QGraphicsItem::ItemClipsToShape, false);
     setZValue(0);
     updatePath();
 }
@@ -264,13 +453,15 @@ void BranchItem::updatePath() {
     if (!m_from || !m_to || !m_from->scene() || !m_to->scene()) {
         return;
     }
+    prepareGeometryChange();
     const QPointF a = m_from->scenePos();
     const QPointF b = m_to->scenePos();
     const bool dashedTail = !m_active && m_type == BranchType::A;
+    const BranchEgress egress = computeBranchEgress(this);
     if (std::abs(m_bow) > 1e-6) {
         setPath(bowedBranch(a, b, m_bow, m_active, dashedTail));
     } else {
-        setPath(parallelBranch(a, b, m_index, m_count, m_active, dashedTail));
+        setPath(parallelBranch(a, b, m_index, m_count, egress.kickA, egress.kickB, m_active, dashedTail));
     }
 }
 
@@ -287,8 +478,111 @@ void BranchItem::setBranchType(BranchType type) {
     updatePath();
 }
 
+void BranchItem::flip() {
+    std::swap(m_from, m_to);
+    m_bow = -m_bow;
+    updatePath();
+}
+
+void BranchItem::replaceEndpoint(NodeItem* oldNode, NodeItem* newNode) {
+    if (!oldNode || !newNode || oldNode == newNode) {
+        return;
+    }
+    if (m_from == oldNode) {
+        oldNode->removeBranch(this);
+        m_from = newNode;
+        newNode->addBranch(this);
+    }
+    if (m_to == oldNode) {
+        oldNode->removeBranch(this);
+        m_to = newNode;
+        newNode->addBranch(this);
+    }
+    updatePath();
+}
+
+QString BranchItem::elementalEquationText() const {
+    return lg::elementalEquationText(m_type, !m_active, m_elementConstant);
+}
+
+void BranchItem::setElementConstant(const QString& constant) {
+    if (m_elementConstant == constant) {
+        return;
+    }
+    prepareGeometryChange();
+    m_elementConstant = constant;
+    update();
+}
+
+void BranchItem::setNormalTreeRole(bool inTree, bool known) {
+    m_inNormalTree = inTree;
+    m_normalTreeRoleKnown = known;
+    updateBranchPen();
+}
+
+void BranchItem::updateBranchPen() {
+    if (isSelected()) {
+        setPen(QPen(QColor(0, 100, 200), 2));
+    } else if (m_normalTreeRoleKnown && m_inNormalTree) {
+        setPen(QPen(QColor(27, 94, 32), 3));
+    } else if (m_normalTreeRoleKnown) {
+        setPen(QPen(QColor(158, 158, 158), 1.5));
+    } else {
+        setPen(QPen(Qt::black, 2));
+    }
+}
+
+QRectF BranchItem::boundingRect() const {
+    QRectF rect = QGraphicsPathItem::boundingRect();
+    if (m_active || !m_from || !m_to || !m_from->scene() || !m_to->scene()) {
+        return rect;
+    }
+    const QPointF a = m_from->scenePos();
+    const QPointF b = m_to->scenePos();
+    const BranchEgress egress = computeBranchEgress(this);
+    const BranchArrowGeom arrow =
+        branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB);
+    const QString label = branchAnnotationLabel(this);
+    QFont font;
+    font.setPointSizeF(9.0);
+    rect |= constantLabelRect(arrow.tip, arrow.tangent, label, font);
+    return rect.marginsAdded(QMarginsF(2.0, 2.0, 2.0, 2.0));
+}
+
+void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+    QGraphicsPathItem::paint(painter, option, widget);
+    if (m_active) {
+        return;
+    }
+    if (!m_from || !m_to || !m_from->scene() || !m_to->scene()) {
+        return;
+    }
+
+    const QPointF a = m_from->scenePos();
+    const QPointF b = m_to->scenePos();
+    const BranchEgress egress = computeBranchEgress(this);
+    const BranchArrowGeom arrow =
+        branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB);
+    const QString label = branchAnnotationLabel(this);
+
+    QFont font = painter->font();
+    font.setPointSizeF(9.0);
+    painter->setFont(font);
+    painter->setPen(isSelected() ? QColor(0, 100, 200) : Qt::black);
+
+    const QRectF textRect = constantLabelRect(arrow.tip, arrow.tangent, label, font);
+    painter->save();
+    painter->setClipping(false);
+    painter->drawText(textRect, Qt::AlignCenter, label);
+    painter->restore();
+}
+
 void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     if (!scene()) {
+        return;
+    }
+    if (isTwoPortPortBranch(this)) {
+        event->accept();
         return;
     }
     auto* dialog = new QDialog(scene()->views().first());
@@ -331,6 +625,20 @@ void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     
     QObject::connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), updateTypeOptions);
     updateTypeOptions();
+
+    auto* constantLabel = new QLabel("Constant:");
+    auto* constantEdit = new QLineEdit(m_elementConstant);
+    layout->addWidget(constantLabel);
+    layout->addWidget(constantEdit);
+
+    auto refreshConstantVisibility = [=]() {
+        const bool passive = !categoryCombo->currentData().toBool();
+        constantLabel->setVisible(passive);
+        constantEdit->setVisible(passive);
+    };
+    QObject::connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), refreshConstantVisibility);
+    QObject::connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), refreshConstantVisibility);
+    refreshConstantVisibility();
     
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     layout->addWidget(buttons);
@@ -339,8 +647,11 @@ void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     
     if (dialog->exec() == QDialog::Accepted) {
-        setActive(categoryCombo->currentData().toBool());
-        setBranchType(static_cast<BranchType>(typeCombo->currentData().toInt()));
+        auto* graph = static_cast<GraphScene*>(scene());
+        graph->pushBranchProperties(
+            this, categoryCombo->currentData().toBool(),
+            static_cast<BranchType>(typeCombo->currentData().toInt()),
+            constantEdit->text());
     }
     dialog->deleteLater();
     event->accept();
@@ -348,7 +659,7 @@ void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
 
 QVariant BranchItem::itemChange(GraphicsItemChange change, const QVariant& value) {
     if (change == ItemSelectedHasChanged) {
-        setPen(isSelected() ? QPen(QColor(0, 100, 200), 2) : QPen(Qt::black, 2));
+        updateBranchPen();
     }
     return QGraphicsPathItem::itemChange(change, value);
 }
@@ -365,6 +676,11 @@ void NodeItem::setGround(bool ground) {
     prepareGeometryChange();
     m_ground = ground;
     update();
+}
+
+void NodeItem::setTwoPort(TwoPortItem* twoPort) {
+    m_twoPort = twoPort;
+    setZValue(twoPort ? 3.0 : 1.0);
 }
 
 QRectF NodeItem::boundingRect() const {
@@ -402,15 +718,7 @@ void NodeItem::removeBranch(BranchItem* branch) {
 QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value) {
     if (change == ItemPositionChange && scene()) {
         const auto* graph = static_cast<GraphScene*>(scene());
-        const QPointF snapped = graph->snap(value.toPointF());
-        if (m_twoPort) {
-            if (m_twoPort->isSyncing()) {
-                return snapped;
-            }
-            m_twoPort->moveBy(snapped - pos());
-            return snapped;
-        }
-        return snapped;
+        return graph->snap(value.toPointF());
     }
     if (change == ItemPositionHasChanged) {
         for (BranchItem* branch : m_branches) {
@@ -428,7 +736,13 @@ void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (m_twoPort && scene()) {
         auto* graph = static_cast<GraphScene*>(scene());
         if (graph->mode() == GraphScene::Mode::Select) {
-            graph->selectTwoPort(m_twoPort);
+            if (!(event->modifiers() & Qt::ShiftModifier)) {
+                graph->selectTwoPortNode(this);
+            } else {
+                setSelected(true);
+            }
+            event->accept();
+            return;
         }
     }
     QGraphicsEllipseItem::mousePressEvent(event);
@@ -442,6 +756,7 @@ void NodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     auto* graph = static_cast<GraphScene*>(scene());
     if (graph->mode() == GraphScene::Mode::Select && m_dragStart != pos()) {
         graph->pushMove(this, m_dragStart, pos());
+        graph->tryMergeOverlappingNodes(this);
     }
 }
 
@@ -469,7 +784,8 @@ void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     
     if (dialog->exec() == QDialog::Accepted) {
-        setGround(groundRadio->isChecked());
+        auto* graph = static_cast<GraphScene*>(scene());
+        graph->pushSetNodeGround(this, groundRadio->isChecked());
     }
     dialog->deleteLater();
     event->accept();
@@ -477,15 +793,57 @@ void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
 
 TwoPortItem::TwoPortItem(TwoPortKind kind, const QPointF& center, NodeItem* v1, NodeItem* v2, NodeItem* g1,
                          NodeItem* g2, BranchItem* left, BranchItem* right)
-    : m_kind(kind), m_center(center), m_v1(v1), m_v2(v2), m_g1(g1), m_g2(g2), m_left(left), m_right(right) {
+    : m_kind(kind),
+      m_center(center),
+      m_v1(v1),
+      m_v2(v2),
+      m_g1(g1),
+      m_g2(g2),
+      m_left(left),
+      m_right(right),
+      m_modulus(lg::defaultTwoPortModulus(kind)) {
     setFlags(QGraphicsItem::ItemIsSelectable);
     setZValue(2);
     refresh();
 }
 
 void TwoPortItem::setKind(TwoPortKind kind) {
+    if (m_kind == kind) {
+        return;
+    }
     m_kind = kind;
     update();
+}
+
+void TwoPortItem::setModulus(const QString& modulus) {
+    const QString trimmed = modulus.trimmed();
+    const QString next = trimmed.isEmpty() ? lg::defaultTwoPortModulus(m_kind) : trimmed;
+    if (m_modulus == next) {
+        return;
+    }
+    m_modulus = next;
+    update();
+}
+
+QString TwoPortItem::elementalEquationText() const {
+    return lg::twoPortElementalEquationText(m_kind, m_modulus);
+}
+
+void TwoPortItem::applyPortDefaults() {
+    m_v1->setName(QStringLiteral("v\u2081"));
+    m_v2->setName(QStringLiteral("v\u2082"));
+    m_g1->setName(QStringLiteral("ref\u2081"));
+    m_g2->setName(QStringLiteral("ref\u2082"));
+    m_v1->setAcrossVariable(QStringLiteral("v1"));
+    m_v2->setAcrossVariable(QStringLiteral("v2"));
+
+    for (BranchItem* branch : {m_left, m_right}) {
+        branch->setBranchType(BranchType::T);
+        branch->setActive(false);
+        branch->setElementConstant(QStringLiteral("1"));
+    }
+    m_left->setName(QStringLiteral("f1"));
+    m_right->setName(QStringLiteral("f2"));
 }
 
 void TwoPortItem::refresh() {
@@ -502,13 +860,39 @@ void TwoPortItem::moveBy(const QPointF& delta) {
         return;
     }
     m_syncing = true;
+    QSet<NodeItem*> nodes;
     for (NodeItem* node : {m_v1, m_v2, m_g1, m_g2}) {
+        if (node) {
+            nodes.insert(node);
+        }
+    }
+    for (NodeItem* node : nodes) {
         node->setPos(node->pos() + delta);
     }
     m_syncing = false;
     m_left->updatePath();
     m_right->updatePath();
     refresh();
+}
+
+bool TwoPortItem::collapseSharedRef(NodeItem* gKeep, NodeItem* gRemove) {
+    if (!gKeep || !gRemove || gKeep == gRemove) {
+        return false;
+    }
+    if ((gKeep != m_g1 && gKeep != m_g2) || (gRemove != m_g1 && gRemove != m_g2)) {
+        return false;
+    }
+    BranchItem* branch = gRemove == m_g1 ? m_left : m_right;
+    branch->replaceEndpoint(gRemove, gKeep);
+    if (m_g1 == gRemove) {
+        m_g1 = gKeep;
+    }
+    if (m_g2 == gRemove) {
+        m_g2 = gKeep;
+    }
+    gRemove->setTwoPort(nullptr);
+    refresh();
+    return true;
 }
 
 void TwoPortItem::selectMembers(bool selected) {
@@ -535,8 +919,12 @@ QRectF TwoPortItem::boundingRect() const {
 }
 
 QPainterPath TwoPortItem::shape() const {
+    const QPointF left = couplerLeft();
+    const QPointF right = couplerRight();
+    const qreal midY = (left.y() + right.y()) / 2.0;
+    const qreal span = right.x() - left.x();
     QPainterPath path;
-    path.addRect(boundingRect());
+    path.addRect(QRectF(left.x() - 8.0, midY - 18.0, span + 16.0, 36.0));
     return path;
 }
 
@@ -549,17 +937,41 @@ void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* optio
 
     painter->setPen(QPen(isSelected() ? QColor(0, 100, 200) : Qt::black, 2.0));
     if (m_kind == TwoPortKind::Transformer) {
-        drawTransformerCoupler(painter, left, right);
+        drawTransformerCoupler(painter, left, right, m_modulus);
     } else {
-        drawGyratorCoupler(painter, left, right);
+        drawGyratorCoupler(painter, left, right, m_modulus);
     }
 }
 
 void TwoPortItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (scene()) {
         static_cast<GraphScene*>(scene())->selectTwoPort(this);
+        m_dragScenePos = event->scenePos();
+        m_dragCenterStart = center();
+        m_dragMoved = false;
     }
-    QGraphicsItem::mousePressEvent(event);
+    event->accept();
+}
+
+void TwoPortItem::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
+    if ((event->buttons() & Qt::LeftButton) && scene()) {
+        const QPointF delta = event->scenePos() - m_dragScenePos;
+        if (delta.manhattanLength() > 1e-6) {
+            moveBy(delta);
+            m_dragScenePos = event->scenePos();
+            m_dragMoved = true;
+        }
+    }
+    event->accept();
+}
+
+void TwoPortItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+    Q_UNUSED(event);
+    if (m_dragMoved && scene()) {
+        static_cast<GraphScene*>(scene())->pushMoveTwoPort(this, m_dragCenterStart, center());
+    }
+    m_dragMoved = false;
+    event->accept();
 }
 
 void TwoPortItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {

@@ -19,7 +19,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 # Boost.Multiprecision via vcpkg
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS multiprecision)
 
 # SymEngine via FetchContent (not in vcpkg)
 include(FetchContent)
@@ -45,10 +45,18 @@ add_executable(LinearGraphModeling
     src/canvas_scene_delete.cpp
     src/canvas_scene_input.cpp
     src/canvas_view.cpp
+    src/elemental_equation.cpp
+    src/elemental_equation.h
+    src/normal_tree.cpp
+    src/normal_tree.h
     src/mainwindow.cpp
 )
 
-target_link_libraries(LinearGraphModeling PRIVATE Qt6::Widgets symengine)
+target_link_libraries(LinearGraphModeling PRIVATE Qt6::Widgets symengine Boost::multiprecision)
+target_include_directories(LinearGraphModeling PRIVATE
+    ${symengine_SOURCE_DIR}
+    ${CMAKE_BINARY_DIR}/_deps/symengine-build
+)
 
 if(WIN32)
     get_target_property(_qmake Qt6::qmake IMPORTED_LOCATION)
