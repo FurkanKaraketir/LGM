@@ -1,0 +1,8 @@
+{
+  "name": "lineargraphmodeling",
+  "version": "0.1.0",
+  "dependencies": [
+    "boost-multiprecision",
+    "boost-mpl"
+  ]
+}

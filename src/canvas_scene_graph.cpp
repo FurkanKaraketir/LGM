@@ -5,10 +5,18 @@
 
 GraphScene::GraphScene(QObject* parent) : QGraphicsScene(-2000, -2000, 4000, 4000, parent) {}
 
+void GraphScene::notifyGraphChanged() {
+    if (!m_suppressGraphChange) {
+        emit graphChanged();
+    }
+}
+
 NodeItem* GraphScene::createNode(const QPointF& center) {
     auto* node = new NodeItem;
+    node->setName(tr("Node %1").arg(m_nextNodeId++));
     node->setPos(snap(center));
     addItem(node);
+    notifyGraphChanged();
     return node;
 }
 
@@ -22,11 +30,14 @@ void GraphScene::destroyNode(NodeItem* node) {
     }
     node->setSelected(false);
     const std::vector<BranchItem*> attached = node->branches();
+    m_suppressGraphChange = true;
     for (BranchItem* branch : attached) {
         destroyBranch(branch);
     }
+    m_suppressGraphChange = false;
     removeItem(node);
     delete node;
+    notifyGraphChanged();
 }
 
 BranchItem* GraphScene::createBranch(NodeItem* a, NodeItem* b, qreal bow) {
@@ -39,6 +50,8 @@ BranchItem* GraphScene::createBranch(NodeItem* a, NodeItem* b, qreal bow) {
     b->addBranch(branch);
     addItem(branch);
     reindexBranches(a, b);
+    branch->setName(tr("Branch %1").arg(m_nextBranchId++));
+    notifyGraphChanged();
     return branch;
 }
 
@@ -49,22 +62,37 @@ TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind) 
     const QPointF g1Pos = c + QPointF(-kTwoPortHalfWidth, kTwoPortHalfHeight);
     const QPointF g2Pos = c + QPointF(kTwoPortHalfWidth, kTwoPortHalfHeight);
 
+    m_suppressGraphChange = true;
     auto* v1 = createNode(v1Pos);
     auto* v2 = createNode(v2Pos);
     auto* g1 = createNode(g1Pos);
     auto* g2 = createNode(g2Pos);
+    v1->setName(tr("V₁"));
+    v2->setName(tr("V₂"));
+    g1->setName(tr("G₁"));
+    g2->setName(tr("G₂"));
     g1->setGround(true);
     g2->setGround(true);
 
     auto* left = createBranch(v1, g1, -14.0);
     auto* right = createBranch(v2, g2, 14.0);
+    left->setName(tr("Left branch"));
+    right->setName(tr("Right branch"));
+
+    const QString twoPortName =
+        kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
+                                         : tr("Gyrator %1").arg(m_nextTwoPortId);
+    ++m_nextTwoPortId;
 
     auto* item = new TwoPortItem(kind, c, v1, v2, g1, g2, left, right);
+    item->setName(twoPortName);
     for (NodeItem* node : {v1, v2, g1, g2}) {
         node->setTwoPort(item);
     }
     addItem(item);
     item->refresh();
+    m_suppressGraphChange = false;
+    notifyGraphChanged();
     return item;
 }
 
@@ -105,6 +133,7 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
             delete node;
         }
     }
+    notifyGraphChanged();
 }
 
 void GraphScene::destroyBranch(BranchItem* branch) {
@@ -127,6 +156,7 @@ void GraphScene::destroyBranch(BranchItem* branch) {
     if (a->scene() && b->scene()) {
         reindexBranches(a, b);
     }
+    notifyGraphChanged();
 }
 
 void GraphScene::destroyBranchAt(const BranchKey& key) {

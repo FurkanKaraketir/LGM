@@ -1,8 +1,16 @@
 #include "canvas.h"
 
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QGraphicsScene>
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsView>
+#include <QLabel>
 #include <QPainter>
+#include <QRadioButton>
 #include <QStyleOptionGraphicsItem>
+#include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
 
@@ -28,18 +36,36 @@ QPointF quadTangent(const QPointF& p0, const QPointF& c, const QPointF& p1, qrea
     return 2.0 * u * (c - p0) + 2.0 * t * (p1 - c);
 }
 
-void appendArrowHead(QPainterPath& path, const QPointF& tip, const QPointF& tangent, qreal size = 9.0) {
+void appendArrowHead(QPainterPath& path, const QPointF& tip, const QPointF& tangent, qreal size = 9.0, bool withCircle = false) {
     const qreal len = std::hypot(tangent.x(), tangent.y());
     if (len < 1e-6) {
         return;
     }
     const QPointF u(tangent.x() / len, tangent.y() / len);
     const QPointF n(-u.y(), u.x());
-    const QPointF wing = tip - u * size;
-    path.moveTo(tip);
-    path.lineTo(wing + n * (size * 0.45));
-    path.moveTo(tip);
-    path.lineTo(wing - n * (size * 0.45));
+    
+    if (withCircle) {
+        // ponytail: current-source symbol: circle + centered arrow
+        const qreal circleRadius = 14.0;
+        path.addEllipse(tip, circleRadius, circleRadius);
+        
+        const qreal arrowLen = circleRadius * 0.85;
+        const QPointF arrowBase = tip - u * arrowLen * 0.5;
+        const QPointF arrowTip = tip + u * arrowLen * 0.5;
+        const qreal wingSize = arrowLen * 0.35;
+        
+        path.moveTo(arrowBase);
+        path.lineTo(arrowTip);
+        path.lineTo(arrowTip - u * wingSize + n * wingSize * 0.45);
+        path.moveTo(arrowTip);
+        path.lineTo(arrowTip - u * wingSize - n * wingSize * 0.45);
+    } else {
+        const QPointF wing = tip - u * size;
+        path.moveTo(tip);
+        path.lineTo(wing + n * (size * 0.45));
+        path.moveTo(tip);
+        path.lineTo(wing - n * (size * 0.45));
+    }
 }
 
 void drawDownArrow(QPainter* painter, const QPointF& tip, qreal size = 7.0) {
@@ -48,7 +74,7 @@ void drawDownArrow(QPainter* painter, const QPointF& tip, qreal size = 7.0) {
     painter->drawLine(tip + QPointF(0.0, size), tip + QPointF(size * 0.4, size * 0.55));
 }
 
-QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count) {
+QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count, bool active = false, bool dashedTail = false) {
     QPainterPath path;
     QPointF dir = b - a;
     const qreal len = std::hypot(dir.x(), dir.y());
@@ -66,23 +92,109 @@ QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int c
     const QPointF c1 = a + u * (len / 3.0) + bow;
     const QPointF c2 = b - u * (len / 3.0) + bow;
 
-    path.moveTo(a);
-    path.cubicTo(c1, c2, b);
+    if (dashedTail) {
+        QPainterPath solidPart;
+        solidPart.moveTo(a);
+        for (qreal t = 0.0; t <= 0.5; t += 0.01) {
+            solidPart.lineTo(cubicPoint(a, c1, c2, b, t));
+        }
+        path.addPath(solidPart);
+        
+        QPainterPath dashedPart;
+        const qreal dashLen = 8.0;
+        const qreal gapLen = 6.0;
+        qreal distance = 0.0;
+        bool drawing = true;
+        QPointF lastPt = cubicPoint(a, c1, c2, b, 0.5);
+        
+        for (qreal t = 0.5; t <= 1.0; t += 0.005) {
+            QPointF pt = cubicPoint(a, c1, c2, b, t);
+            qreal segLen = std::hypot(pt.x() - lastPt.x(), pt.y() - lastPt.y());
+            distance += segLen;
+            
+            if (drawing && distance >= dashLen) {
+                distance = 0.0;
+                drawing = false;
+            } else if (!drawing && distance >= gapLen) {
+                distance = 0.0;
+                drawing = true;
+                dashedPart.moveTo(pt);
+            }
+            
+            if (drawing) {
+                if (dashedPart.isEmpty()) {
+                    dashedPart.moveTo(lastPt);
+                }
+                dashedPart.lineTo(pt);
+            }
+            lastPt = pt;
+        }
+        path.addPath(dashedPart);
+    } else {
+        path.moveTo(a);
+        path.cubicTo(c1, c2, b);
+    }
 
     const QPointF mid = cubicPoint(a, c1, c2, b, 0.5);
-    appendArrowHead(path, mid, cubicTangent(a, c1, c2, b, 0.5));
+    appendArrowHead(path, mid, cubicTangent(a, c1, c2, b, 0.5), 9.0, active);
     return path;
 }
 
-QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow) {
+QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false, bool dashedTail = false) {
     QPainterPath path;
     const QPointF ctrl = (top + bottom) / 2.0 + QPointF(bow, 0.0);
-    path.moveTo(top);
-    path.quadTo(ctrl, bottom);
+    
+    if (dashedTail) {
+        QPainterPath solidPart;
+        solidPart.moveTo(top);
+        for (qreal t = 0.0; t <= 0.5; t += 0.02) {
+            qreal x = (1 - t) * (1 - t) * top.x() + 2 * t * (1 - t) * ctrl.x() + t * t * bottom.x();
+            qreal y = (1 - t) * (1 - t) * top.y() + 2 * t * (1 - t) * ctrl.y() + t * t * bottom.y();
+            solidPart.lineTo(QPointF(x, y));
+        }
+        path.addPath(solidPart);
+        
+        QPainterPath dashedPart;
+        const qreal dashLen = 8.0;
+        const qreal gapLen = 6.0;
+        qreal distance = 0.0;
+        bool drawing = true;
+        qreal prevX = (1 - 0.5) * (1 - 0.5) * top.x() + 2 * 0.5 * (1 - 0.5) * ctrl.x() + 0.5 * 0.5 * bottom.x();
+        qreal prevY = (1 - 0.5) * (1 - 0.5) * top.y() + 2 * 0.5 * (1 - 0.5) * ctrl.y() + 0.5 * 0.5 * bottom.y();
+        
+        for (qreal t = 0.5; t <= 1.0; t += 0.01) {
+            qreal x = (1 - t) * (1 - t) * top.x() + 2 * t * (1 - t) * ctrl.x() + t * t * bottom.x();
+            qreal y = (1 - t) * (1 - t) * top.y() + 2 * t * (1 - t) * ctrl.y() + t * t * bottom.y();
+            qreal segLen = std::hypot(x - prevX, y - prevY);
+            distance += segLen;
+            
+            if (drawing && distance >= dashLen) {
+                distance = 0.0;
+                drawing = false;
+            } else if (!drawing && distance >= gapLen) {
+                distance = 0.0;
+                drawing = true;
+                dashedPart.moveTo(QPointF(x, y));
+            }
+            
+            if (drawing) {
+                if (dashedPart.isEmpty()) {
+                    dashedPart.moveTo(QPointF(prevX, prevY));
+                }
+                dashedPart.lineTo(QPointF(x, y));
+            }
+            prevX = x;
+            prevY = y;
+        }
+        path.addPath(dashedPart);
+    } else {
+        path.moveTo(top);
+        path.quadTo(ctrl, bottom);
+    }
 
     const QPointF midActual((1 - 0.5) * (1 - 0.5) * top.x() + 2 * 0.5 * (1 - 0.5) * ctrl.x() + 0.5 * 0.5 * bottom.x(),
                             (1 - 0.5) * (1 - 0.5) * top.y() + 2 * 0.5 * (1 - 0.5) * ctrl.y() + 0.5 * 0.5 * bottom.y());
-    appendArrowHead(path, midActual, quadTangent(top, ctrl, bottom, 0.5));
+    appendArrowHead(path, midActual, quadTangent(top, ctrl, bottom, 0.5), 9.0, active);
     return path;
 }
 
@@ -154,11 +266,84 @@ void BranchItem::updatePath() {
     }
     const QPointF a = m_from->scenePos();
     const QPointF b = m_to->scenePos();
+    const bool dashedTail = !m_active && m_type == BranchType::A;
     if (std::abs(m_bow) > 1e-6) {
-        setPath(bowedBranch(a, b, m_bow));
+        setPath(bowedBranch(a, b, m_bow, m_active, dashedTail));
     } else {
-        setPath(parallelBranch(a, b, m_index, m_count));
+        setPath(parallelBranch(a, b, m_index, m_count, m_active, dashedTail));
     }
+}
+
+void BranchItem::setActive(bool active) {
+    m_active = active;
+    if (active && m_type == BranchType::D) {
+        m_type = BranchType::A;
+    }
+    updatePath();
+}
+
+void BranchItem::setBranchType(BranchType type) {
+    m_type = type;
+    updatePath();
+}
+
+void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
+    if (!scene()) {
+        return;
+    }
+    auto* dialog = new QDialog(scene()->views().first());
+    dialog->setWindowTitle("Branch Properties");
+    auto* layout = new QVBoxLayout(dialog);
+    
+    layout->addWidget(new QLabel("Branch Category:"));
+    auto* categoryCombo = new QComboBox();
+    categoryCombo->addItem("Passive Element", false);
+    categoryCombo->addItem("Active Element (Source)", true);
+    categoryCombo->setCurrentIndex(m_active ? 1 : 0);
+    layout->addWidget(categoryCombo);
+    
+    auto* typeLabel = new QLabel("Element Type:");
+    layout->addWidget(typeLabel);
+    auto* typeCombo = new QComboBox();
+    layout->addWidget(typeCombo);
+    
+    auto updateTypeOptions = [=]() {
+        const bool isActive = categoryCombo->currentData().toBool();
+        typeCombo->clear();
+        if (isActive) {
+            typeCombo->addItem("A-type", static_cast<int>(BranchType::A));
+            typeCombo->addItem("T-type", static_cast<int>(BranchType::T));
+            int currentIdx = (m_type == BranchType::T) ? 1 : 0;
+            typeCombo->setCurrentIndex(currentIdx);
+        } else {
+            typeCombo->addItem("A-type", static_cast<int>(BranchType::A));
+            typeCombo->addItem("T-type", static_cast<int>(BranchType::T));
+            typeCombo->addItem("D-type", static_cast<int>(BranchType::D));
+            int currentIdx = 0;
+            switch (m_type) {
+                case BranchType::A: currentIdx = 0; break;
+                case BranchType::T: currentIdx = 1; break;
+                case BranchType::D: currentIdx = 2; break;
+            }
+            typeCombo->setCurrentIndex(currentIdx);
+        }
+    };
+    
+    QObject::connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), updateTypeOptions);
+    updateTypeOptions();
+    
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    layout->addWidget(buttons);
+    
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    
+    if (dialog->exec() == QDialog::Accepted) {
+        setActive(categoryCombo->currentData().toBool());
+        setBranchType(static_cast<BranchType>(typeCombo->currentData().toInt()));
+    }
+    dialog->deleteLater();
+    event->accept();
 }
 
 QVariant BranchItem::itemChange(GraphicsItemChange change, const QVariant& value) {
@@ -177,15 +362,29 @@ NodeItem::NodeItem(qreal radius) : QGraphicsEllipseItem(-radius, -radius, radius
 }
 
 void NodeItem::setGround(bool ground) {
+    prepareGeometryChange();
     m_ground = ground;
     update();
+}
+
+QRectF NodeItem::boundingRect() const {
+    QRectF r = QGraphicsEllipseItem::boundingRect();
+    if (m_ground) {
+        // ground symbol extends: radius+2 stem + 8 down + 14 for three rungs = radius+16 below center
+        const qreal extra = rect().width() / 2.0 + 18.0;
+        r.setBottom(r.bottom() + extra);
+    }
+    return r;
 }
 
 void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     QGraphicsEllipseItem::paint(painter, option, widget);
     if (m_ground) {
+        painter->save();
         painter->setPen(QPen(Qt::black, 1.5));
+        painter->setBrush(Qt::NoBrush);
         drawGroundSymbol(painter, QPointF(0.0, 0.0), rect().width() / 2.0);
+        painter->restore();
     }
 }
 
@@ -244,6 +443,36 @@ void NodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     if (graph->mode() == GraphScene::Mode::Select && m_dragStart != pos()) {
         graph->pushMove(this, m_dragStart, pos());
     }
+}
+
+void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
+    if (!scene() || m_twoPort) {
+        QGraphicsEllipseItem::mouseDoubleClickEvent(event);
+        return;
+    }
+    auto* dialog = new QDialog(scene()->views().first());
+    dialog->setWindowTitle("Node Properties");
+    auto* layout = new QVBoxLayout(dialog);
+    
+    layout->addWidget(new QLabel("Node Type:"));
+    auto* normalRadio = new QRadioButton("Normal Node");
+    auto* groundRadio = new QRadioButton("Reference (0-Ground) Node");
+    normalRadio->setChecked(!m_ground);
+    groundRadio->setChecked(m_ground);
+    layout->addWidget(normalRadio);
+    layout->addWidget(groundRadio);
+    
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    layout->addWidget(buttons);
+    
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    
+    if (dialog->exec() == QDialog::Accepted) {
+        setGround(groundRadio->isChecked());
+    }
+    dialog->deleteLater();
+    event->accept();
 }
 
 TwoPortItem::TwoPortItem(TwoPortKind kind, const QPointF& center, NodeItem* v1, NodeItem* v2, NodeItem* g1,

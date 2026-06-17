@@ -12,6 +12,8 @@
 
 #include <QGraphicsView>
 
+#include <QString>
+
 #include <QUndoStack>
 
 #include <vector>
@@ -28,6 +30,8 @@ class TwoPortItem;
 
 
 enum class TwoPortKind { Transformer, Gyrator };
+
+enum class BranchType { A, T, D };
 
 
 
@@ -51,11 +55,25 @@ public:
 
     void setBow(qreal bow);
 
+    bool isActive() const { return m_active; }
+
+    void setActive(bool active);
+
+    BranchType branchType() const { return m_type; }
+
+    void setBranchType(BranchType type);
+
+    QString name() const { return m_name; }
+
+    void setName(const QString& name) { m_name = name; }
+
 
 
 protected:
 
     QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
+
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) override;
 
 
 
@@ -70,6 +88,12 @@ private:
     int m_count;
 
     qreal m_bow;
+
+    bool m_active = false;
+
+    BranchType m_type = BranchType::A;
+
+    QString m_name;
 
 };
 
@@ -95,9 +119,15 @@ public:
 
     void setGround(bool ground);
 
+    QRectF boundingRect() const override;
+
     TwoPortItem* twoPort() const { return m_twoPort; }
 
     void setTwoPort(TwoPortItem* twoPort) { m_twoPort = twoPort; }
+
+    QString name() const { return m_name; }
+
+    void setName(const QString& name) { m_name = name; }
 
 
 
@@ -111,6 +141,8 @@ protected:
 
     void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
 
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) override;
+
 
 
 private:
@@ -122,6 +154,8 @@ private:
     bool m_ground = false;
 
     TwoPortItem* m_twoPort = nullptr;
+
+    QString m_name;
 
 };
 
@@ -153,6 +187,10 @@ public:
     BranchItem* leftBranch() const { return m_left; }
 
     BranchItem* rightBranch() const { return m_right; }
+
+    QString name() const { return m_name; }
+
+    void setName(const QString& name) { m_name = name; }
 
 
 
@@ -201,6 +239,7 @@ private:
     BranchItem* m_left;
     BranchItem* m_right;
     bool m_syncing = false;
+    QString m_name;
 };
 
 
@@ -325,6 +364,8 @@ signals:
 
     void modeChanged(Mode mode);
 
+    void graphChanged();
+
 
 
 protected:
@@ -358,6 +399,16 @@ private:
     NodeItem* m_pending = nullptr;
 
     QUndoStack m_undoStack;
+
+    int m_nextNodeId = 1;
+
+    int m_nextBranchId = 1;
+
+    int m_nextTwoPortId = 1;
+
+    bool m_suppressGraphChange = false;
+
+    void notifyGraphChanged();
 
 };
 
