@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <vector>
 
-void GraphScene::captureDeleteState(std::vector<QPointF>& nodes, std::vector<BranchKey>& branches,
+void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,
                                     std::vector<TwoPortKey>& twoPorts) const {
     nodes.clear();
     branches.clear();
@@ -51,7 +51,13 @@ void GraphScene::captureDeleteState(std::vector<QPointF>& nodes, std::vector<Bra
         if (node->twoPort()) {
             continue;
         }
-        nodes.push_back(node->scenePos());
+        NodeSnapshot snap;
+        snap.pos = node->scenePos();
+        snap.name = node->name();
+        snap.ground = node->isGround();
+        snap.across = node->isGround() ? QStringLiteral("0") : node->acrossVariable();
+        snap.systemType = node->systemType();
+        nodes.push_back(snap);
     }
 
     for (BranchItem* branch : branchesToDelete) {
@@ -60,11 +66,21 @@ void GraphScene::captureDeleteState(std::vector<QPointF>& nodes, std::vector<Bra
                 continue;
             }
         }
-        branches.push_back({branch->from()->scenePos(), branch->to()->scenePos(), branch->index()});
+        BranchSnapshot snap;
+        snap.from = branch->from()->scenePos();
+        snap.to = branch->to()->scenePos();
+        snap.index = branch->index();
+        snap.name = branch->name();
+        snap.active = branch->isActive();
+        snap.type = branch->branchType();
+        snap.constant = branch->elementConstant();
+        snap.bow = branch->bow();
+        branches.push_back(snap);
     }
 }
 
-void GraphScene::executeDelete(const std::vector<QPointF>& nodes, const std::vector<BranchKey>& branches,
+void GraphScene::executeDelete(const std::vector<NodeSnapshot>& nodes,
+                               const std::vector<BranchSnapshot>& branches,
                                const std::vector<TwoPortKey>& twoPorts) {
     clearBranchPending();
     clearSelection();
@@ -76,55 +92,70 @@ void GraphScene::executeDelete(const std::vector<QPointF>& nodes, const std::vec
     }
 
     const auto deletingNode = [&](const QPointF& pos) {
-        return std::find(nodes.begin(), nodes.end(), pos) != nodes.end();
+        return std::any_of(nodes.begin(), nodes.end(),
+                           [&](const NodeSnapshot& snap) { return snap.pos == pos; });
     };
 
-    std::vector<BranchKey> loneBranches;
-    for (const BranchKey& key : branches) {
-        if (deletingNode(key.from) || deletingNode(key.to)) {
+    std::vector<BranchSnapshot> loneBranches;
+    for (const BranchSnapshot& snap : branches) {
+        if (deletingNode(snap.from) || deletingNode(snap.to)) {
             continue;
         }
-        loneBranches.push_back(key);
+        loneBranches.push_back(snap);
     }
     std::sort(loneBranches.begin(), loneBranches.end(),
-              [](const BranchKey& a, const BranchKey& b) { return a.index > b.index; });
+              [](const BranchSnapshot& a, const BranchSnapshot& b) { return a.index > b.index; });
 
-    for (const BranchKey& key : loneBranches) {
-        NodeItem* a = nodeAtPos(key.from);
-        NodeItem* b = nodeAtPos(key.to);
+    for (const BranchSnapshot& snap : loneBranches) {
+        NodeItem* a = nodeAtPos(snap.from);
+        NodeItem* b = nodeAtPos(snap.to);
         if (!a || !b) {
             continue;
         }
         for (BranchItem* branch : branchesBetween(a, b)) {
-            if (branch->index() == key.index) {
+            if (branch->index() == snap.index) {
                 destroyBranch(branch);
                 break;
             }
         }
     }
 
-    for (const QPointF& pos : nodes) {
-        if (NodeItem* node = nodeAtPos(pos)) {
+    for (const NodeSnapshot& snap : nodes) {
+        if (NodeItem* node = nodeAtPos(snap.pos)) {
             destroyNode(node);
         }
     }
 }
 
-void GraphScene::restoreDelete(const std::vector<QPointF>& nodes, const std::vector<BranchKey>& branches,
+void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
+                               const std::vector<BranchSnapshot>& branches,
                                const std::vector<TwoPortKey>& twoPorts) {
     for (const TwoPortKey& key : twoPorts) {
         createTwoPort(key.center, key.kind, key.modulus, key.name);
     }
 
-    for (const QPointF& pos : nodes) {
-        createNode(pos);
+    for (const NodeSnapshot& snap : nodes) {
+        if (NodeItem* node = createNode(snap.pos)) {
+            node->setName(snap.name);
+            node->setGround(snap.ground);
+            if (!snap.ground) {
+                node->setAcrossVariable(snap.across);
+                node->setSystemType(snap.systemType);
+            }
+        }
     }
 
-    for (const BranchKey& key : branches) {
-        NodeItem* a = nodeAtPos(key.from);
-        NodeItem* b = nodeAtPos(key.to);
-        if (a && b) {
-            createBranch(a, b);
+    for (const BranchSnapshot& snap : branches) {
+        NodeItem* a = nodeAtPos(snap.from);
+        NodeItem* b = nodeAtPos(snap.to);
+        if (!a || !b) {
+            continue;
+        }
+        if (BranchItem* branch = createBranch(a, b, snap.bow)) {
+            branch->setName(snap.name);
+            branch->setActive(snap.active);
+            branch->setBranchType(snap.type);
+            branch->setElementConstant(snap.constant);
         }
     }
 }

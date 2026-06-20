@@ -405,6 +405,19 @@ BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, i
     return {cubicPoint(a, c1, c2, b, 0.5), cubicTangent(a, c1, c2, b, 0.5)};
 }
 
+QRectF nodeAcrossLabelRect(const QString& text, qreal radius, const QFont& font) {
+    constexpr qreal kPad = 4.0;
+    constexpr qreal kGap = 4.0;
+    QFontMetricsF fm(font);
+    QRectF textBounds = fm.boundingRect(QRectF(), Qt::TextDontClip, text);
+    if (!textBounds.isValid() || textBounds.isEmpty()) {
+        const qreal w = fm.horizontalAdvance(text);
+        textBounds = QRectF(-w * 0.5, -fm.ascent(), w, fm.height());
+    }
+    textBounds.moveCenter(QPointF(0.0, -radius - kGap - textBounds.height() * 0.5));
+    return textBounds.adjusted(-kPad, -kPad, kPad, kPad);
+}
+
 QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const QString& text,
                          const QFont& font) {
     constexpr qreal kPad = 6.0;
@@ -470,6 +483,19 @@ void BranchItem::setActive(bool active) {
     if (active && m_type == BranchType::D) {
         m_type = BranchType::A;
     }
+    if (active && (m_type == BranchType::A || m_type == BranchType::T) && m_sourceInputId == 0) {
+        const int parsed = lg::parseSourceInputIdFromName(m_name);
+        if (parsed > 0) {
+            m_sourceInputId = parsed;
+        } else if (auto* graphScene = qobject_cast<GraphScene*>(scene())) {
+            m_sourceInputId = graphScene->allocateSourceInputId();
+        } else {
+            m_sourceInputId = 1;
+        }
+        if (auto* graphScene = qobject_cast<GraphScene*>(scene())) {
+            graphScene->registerSourceInputId(m_sourceInputId);
+        }
+    }
     lg::applySourceThroughNaming(this);
     updatePath();
 }
@@ -504,7 +530,7 @@ void BranchItem::replaceEndpoint(NodeItem* oldNode, NodeItem* newNode) {
 }
 
 QString BranchItem::elementalEquationText() const {
-    return lg::elementalEquationText(m_type, !m_active, m_elementConstant);
+    return lg::elementalEquationText(m_type, lg::branchSystemType(*this), !m_active, m_elementConstant);
 }
 
 void BranchItem::setElementConstant(const QString& constant) {
@@ -513,6 +539,13 @@ void BranchItem::setElementConstant(const QString& constant) {
     }
     prepareGeometryChange();
     m_elementConstant = constant;
+    if (!m_active) {
+        if (const std::optional<BranchType> inferred =
+                lg::inferPassiveBranchType(constant, lg::branchSystemType(*this))) {
+            m_type = *inferred;
+        }
+    }
+    lg::applyConstantThroughNaming(this);
     update();
 }
 
@@ -674,9 +707,27 @@ NodeItem::NodeItem(qreal radius) : QGraphicsEllipseItem(-radius, -radius, radius
     setZValue(1);
 }
 
+void NodeItem::setAcrossVariable(const QString& symbol) {
+    if (m_acrossVariable == symbol) {
+        return;
+    }
+    prepareGeometryChange();
+    m_acrossVariable = symbol;
+    update();
+}
+
 void NodeItem::setGround(bool ground) {
     prepareGeometryChange();
     m_ground = ground;
+    update();
+}
+
+void NodeItem::setSystemType(SystemType type) {
+    if (m_systemType == type) {
+        return;
+    }
+    m_systemType = type;
+    lg::applyNodeDomainNaming(this);
     update();
 }
 
@@ -692,6 +743,11 @@ QRectF NodeItem::boundingRect() const {
         const qreal extra = rect().width() / 2.0 + 18.0;
         r.setBottom(r.bottom() + extra);
     }
+    if (!m_twoPort) {
+        QFont font;
+        font.setPointSizeF(9.0);
+        r |= nodeAcrossLabelRect(acrossVariable(), rect().width() / 2.0, font);
+    }
     return r;
 }
 
@@ -702,6 +758,19 @@ void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
         painter->setPen(QPen(Qt::black, 1.5));
         painter->setBrush(Qt::NoBrush);
         drawGroundSymbol(painter, QPointF(0.0, 0.0), rect().width() / 2.0);
+        painter->restore();
+    }
+    if (!m_twoPort) {
+        const qreal radius = rect().width() / 2.0;
+        const QString label = acrossVariable();
+        QFont font = painter->font();
+        font.setPointSizeF(9.0);
+        painter->setFont(font);
+        painter->setPen(isSelected() ? QColor(0, 100, 200) : Qt::black);
+        const QRectF textRect = nodeAcrossLabelRect(label, radius, font);
+        painter->save();
+        painter->setClipping(false);
+        painter->drawText(textRect, Qt::AlignCenter, label);
         painter->restore();
     }
 }
@@ -718,6 +787,9 @@ void NodeItem::removeBranch(BranchItem* branch) {
 }
 
 QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value) {
+    if (change == ItemSelectedHasChanged) {
+        update();
+    }
     if (change == ItemPositionChange && scene()) {
         const auto* graph = static_cast<GraphScene*>(scene());
         return graph->snap(value.toPointF());
@@ -778,6 +850,19 @@ void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     groundRadio->setChecked(m_ground);
     layout->addWidget(normalRadio);
     layout->addWidget(groundRadio);
+
+    QComboBox* systemTypeCombo = nullptr;
+    if (!m_ground) {
+        layout->addWidget(new QLabel("System Type:"));
+        systemTypeCombo = new QComboBox();
+        systemTypeCombo->addItem("Mechanical (Translational)", static_cast<int>(SystemType::Mechanical));
+        systemTypeCombo->addItem("Mechanical (Rotational)", static_cast<int>(SystemType::MechanicalRotational));
+        systemTypeCombo->addItem("Electrical", static_cast<int>(SystemType::Electrical));
+        systemTypeCombo->addItem("Fluid", static_cast<int>(SystemType::Fluid));
+        systemTypeCombo->addItem("Heat", static_cast<int>(SystemType::Heat));
+        systemTypeCombo->setCurrentIndex(systemTypeCombo->findData(static_cast<int>(m_systemType)));
+        layout->addWidget(systemTypeCombo);
+    }
     
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     layout->addWidget(buttons);
@@ -787,7 +872,12 @@ void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     
     if (dialog->exec() == QDialog::Accepted) {
         auto* graph = static_cast<GraphScene*>(scene());
-        graph->pushSetNodeGround(this, groundRadio->isChecked());
+        const bool newGround = groundRadio->isChecked();
+        const SystemType newSystemType =
+            systemTypeCombo && !newGround
+                ? static_cast<SystemType>(systemTypeCombo->currentData().toInt())
+                : m_systemType;
+        graph->pushNodeProperties(this, m_ground, newGround, m_systemType, newSystemType);
     }
     dialog->deleteLater();
     event->accept();

@@ -36,6 +36,8 @@ enum class TwoPortKind { Transformer, Gyrator };
 
 enum class BranchType { A, T, D };
 
+enum class SystemType { Mechanical, Electrical, Fluid, Heat, MechanicalRotational };
+
 
 
 class BranchItem : public QGraphicsPathItem {
@@ -78,6 +80,8 @@ public:
 
     void flip();
 
+    qreal bow() const { return m_bow; }
+
     void replaceEndpoint(NodeItem* oldNode, NodeItem* newNode);
 
     bool inNormalTree() const { return m_inNormalTree; }
@@ -85,6 +89,14 @@ public:
     bool normalTreeRoleKnown() const { return m_normalTreeRoleKnown; }
 
     void setNormalTreeRole(bool inTree, bool known);
+
+    int serialId() const { return m_serialId; }
+
+    void setSerialId(int id) { m_serialId = id; }
+
+    int sourceInputId() const { return m_sourceInputId; }
+
+    void setSourceInputId(int id) { m_sourceInputId = id; }
 
 
 
@@ -124,6 +136,10 @@ private:
 
     bool m_normalTreeRoleKnown = false;
 
+    int m_serialId = 0;
+
+    int m_sourceInputId = 0;
+
     void updateBranchPen();
 
 };
@@ -162,7 +178,11 @@ public:
 
     QString acrossVariable() const { return m_ground ? QStringLiteral("0") : m_acrossVariable; }
 
-    void setAcrossVariable(const QString& symbol) { m_acrossVariable = symbol; }
+    void setAcrossVariable(const QString& symbol);
+
+    SystemType systemType() const { return m_systemType; }
+
+    void setSystemType(SystemType type);
 
 
 
@@ -193,6 +213,8 @@ private:
     QString m_name;
 
     QString m_acrossVariable;
+
+    SystemType m_systemType = SystemType::Mechanical;
 
 };
 
@@ -354,6 +376,10 @@ public:
 
     Mode mode() const { return m_mode; }
 
+    SystemType defaultSystemType() const { return m_defaultSystemType; }
+
+    void setDefaultSystemType(SystemType type);
+
 
 
     NodeItem* createNode(const QPointF& center);
@@ -392,6 +418,40 @@ public:
         QString modulus;
 
         QString name;
+
+    };
+
+    struct NodeSnapshot {
+
+        QPointF pos;
+
+        QString name;
+
+        QString across;
+
+        bool ground = false;
+
+        SystemType systemType = SystemType::Mechanical;
+
+    };
+
+    struct BranchSnapshot {
+
+        QPointF from;
+
+        QPointF to;
+
+        int index = 0;
+
+        QString name;
+
+        bool active = false;
+
+        BranchType type = BranchType::A;
+
+        QString constant = QStringLiteral("1");
+
+        qreal bow = 0.0;
 
     };
 
@@ -437,6 +497,9 @@ public:
 
     void pushSetNodeGround(NodeItem* node, bool ground);
 
+    void pushNodeProperties(NodeItem* node, bool oldGround, bool newGround, SystemType oldType,
+                            SystemType newType);
+
     void pushSetBranchName(BranchItem* branch, const QString& name);
 
     void pushSetBranchActive(BranchItem* branch, bool active);
@@ -444,6 +507,12 @@ public:
     void pushSetBranchType(BranchItem* branch, BranchType type);
 
     void pushSetBranchConstant(BranchItem* branch, const QString& constant);
+
+    int allocateSourceInputId();
+
+    void registerSourceInputId(int id);
+
+    void pushSetNodeSystemType(NodeItem* node, SystemType type);
 
     void pushBranchProperties(BranchItem* branch, bool active, BranchType type, const QString& constant);
 
@@ -475,15 +544,15 @@ public:
         return twoPort && (branch == twoPort->leftBranch() || branch == twoPort->rightBranch());
     }
 
-    void captureDeleteState(std::vector<QPointF>& nodes, std::vector<BranchKey>& branches,
+    void captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,
 
                             std::vector<TwoPortKey>& twoPorts) const;
 
-    void executeDelete(const std::vector<QPointF>& nodes, const std::vector<BranchKey>& branches,
+    void executeDelete(const std::vector<NodeSnapshot>& nodes, const std::vector<BranchSnapshot>& branches,
 
                        const std::vector<TwoPortKey>& twoPorts);
 
-    void restoreDelete(const std::vector<QPointF>& nodes, const std::vector<BranchKey>& branches,
+    void restoreDelete(const std::vector<NodeSnapshot>& nodes, const std::vector<BranchSnapshot>& branches,
 
                        const std::vector<TwoPortKey>& twoPorts);
 
@@ -545,6 +614,8 @@ private:
 
     Mode m_mode = Mode::Select;
 
+    SystemType m_defaultSystemType = SystemType::Mechanical;
+
     NodeItem* m_pending = nullptr;
 
     QUndoStack m_undoStack;
@@ -552,6 +623,8 @@ private:
     int m_nextNodeId = 1;
 
     int m_nextBranchId = 1;
+
+    int m_nextSourceInputId = 1;
 
     int m_nextTwoPortId = 1;
 

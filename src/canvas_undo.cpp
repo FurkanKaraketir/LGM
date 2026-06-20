@@ -8,18 +8,20 @@
 
 namespace {
 
-BranchItem* findBranch(GraphScene* scene, const GraphScene::BranchKey& key) {
-    NodeItem* a = scene->nodeAtPos(key.from);
-    NodeItem* b = scene->nodeAtPos(key.to);
-    if (!a || !b) {
-        return nullptr;
-    }
-    for (BranchItem* branch : scene->branchesBetween(a, b)) {
-        if (branch->index() == key.index) {
-            return branch;
-        }
-    }
-    return nullptr;
+enum UndoMergeId {
+    MoveNodeId = 1,
+    MoveTwoPortId = 2,
+    SetNodeNameId = 3,
+    SetNodeAcrossId = 4,
+    SetBranchNameId = 5,
+    SetTwoPortNameId = 6,
+    SetBranchConstantId = 7,
+    SetTwoPortModulusId = 8,
+};
+
+template <typename Item>
+bool itemAlive(Item* item) {
+    return item && item->scene();
 }
 
 class AddNodeCommand : public QUndoCommand {
@@ -128,9 +130,7 @@ private:
 
 class FlipBranchCommand : public QUndoCommand {
 public:
-    FlipBranchCommand(GraphScene* scene, BranchItem* branch)
-        : m_scene(scene),
-          m_key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()} {
+    FlipBranchCommand(GraphScene* scene, BranchItem* branch) : m_scene(scene), m_branch(branch) {
         setText("Flip branch");
     }
 
@@ -140,19 +140,19 @@ public:
 
 private:
     void apply() {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            m_scene->flipBranch(branch);
+        if (itemAlive(m_branch)) {
+            m_scene->flipBranch(m_branch);
         }
     }
 
     GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    BranchItem* m_branch;
 };
 
 class SetNodeNameCommand : public QUndoCommand {
 public:
-    SetNodeNameCommand(GraphScene* scene, const QPointF& pos, const QString& oldName, const QString& newName)
-        : m_scene(scene), m_pos(pos), m_old(oldName), m_new(newName) {
+    SetNodeNameCommand(NodeItem* node, const QString& oldName, const QString& newName)
+        : m_node(node), m_old(oldName), m_new(newName) {
         setText("Rename node");
     }
 
@@ -160,24 +160,33 @@ public:
 
     void redo() override { apply(m_new); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetNodeNameCommand*>(other);
+        if (!cmd || cmd->m_node != m_node) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetNodeNameId; }
+
 private:
     void apply(const QString& name) {
-        if (NodeItem* node = m_scene->nodeAtPos(m_pos)) {
-            node->setName(name);
+        if (itemAlive(m_node)) {
+            m_node->setName(name);
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_pos;
+    NodeItem* m_node;
     QString m_old;
     QString m_new;
 };
 
 class SetNodeAcrossVariableCommand : public QUndoCommand {
 public:
-    SetNodeAcrossVariableCommand(GraphScene* scene, const QPointF& pos, const QString& oldSymbol,
-                                 const QString& newSymbol)
-        : m_scene(scene), m_pos(pos), m_old(oldSymbol), m_new(newSymbol) {
+    SetNodeAcrossVariableCommand(NodeItem* node, const QString& oldSymbol, const QString& newSymbol)
+        : m_node(node), m_old(oldSymbol), m_new(newSymbol) {
         setText("Change node across variable");
     }
 
@@ -185,23 +194,33 @@ public:
 
     void redo() override { apply(m_new); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetNodeAcrossVariableCommand*>(other);
+        if (!cmd || cmd->m_node != m_node) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetNodeAcrossId; }
+
 private:
     void apply(const QString& symbol) {
-        if (NodeItem* node = m_scene->nodeAtPos(m_pos)) {
-            node->setAcrossVariable(symbol);
+        if (itemAlive(m_node)) {
+            m_node->setAcrossVariable(symbol);
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_pos;
+    NodeItem* m_node;
     QString m_old;
     QString m_new;
 };
 
 class SetNodeGroundCommand : public QUndoCommand {
 public:
-    SetNodeGroundCommand(GraphScene* scene, const QPointF& pos, bool oldGround, bool newGround)
-        : m_scene(scene), m_pos(pos), m_old(oldGround), m_new(newGround) {
+    SetNodeGroundCommand(NodeItem* node, bool oldGround, bool newGround)
+        : m_node(node), m_old(oldGround), m_new(newGround) {
         setText("Change node type");
     }
 
@@ -211,22 +230,50 @@ public:
 
 private:
     void apply(bool ground) {
-        if (NodeItem* node = m_scene->nodeAtPos(m_pos)) {
-            node->setGround(ground);
+        if (itemAlive(m_node)) {
+            m_node->setGround(ground);
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_pos;
+    NodeItem* m_node;
     bool m_old;
     bool m_new;
 };
 
+class NodePropertiesCommand : public QUndoCommand {
+public:
+    NodePropertiesCommand(NodeItem* node, bool oldGround, bool newGround, SystemType oldType,
+                          SystemType newType)
+        : m_node(node), m_oldGround(oldGround), m_newGround(newGround), m_oldType(oldType), m_newType(newType) {
+        setText("Change node properties");
+    }
+
+    void undo() override { apply(m_oldGround, m_oldType); }
+
+    void redo() override { apply(m_newGround, m_newType); }
+
+private:
+    void apply(bool ground, SystemType type) {
+        if (!itemAlive(m_node)) {
+            return;
+        }
+        m_node->setGround(ground);
+        if (!ground) {
+            m_node->setSystemType(type);
+        }
+    }
+
+    NodeItem* m_node;
+    bool m_oldGround;
+    bool m_newGround;
+    SystemType m_oldType;
+    SystemType m_newType;
+};
+
 class SetBranchNameCommand : public QUndoCommand {
 public:
-    SetBranchNameCommand(GraphScene* scene, const GraphScene::BranchKey& key, const QString& oldName,
-                         const QString& newName)
-        : m_scene(scene), m_key(key), m_old(oldName), m_new(newName) {
+    SetBranchNameCommand(BranchItem* branch, const QString& oldName, const QString& newName)
+        : m_branch(branch), m_old(oldName), m_new(newName) {
         setText("Rename branch");
     }
 
@@ -234,23 +281,33 @@ public:
 
     void redo() override { apply(m_new); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetBranchNameCommand*>(other);
+        if (!cmd || cmd->m_branch != m_branch) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetBranchNameId; }
+
 private:
     void apply(const QString& name) {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            branch->setName(name);
+        if (itemAlive(m_branch)) {
+            m_branch->setName(name);
         }
     }
 
-    GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    BranchItem* m_branch;
     QString m_old;
     QString m_new;
 };
 
 class SetBranchActiveCommand : public QUndoCommand {
 public:
-    SetBranchActiveCommand(GraphScene* scene, const GraphScene::BranchKey& key, bool oldActive, bool newActive)
-        : m_scene(scene), m_key(key), m_old(oldActive), m_new(newActive) {
+    SetBranchActiveCommand(BranchItem* branch, bool oldActive, bool newActive)
+        : m_branch(branch), m_old(oldActive), m_new(newActive) {
         setText("Change branch category");
     }
 
@@ -260,21 +317,20 @@ public:
 
 private:
     void apply(bool active) {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            branch->setActive(active);
+        if (itemAlive(m_branch)) {
+            m_branch->setActive(active);
         }
     }
 
-    GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    BranchItem* m_branch;
     bool m_old;
     bool m_new;
 };
 
 class SetBranchTypeCommand : public QUndoCommand {
 public:
-    SetBranchTypeCommand(GraphScene* scene, const GraphScene::BranchKey& key, BranchType oldType, BranchType newType)
-        : m_scene(scene), m_key(key), m_old(oldType), m_new(newType) {
+    SetBranchTypeCommand(BranchItem* branch, BranchType oldType, BranchType newType)
+        : m_branch(branch), m_old(oldType), m_new(newType) {
         setText("Change branch element");
     }
 
@@ -284,23 +340,21 @@ public:
 
 private:
     void apply(BranchType type) {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            branch->setBranchType(type);
+        if (itemAlive(m_branch)) {
+            m_branch->setBranchType(type);
         }
     }
 
-    GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    BranchItem* m_branch;
     BranchType m_old;
     BranchType m_new;
 };
 
-class SetBranchConstantCommand : public QUndoCommand {
+class SetNodeSystemTypeCommand : public QUndoCommand {
 public:
-    SetBranchConstantCommand(GraphScene* scene, const GraphScene::BranchKey& key, const QString& oldConstant,
-                             const QString& newConstant)
-        : m_scene(scene), m_key(key), m_old(oldConstant), m_new(newConstant) {
-        setText("Change branch constant");
+    SetNodeSystemTypeCommand(NodeItem* node, SystemType oldType, SystemType newType)
+        : m_node(node), m_old(oldType), m_new(newType) {
+        setText("Change node system type");
     }
 
     void undo() override { apply(m_old); }
@@ -308,24 +362,57 @@ public:
     void redo() override { apply(m_new); }
 
 private:
-    void apply(const QString& constant) {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            branch->setElementConstant(constant);
+    void apply(SystemType type) {
+        if (itemAlive(m_node)) {
+            m_node->setSystemType(type);
         }
     }
 
-    GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    NodeItem* m_node;
+    SystemType m_old;
+    SystemType m_new;
+};
+
+class SetBranchConstantCommand : public QUndoCommand {
+public:
+    SetBranchConstantCommand(BranchItem* branch, const QString& oldConstant, const QString& newConstant)
+        : m_branch(branch), m_old(oldConstant), m_new(newConstant) {
+        setText("Change branch constant");
+    }
+
+    void undo() override { apply(m_old); }
+
+    void redo() override { apply(m_new); }
+
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetBranchConstantCommand*>(other);
+        if (!cmd || cmd->m_branch != m_branch) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetBranchConstantId; }
+
+private:
+    void apply(const QString& constant) {
+        if (itemAlive(m_branch)) {
+            m_branch->setElementConstant(constant);
+            lg::applyConstantThroughNaming(m_branch);
+        }
+    }
+
+    BranchItem* m_branch;
     QString m_old;
     QString m_new;
 };
 
 class BranchPropertiesCommand : public QUndoCommand {
 public:
-    BranchPropertiesCommand(GraphScene* scene, const GraphScene::BranchKey& key, bool oldActive, BranchType oldType,
-                            const QString& oldConstant, bool newActive, BranchType newType, const QString& newConstant)
-        : m_scene(scene),
-          m_key(key),
+    BranchPropertiesCommand(BranchItem* branch, bool oldActive, BranchType oldType, const QString& oldConstant,
+                            bool newActive, BranchType newType, const QString& newConstant)
+        : m_branch(branch),
           m_oldActive(oldActive),
           m_oldType(oldType),
           m_oldConstant(oldConstant),
@@ -341,17 +428,17 @@ public:
 
 private:
     void apply(bool active, BranchType type, const QString& constant) {
-        if (BranchItem* branch = findBranch(m_scene, m_key)) {
-            branch->setActive(active);
-            branch->setBranchType(type);
-            if (!active) {
-                branch->setElementConstant(constant);
-            }
+        if (!itemAlive(m_branch)) {
+            return;
+        }
+        m_branch->setActive(active);
+        m_branch->setBranchType(type);
+        if (!active) {
+            m_branch->setElementConstant(constant);
         }
     }
 
-    GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
+    BranchItem* m_branch;
     bool m_oldActive;
     BranchType m_oldType;
     QString m_oldConstant;
@@ -362,8 +449,8 @@ private:
 
 class SetTwoPortNameCommand : public QUndoCommand {
 public:
-    SetTwoPortNameCommand(GraphScene* scene, const QPointF& center, const QString& oldName, const QString& newName)
-        : m_scene(scene), m_center(center), m_old(oldName), m_new(newName) {
+    SetTwoPortNameCommand(TwoPortItem* item, const QString& oldName, const QString& newName)
+        : m_item(item), m_old(oldName), m_new(newName) {
         setText("Rename two-port");
     }
 
@@ -371,23 +458,33 @@ public:
 
     void redo() override { apply(m_new); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetTwoPortNameCommand*>(other);
+        if (!cmd || cmd->m_item != m_item) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetTwoPortNameId; }
+
 private:
     void apply(const QString& name) {
-        if (TwoPortItem* item = m_scene->twoPortAtCenter(m_center)) {
-            item->setName(name);
+        if (itemAlive(m_item)) {
+            m_item->setName(name);
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_center;
+    TwoPortItem* m_item;
     QString m_old;
     QString m_new;
 };
 
 class SetTwoPortKindCommand : public QUndoCommand {
 public:
-    SetTwoPortKindCommand(GraphScene* scene, const QPointF& center, TwoPortKind from, TwoPortKind to)
-        : m_scene(scene), m_center(center), m_from(from), m_to(to) {
+    SetTwoPortKindCommand(TwoPortItem* item, TwoPortKind from, TwoPortKind to)
+        : m_item(item), m_from(from), m_to(to) {
         setText("Change two-port type");
     }
 
@@ -397,25 +494,24 @@ public:
 
 private:
     void apply(TwoPortKind kind) {
-        if (TwoPortItem* item = m_scene->twoPortAtCenter(m_center)) {
-            if (item->modulus() == lg::defaultTwoPortModulus(item->kind())) {
-                item->setModulus(lg::defaultTwoPortModulus(kind));
-            }
-            item->setKind(kind);
+        if (!itemAlive(m_item)) {
+            return;
         }
+        if (m_item->modulus() == lg::defaultTwoPortModulus(m_item->kind())) {
+            m_item->setModulus(lg::defaultTwoPortModulus(kind));
+        }
+        m_item->setKind(kind);
     }
 
-    GraphScene* m_scene;
-    QPointF m_center;
+    TwoPortItem* m_item;
     TwoPortKind m_from;
     TwoPortKind m_to;
 };
 
 class SetTwoPortModulusCommand : public QUndoCommand {
 public:
-    SetTwoPortModulusCommand(GraphScene* scene, const QPointF& center, const QString& oldModulus,
-                             const QString& newModulus)
-        : m_scene(scene), m_center(center), m_old(oldModulus), m_new(newModulus) {
+    SetTwoPortModulusCommand(TwoPortItem* item, const QString& oldModulus, const QString& newModulus)
+        : m_item(item), m_old(oldModulus), m_new(newModulus) {
         setText("Change two-port modulus");
     }
 
@@ -423,15 +519,25 @@ public:
 
     void redo() override { apply(m_new); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const SetTwoPortModulusCommand*>(other);
+        if (!cmd || cmd->m_item != m_item) {
+            return false;
+        }
+        m_new = cmd->m_new;
+        return true;
+    }
+
+    int id() const override { return SetTwoPortModulusId; }
+
 private:
     void apply(const QString& modulus) {
-        if (TwoPortItem* item = m_scene->twoPortAtCenter(m_center)) {
-            item->setModulus(modulus);
+        if (itemAlive(m_item)) {
+            m_item->setModulus(modulus);
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_center;
+    TwoPortItem* m_item;
     QString m_old;
     QString m_new;
 };
@@ -449,15 +555,15 @@ public:
 
 private:
     GraphScene* m_scene;
-    std::vector<QPointF> m_nodes;
-    std::vector<GraphScene::BranchKey> m_branches;
+    std::vector<GraphScene::NodeSnapshot> m_nodes;
+    std::vector<GraphScene::BranchSnapshot> m_branches;
     std::vector<GraphScene::TwoPortKey> m_twoPorts;
 };
 
 class MoveNodeCommand : public QUndoCommand {
 public:
-    MoveNodeCommand(GraphScene* scene, NodeItem* node, const QPointF& oldPos, const QPointF& newPos)
-        : m_scene(scene), m_node(node), m_oldPos(oldPos), m_newPos(newPos) {
+    MoveNodeCommand(NodeItem* node, const QPointF& oldPos, const QPointF& newPos)
+        : m_node(node), m_oldPos(oldPos), m_newPos(newPos) {
         setText("Move node");
     }
 
@@ -474,11 +580,11 @@ public:
         return true;
     }
 
-    int id() const override { return 1; }
+    int id() const override { return MoveNodeId; }
 
 private:
     void apply(const QPointF& pos) {
-        if (!m_node || !m_node->scene()) {
+        if (!itemAlive(m_node)) {
             return;
         }
         m_node->setPos(pos);
@@ -490,7 +596,6 @@ private:
         }
     }
 
-    GraphScene* m_scene;
     NodeItem* m_node;
     QPointF m_oldPos;
     QPointF m_newPos;
@@ -498,10 +603,8 @@ private:
 
 class MoveTwoPortCommand : public QUndoCommand {
 public:
-    MoveTwoPortCommand(GraphScene* scene, TwoPortItem* item, const QPointF& oldCenter,
-                       const QPointF& newCenter)
-        : m_scene(scene), m_center(m_scene->snap(item->center())), m_oldCenter(oldCenter),
-          m_newCenter(newCenter) {
+    MoveTwoPortCommand(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter)
+        : m_item(item), m_oldCenter(oldCenter), m_newCenter(newCenter) {
         setText("Move two-port");
     }
 
@@ -509,15 +612,25 @@ public:
 
     void redo() override { apply(m_newCenter); }
 
+    bool mergeWith(const QUndoCommand* other) override {
+        const auto* cmd = dynamic_cast<const MoveTwoPortCommand*>(other);
+        if (!cmd || cmd->m_item != m_item) {
+            return false;
+        }
+        m_newCenter = cmd->m_newCenter;
+        return true;
+    }
+
+    int id() const override { return MoveTwoPortId; }
+
 private:
     void apply(const QPointF& targetCenter) {
-        if (TwoPortItem* item = m_scene->twoPortAtCenter(m_center)) {
-            item->moveBy(targetCenter - item->center());
+        if (itemAlive(m_item)) {
+            m_item->moveBy(targetCenter - m_item->center());
         }
     }
 
-    GraphScene* m_scene;
-    QPointF m_center;
+    TwoPortItem* m_item;
     QPointF m_oldCenter;
     QPointF m_newCenter;
 };
@@ -593,54 +706,71 @@ void GraphScene::pushSetNodeName(NodeItem* node, const QString& name) {
     if (!node || node->name() == name) {
         return;
     }
-    m_undoStack.push(new SetNodeNameCommand(this, node->scenePos(), node->name(), name));
+    m_undoStack.push(new SetNodeNameCommand(node, node->name(), name));
 }
 
 void GraphScene::pushSetNodeAcrossVariable(NodeItem* node, const QString& symbol) {
     if (!node || node->isGround() || node->acrossVariable() == symbol) {
         return;
     }
-    m_undoStack.push(
-        new SetNodeAcrossVariableCommand(this, node->scenePos(), node->acrossVariable(), symbol));
+    m_undoStack.push(new SetNodeAcrossVariableCommand(node, node->acrossVariable(), symbol));
 }
 
 void GraphScene::pushSetNodeGround(NodeItem* node, bool ground) {
     if (!node || node->isGround() == ground) {
         return;
     }
-    m_undoStack.push(new SetNodeGroundCommand(this, node->scenePos(), node->isGround(), ground));
+    m_undoStack.push(new SetNodeGroundCommand(node, node->isGround(), ground));
+}
+
+void GraphScene::pushNodeProperties(NodeItem* node, bool oldGround, bool newGround, SystemType oldType,
+                                    SystemType newType) {
+    if (!node) {
+        return;
+    }
+    if (oldGround == newGround && (oldGround || oldType == newType)) {
+        return;
+    }
+    if (!newGround) {
+        m_defaultSystemType = newType;
+    }
+    m_undoStack.push(new NodePropertiesCommand(node, oldGround, newGround, oldType, newType));
 }
 
 void GraphScene::pushSetBranchName(BranchItem* branch, const QString& name) {
     if (!branch || branch->name() == name) {
         return;
     }
-    const BranchKey key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
-    m_undoStack.push(new SetBranchNameCommand(this, key, branch->name(), name));
+    m_undoStack.push(new SetBranchNameCommand(branch, branch->name(), name));
 }
 
 void GraphScene::pushSetBranchActive(BranchItem* branch, bool active) {
     if (!branch || branch->isActive() == active) {
         return;
     }
-    const BranchKey key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
-    m_undoStack.push(new SetBranchActiveCommand(this, key, branch->isActive(), active));
+    m_undoStack.push(new SetBranchActiveCommand(branch, branch->isActive(), active));
 }
 
 void GraphScene::pushSetBranchType(BranchItem* branch, BranchType type) {
     if (!branch || branch->branchType() == type) {
         return;
     }
-    const BranchKey key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
-    m_undoStack.push(new SetBranchTypeCommand(this, key, branch->branchType(), type));
+    m_undoStack.push(new SetBranchTypeCommand(branch, branch->branchType(), type));
+}
+
+void GraphScene::pushSetNodeSystemType(NodeItem* node, SystemType type) {
+    if (!node || node->isGround() || node->systemType() == type) {
+        return;
+    }
+    m_defaultSystemType = type;
+    m_undoStack.push(new SetNodeSystemTypeCommand(node, node->systemType(), type));
 }
 
 void GraphScene::pushSetBranchConstant(BranchItem* branch, const QString& constant) {
     if (!branch || branch->elementConstant() == constant) {
         return;
     }
-    const BranchKey key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
-    m_undoStack.push(new SetBranchConstantCommand(this, key, branch->elementConstant(), constant));
+    m_undoStack.push(new SetBranchConstantCommand(branch, branch->elementConstant(), constant));
 }
 
 void GraphScene::pushBranchProperties(BranchItem* branch, bool active, BranchType type, const QString& constant) {
@@ -653,41 +783,43 @@ void GraphScene::pushBranchProperties(BranchItem* branch, bool active, BranchTyp
     if (oldActive == active && oldType == type && oldConstant == constant) {
         return;
     }
-    const BranchKey key{branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
     m_undoStack.push(
-        new BranchPropertiesCommand(this, key, oldActive, oldType, oldConstant, active, type, constant));
+        new BranchPropertiesCommand(branch, oldActive, oldType, oldConstant, active, type, constant));
 }
 
 void GraphScene::pushSetTwoPortName(TwoPortItem* item, const QString& name) {
     if (!item || item->name() == name) {
         return;
     }
-    m_undoStack.push(new SetTwoPortNameCommand(this, item->center(), item->name(), name));
+    m_undoStack.push(new SetTwoPortNameCommand(item, item->name(), name));
 }
 
 void GraphScene::pushSetTwoPortKind(TwoPortItem* item, TwoPortKind kind) {
     if (!item || item->kind() == kind) {
         return;
     }
-    m_undoStack.push(new SetTwoPortKindCommand(this, item->center(), item->kind(), kind));
+    m_undoStack.push(new SetTwoPortKindCommand(item, item->kind(), kind));
 }
 
 void GraphScene::pushSetTwoPortModulus(TwoPortItem* item, const QString& modulus) {
     if (!item || item->modulus() == modulus) {
         return;
     }
-    m_undoStack.push(new SetTwoPortModulusCommand(this, item->center(), item->modulus(), modulus));
+    m_undoStack.push(new SetTwoPortModulusCommand(item, item->modulus(), modulus));
 }
 
 void GraphScene::pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& newPos) {
-    m_undoStack.push(new MoveNodeCommand(this, node, oldPos, newPos));
+    if (!node || oldPos == newPos) {
+        return;
+    }
+    m_undoStack.push(new MoveNodeCommand(node, oldPos, newPos));
 }
 
 void GraphScene::pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter) {
     if (!item || oldCenter == newCenter) {
         return;
     }
-    m_undoStack.push(new MoveTwoPortCommand(this, item, oldCenter, newCenter));
+    m_undoStack.push(new MoveTwoPortCommand(item, oldCenter, newCenter));
 }
 
 void GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b) {
@@ -767,13 +899,6 @@ void GraphScene::pushDeleteSelection() {
         return;
     }
     clearBranchPending();
-    std::vector<QPointF> nodes;
-    std::vector<BranchKey> branches;
-    std::vector<TwoPortKey> twoPorts;
-    captureDeleteState(nodes, branches, twoPorts);
-    if (nodes.empty() && branches.empty() && twoPorts.empty()) {
-        return;
-    }
     m_undoStack.push(new DeleteItemsCommand(this));
 }
 

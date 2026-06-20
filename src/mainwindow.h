@@ -6,6 +6,7 @@
 
 class QAction;
 class QActionGroup;
+class QComboBox;
 class QDockWidget;
 class QListWidget;
 class QTreeWidget;
@@ -33,6 +34,7 @@ private:
     void onPropertyTableItemChanged(QTableWidgetItem* item);
     void updateFlipBranchAction();
     static QString modeStatusText(GraphScene::Mode mode);
+    void syncDefaultSystemTypeCombo(SystemType type);
 
     GraphScene* m_scene = nullptr;
     GraphView* m_view = nullptr;
@@ -46,6 +48,8 @@ private:
     QAction* m_redoAction = nullptr;
     QAction* m_flipBranchAction = nullptr;
     QAction* m_mergeNodesAction = nullptr;
+    QComboBox* m_defaultSystemTypeCombo = nullptr;
+    bool m_updatingDomainCombo = false;
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;

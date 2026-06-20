@@ -86,6 +86,16 @@ GraphObjectKind objectKind(const QTreeWidgetItem* item) {
 
 }
 
+void populateSystemTypeCombo(QComboBox* combo) {
+    combo->addItem(QObject::tr("Mechanical (Translational)"),
+                   static_cast<int>(SystemType::Mechanical));
+    combo->addItem(QObject::tr("Mechanical (Rotational)"),
+                   static_cast<int>(SystemType::MechanicalRotational));
+    combo->addItem(QObject::tr("Electrical"), static_cast<int>(SystemType::Electrical));
+    combo->addItem(QObject::tr("Fluid"), static_cast<int>(SystemType::Fluid));
+    combo->addItem(QObject::tr("Heat"), static_cast<int>(SystemType::Heat));
+}
+
 
 
 BranchItem* singleSelectedBranch(const GraphScene* scene) {
@@ -579,6 +589,38 @@ void MainWindow::buildToolbar() {
                                  tr("Two-Port"), QKeySequence(Qt::Key_P), GraphScene::Mode::AddTwoPort,
 
                                  m_view);
+
+    toolbar->addSeparator();
+
+    auto* domainLabel = new QLabel(tr("Domain:"), this);
+
+    domainLabel->setContentsMargins(8, 0, 4, 0);
+
+    toolbar->addWidget(domainLabel);
+
+    m_defaultSystemTypeCombo = new QComboBox(this);
+
+    populateSystemTypeCombo(m_defaultSystemTypeCombo);
+
+    m_defaultSystemTypeCombo->setToolTip(tr("Default system type for new nodes and branches"));
+
+    connect(m_defaultSystemTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+            [this](int index) {
+
+                if (m_updatingDomainCombo) {
+
+                    return;
+
+                }
+
+                m_scene->setDefaultSystemType(
+
+                    static_cast<SystemType>(m_defaultSystemTypeCombo->itemData(index).toInt()));
+
+            });
+
+    toolbar->addWidget(m_defaultSystemTypeCombo);
 
     m_deleteAction = toolbar->addAction(themedIcon("edit-delete", QStyle::SP_TrashIcon), tr("Delete"));
     m_deleteAction->setToolTip(tr("Delete selection (Delete)"));
@@ -1491,6 +1533,49 @@ void MainWindow::updatePropertyPanel() {
 
             }
 
+            if (!node->isGround()) {
+                const int systemTypeRow = addLabelRow(tr("System type"));
+
+                auto* systemTypeCombo = new QComboBox(m_propertyTable);
+
+                systemTypeCombo->addItem(tr("Mechanical (Translational)"),
+                                         static_cast<int>(SystemType::Mechanical));
+
+                systemTypeCombo->addItem(tr("Mechanical (Rotational)"),
+                                         static_cast<int>(SystemType::MechanicalRotational));
+
+                systemTypeCombo->addItem(tr("Electrical"), static_cast<int>(SystemType::Electrical));
+
+                systemTypeCombo->addItem(tr("Fluid"), static_cast<int>(SystemType::Fluid));
+
+                systemTypeCombo->addItem(tr("Heat"), static_cast<int>(SystemType::Heat));
+
+                systemTypeCombo->setCurrentIndex(
+                    systemTypeCombo->findData(static_cast<int>(node->systemType())));
+
+                connect(systemTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+
+                        [this, node, systemTypeCombo](int index) {
+
+                            if (m_updatingPropertyPanel) {
+
+                                return;
+
+                            }
+
+                            m_scene->pushSetNodeSystemType(
+                                node, static_cast<SystemType>(systemTypeCombo->itemData(index).toInt()));
+
+                            syncDefaultSystemTypeCombo(
+                                static_cast<SystemType>(systemTypeCombo->itemData(index).toInt()));
+
+                            updatePropertyPanel();
+
+                        });
+
+                m_propertyTable->setCellWidget(systemTypeRow, 1, systemTypeCombo);
+            }
+
             break;
 
         }
@@ -1520,6 +1605,8 @@ void MainWindow::updatePropertyPanel() {
                 addRow(tr("To"), branch->to()->name());
                 break;
             }
+
+            addRow(tr("System type"), lg::systemTypeLabel(lg::branchSystemType(*branch)));
 
             const int categoryRow = addLabelRow(tr("Category"));
 
@@ -1828,5 +1915,17 @@ QString MainWindow::modeStatusText(GraphScene::Mode mode) {
 
     return {};
 
+}
+
+void MainWindow::syncDefaultSystemTypeCombo(SystemType type) {
+    if (!m_defaultSystemTypeCombo) {
+        return;
+    }
+    m_updatingDomainCombo = true;
+    const int index = m_defaultSystemTypeCombo->findData(static_cast<int>(type));
+    if (index >= 0) {
+        m_defaultSystemTypeCombo->setCurrentIndex(index);
+    }
+    m_updatingDomainCombo = false;
 }
 

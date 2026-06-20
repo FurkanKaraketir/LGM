@@ -102,7 +102,7 @@ TreeScore scoreTree(const std::vector<BranchItem*>& tree) {
         if (!branch || branch->isActive()) {
             continue;
         }
-        switch (branch->branchType()) {
+        switch (effectivePassiveBranchType(*branch)) {
         case BranchType::A:
             ++score.aPassive;
             break;
@@ -217,7 +217,7 @@ std::optional<BuildAttempt> tryBuildNormalTree(
             forcedIn.push_back(*edge);
             continue;
         }
-        switch (branch->branchType()) {
+        switch (effectivePassiveBranchType(*branch)) {
         case BranchType::A:
             optionalA.push_back(*edge);
             break;
@@ -347,7 +347,8 @@ void extractStateVariables(NormalTreeResult& result, const std::vector<BranchIte
                                                   result.treeBranches.end());
 
     for (BranchItem* branch : result.treeBranches) {
-        if (!branch || branch->isActive() || branch->branchType() != BranchType::A) {
+        if (!branch || branch->isActive() ||
+            effectivePassiveBranchType(*branch) != BranchType::A) {
             continue;
         }
         NormalTreeResult::StateVariable state;
@@ -359,7 +360,9 @@ void extractStateVariables(NormalTreeResult& result, const std::vector<BranchIte
     }
 
     for (BranchItem* branch : branches) {
-        if (!branch || branch->isActive() || branch->branchType() != BranchType::T) {
+        if (!branch || branch->isActive() ||
+            effectivePassiveBranchType(*branch) != BranchType::T ||
+            isTwoPortInternalBranch(*branch)) {
             continue;
         }
         if (inTree.count(branch) != 0) {

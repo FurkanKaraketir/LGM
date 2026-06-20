@@ -24,7 +24,9 @@ void refreshTwoPortEgressAt(NodeItem* port) {
 
 }  // namespace
 
-GraphScene::GraphScene(QObject* parent) : QGraphicsScene(-2000, -2000, 4000, 4000, parent) {}
+GraphScene::GraphScene(QObject* parent) : QGraphicsScene(-2000, -2000, 4000, 4000, parent) {
+    m_undoStack.setUndoLimit(200);
+}
 
 void GraphScene::notifyGraphChanged() {
     clearNormalTreeHighlight();
@@ -33,10 +35,22 @@ void GraphScene::notifyGraphChanged() {
     }
 }
 
+int GraphScene::allocateSourceInputId() {
+    return m_nextSourceInputId++;
+}
+
+void GraphScene::registerSourceInputId(int id) {
+    if (id >= m_nextSourceInputId) {
+        m_nextSourceInputId = id + 1;
+    }
+}
+
 NodeItem* GraphScene::createNode(const QPointF& center) {
+    const int id = m_nextNodeId++;
     auto* node = new NodeItem;
-    node->setName(tr("Node %1").arg(m_nextNodeId));
-    node->setAcrossVariable(lg::defaultNodeAcrossName(m_nextNodeId++));
+    node->setName(tr("Node %1").arg(id));
+    node->setAcrossVariable(lg::defaultNodeAcrossName(id, m_defaultSystemType));
+    node->setSystemType(m_defaultSystemType);
     node->setPos(snap(center));
     addItem(node);
     notifyGraphChanged();
@@ -73,7 +87,10 @@ BranchItem* GraphScene::createBranch(NodeItem* a, NodeItem* b, qreal bow) {
     b->addBranch(branch);
     addItem(branch);
     reindexBranches(a, b);
-    branch->setName(lg::defaultPassiveThroughName(m_nextBranchId++));
+    const int branchId = m_nextBranchId++;
+    branch->setSerialId(branchId);
+    branch->setName(lg::throughNameFromConstant(branch->elementConstant(), branchId,
+                                                lg::branchSystemType(*branch)));
     if (a->twoPort()) {
         refreshTwoPortEgressAt(a);
     }
@@ -366,6 +383,10 @@ void GraphScene::setMode(Mode mode) {
     }
     m_mode = mode;
     emit modeChanged(mode);
+}
+
+void GraphScene::setDefaultSystemType(SystemType type) {
+    m_defaultSystemType = type;
 }
 
 void GraphScene::clearBranchPending() {
