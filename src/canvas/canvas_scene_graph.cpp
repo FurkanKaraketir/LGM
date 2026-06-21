@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <QMessageBox>
+#include <QPainter>
 #include <QSet>
 
 namespace {
@@ -389,6 +390,36 @@ void GraphScene::setDefaultSystemType(SystemType type) {
     m_defaultSystemType = type;
 }
 
+void GraphScene::setSnapToGrid(bool enabled) {
+    m_snapToGrid = enabled;
+}
+
+void GraphScene::setShowGrid(bool enabled) {
+    if (m_showGrid == enabled) {
+        return;
+    }
+    m_showGrid = enabled;
+    invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+}
+
+void GraphScene::setGridSpacing(qreal spacing) {
+    m_gridSpacing = std::max<qreal>(1.0, spacing);
+    invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+}
+
+void GraphScene::refreshAppearance() {
+    for (QGraphicsItem* item : items()) {
+        if (auto* node = dynamic_cast<NodeItem*>(item)) {
+            node->refreshTheme();
+        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branch->refreshTheme();
+        } else if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
+            twoPort->update();
+        }
+    }
+    invalidate(sceneRect(), QGraphicsScene::BackgroundLayer);
+}
+
 void GraphScene::clearBranchPending() {
     if (m_pending) {
         if (m_pending->scene()) {
@@ -418,7 +449,11 @@ NodeItem* GraphScene::nodeAt(const QPointF& scenePos, const NodeItem* except) co
 }
 
 QPointF GraphScene::snap(QPointF point) const {
-    return {std::round(point.x() / kGrid) * kGrid, std::round(point.y() / kGrid) * kGrid};
+    if (!m_snapToGrid) {
+        return point;
+    }
+    return {std::round(point.x() / m_gridSpacing) * m_gridSpacing,
+            std::round(point.y() / m_gridSpacing) * m_gridSpacing};
 }
 
 void GraphScene::clearNormalTreeHighlight() {

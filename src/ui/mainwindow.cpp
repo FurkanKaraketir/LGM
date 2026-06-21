@@ -3,6 +3,7 @@
 
 
 #include "canvas.h"
+#include "settings_window.h"
 
 #include "elemental_equation.h"
 #include "latex_widget.h"
@@ -14,9 +15,19 @@
 
 #include <QApplication>
 
+#include <QCloseEvent>
+
 #include <QComboBox>
 
 #include <QDockWidget>
+
+#include <QFile>
+
+#include <QFileDialog>
+
+#include <QFileInfo>
+
+#include <QGuiApplication>
 
 #include <QHeaderView>
 
@@ -41,6 +52,8 @@
 #include <QStatusBar>
 
 #include <QStyle>
+
+#include <QStyleHints>
 
 #include <QTableWidget>
 
@@ -214,13 +227,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     buildDockPanels();
 
+    applySettings(AppSettings::load());
 
+    connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this]() {
+        refreshChromeTheme();
+        m_scene->refreshAppearance();
+    });
 
     connect(m_scene, &GraphScene::modeChanged, this, &MainWindow::syncModeUi);
 
+    connect(m_scene->undoStack(), &QUndoStack::cleanChanged, this, &MainWindow::updateWindowTitle);
+
+    connect(m_scene->undoStack(), &QUndoStack::indexChanged, this, &MainWindow::updateWindowTitle);
 
 
-    setWindowTitle(tr("Linear Graph Modeling"));
+
+    updateWindowTitle();
 
     resize(1200, 800);
 
@@ -242,11 +264,15 @@ void MainWindow::buildMenuBar() {
 
     newAction->setShortcut(QKeySequence::New);
 
+    connect(newAction, &QAction::triggered, this, &MainWindow::fileNew);
+
     
 
     auto* openAction = fileMenu->addAction(themedIcon("document-open", QStyle::SP_DirIcon), tr("&Open..."));
 
     openAction->setShortcut(QKeySequence::Open);
+
+    connect(openAction, &QAction::triggered, this, &MainWindow::fileOpen);
 
     
 
@@ -254,11 +280,15 @@ void MainWindow::buildMenuBar() {
 
     saveAction->setShortcut(QKeySequence::Save);
 
+    connect(saveAction, &QAction::triggered, this, &MainWindow::fileSave);
+
     
 
     auto* saveAsAction = fileMenu->addAction(themedIcon("document-save-as", QStyle::SP_DialogSaveButton), tr("Save &As..."));
 
     saveAsAction->setShortcut(QKeySequence::SaveAs);
+
+    connect(saveAsAction, &QAction::triggered, this, &MainWindow::fileSaveAs);
 
     
 
@@ -279,6 +309,11 @@ void MainWindow::buildMenuBar() {
     editMenu->addAction(m_undoAction);
 
     editMenu->addAction(m_redoAction);
+
+    editMenu->addSeparator();
+
+    auto* settingsAction = editMenu->addAction(tr("&Settings..."));
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettingsWindow);
 
     editMenu->addSeparator();
 
@@ -556,7 +591,8 @@ void MainWindow::buildToolbar() {
 
     toolbar->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
 
-    toolbar->setStyleSheet("QToolBar { spacing: 4px; padding: 4px; background: palette(window); border-bottom: 1px solid palette(mid); }");
+    // ponytail: no palette() in stylesheets — values freeze at parse time and break theme switches
+    toolbar->setStyleSheet("QToolBar#mainToolBar { spacing: 4px; padding: 4px; }");
 
 
 
@@ -1929,3 +1965,177 @@ void MainWindow::syncDefaultSystemTypeCombo(SystemType type) {
     m_updatingDomainCombo = false;
 }
 
+AppSettings MainWindow::currentSettings() const {
+    AppSettings s;
+    s.theme = m_theme;
+    s.defaultSystemType = m_scene->defaultSystemType();
+    s.snapToGrid = m_scene->snapToGrid();
+    s.showGrid = m_scene->showGrid();
+    s.gridSpacing = static_cast<int>(m_scene->gridSpacing());
+    s.antialiasing = m_view->renderHints().testFlag(QPainter::Antialiasing);
+    return s;
+}
+
+void MainWindow::applySettings(const AppSettings& settings) {
+    m_theme = settings.theme;
+    applyAppTheme(settings.theme);
+    m_scene->setDefaultSystemType(settings.defaultSystemType);
+    syncDefaultSystemTypeCombo(settings.defaultSystemType);
+    m_scene->setSnapToGrid(settings.snapToGrid);
+    m_scene->setShowGrid(settings.showGrid);
+    m_scene->setGridSpacing(settings.gridSpacing);
+    m_view->setRenderHint(QPainter::Antialiasing, settings.antialiasing);
+    m_scene->refreshAppearance();
+    refreshChromeTheme();
+}
+
+void MainWindow::refreshChromeTheme() {
+    auto polishWidget = [](QWidget* widget) {
+        if (!widget) {
+            return;
+        }
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+        widget->update();
+    };
+
+    polishWidget(menuBar());
+    polishWidget(statusBar());
+    if (auto* toolbar = findChild<QToolBar*>("mainToolBar")) {
+        polishWidget(toolbar);
+        for (QAction* action : toolbar->actions()) {
+            polishWidget(toolbar->widgetForAction(action));
+        }
+    }
+    for (QDockWidget* dock : findChildren<QDockWidget*>()) {
+        polishWidget(dock);
+    }
+    if (m_settingsWindow) {
+        polishWidget(m_settingsWindow);
+    }
+}
+
+void MainWindow::showSettingsWindow() {
+    if (!m_settingsWindow) {
+        m_settingsWindow = new SettingsWindow;
+        connect(m_settingsWindow, &SettingsWindow::settingsApplied, this, &MainWindow::applySettings);
+    }
+    m_settingsWindow->setFrom(currentSettings());
+    m_settingsWindow->show();
+    m_settingsWindow->raise();
+    m_settingsWindow->activateWindow();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (!confirmDiscardChanges()) {
+        event->ignore();
+        return;
+    }
+    event->accept();
+}
+
+void MainWindow::updateWindowTitle() {
+    const QString name =
+        m_currentFilePath.isEmpty() ? tr("Untitled") : QFileInfo(m_currentFilePath).fileName();
+    setWindowTitle(tr("%1 [*] - Linear Graph Modeling").arg(name));
+    setWindowModified(!m_scene->undoStack()->isClean());
+}
+
+bool MainWindow::confirmDiscardChanges() {
+    if (m_scene->undoStack()->isClean()) {
+        return true;
+    }
+    const QMessageBox::StandardButton btn = QMessageBox::warning(
+        this, tr("Unsaved Changes"),
+        tr("The document has been modified.\nDo you want to save your changes?"),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (btn == QMessageBox::Cancel) {
+        return false;
+    }
+    if (btn == QMessageBox::Save) {
+        return fileSave();
+    }
+    return true;
+}
+
+void MainWindow::fileNew() {
+    if (!confirmDiscardChanges()) {
+        return;
+    }
+    m_scene->clearDocument();
+    m_currentFilePath.clear();
+    m_scene->undoStack()->setClean();
+    updateWindowTitle();
+    updateObjectList();
+    updatePropertyPanel();
+}
+
+void MainWindow::fileOpen() {
+    if (!confirmDiscardChanges()) {
+        return;
+    }
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Open"), QString(), tr("Linear Graph Model (*.lgm);;All Files (*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, tr("Open Failed"), tr("Could not read %1.").arg(path));
+        return;
+    }
+
+    QString error;
+    if (!m_scene->documentFromJson(file.readAll(), &error)) {
+        QMessageBox::warning(this, tr("Open Failed"), error);
+        return;
+    }
+
+    m_currentFilePath = path;
+    m_scene->undoStack()->setClean();
+    syncDefaultSystemTypeCombo(m_scene->defaultSystemType());
+    updateWindowTitle();
+    updateObjectList();
+    updatePropertyPanel();
+}
+
+bool MainWindow::fileSave() {
+    if (m_currentFilePath.isEmpty()) {
+        return fileSaveAs();
+    }
+    return writeDocument(m_currentFilePath);
+}
+
+bool MainWindow::fileSaveAs() {
+    QString path = QFileDialog::getSaveFileName(
+        this, tr("Save As"), m_currentFilePath.isEmpty() ? QString() : m_currentFilePath,
+        tr("Linear Graph Model (*.lgm);;All Files (*)"));
+    if (path.isEmpty()) {
+        return false;
+    }
+    if (!path.endsWith(QStringLiteral(".lgm"), Qt::CaseInsensitive)) {
+        path += QStringLiteral(".lgm");
+    }
+    if (!writeDocument(path)) {
+        return false;
+    }
+    m_currentFilePath = path;
+    updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::writeDocument(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Save Failed"), tr("Could not write %1.").arg(path));
+        return false;
+    }
+    if (file.write(m_scene->documentToJson()) == -1) {
+        QMessageBox::warning(this, tr("Save Failed"), tr("Could not write %1.").arg(path));
+        return false;
+    }
+    m_scene->undoStack()->setClean();
+    updateWindowTitle();
+    return true;
+}

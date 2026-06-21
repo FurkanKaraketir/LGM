@@ -58,6 +58,7 @@ add_executable(LinearGraphModeling
     src/canvas/canvas_undo.cpp
     src/canvas/canvas_scene_graph.cpp
     src/canvas/canvas_scene_delete.cpp
+    src/canvas/canvas_document.cpp
     src/canvas/canvas_scene_input.cpp
     src/canvas/canvas_view.cpp
     src/model/elemental_equation.cpp
@@ -72,6 +73,10 @@ add_executable(LinearGraphModeling
     src/model/state_space.h
     src/ui/latex_widget.cpp
     src/ui/latex_widget.h
+    src/ui/app_settings.cpp
+    src/ui/app_settings.h
+    src/ui/settings_window.cpp
+    src/ui/settings_window.h
     src/ui/mainwindow.cpp
 )
 

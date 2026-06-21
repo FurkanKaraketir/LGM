@@ -90,6 +90,8 @@ public:
 
     void setNormalTreeRole(bool inTree, bool known);
 
+    void refreshTheme();
+
     int serialId() const { return m_serialId; }
 
     void setSerialId(int id) { m_serialId = id; }
@@ -184,7 +186,7 @@ public:
 
     void setSystemType(SystemType type);
 
-
+    void refreshTheme();
 
 protected:
 
@@ -382,6 +384,20 @@ public:
 
     void setDefaultSystemType(SystemType type);
 
+    bool snapToGrid() const { return m_snapToGrid; }
+
+    void setSnapToGrid(bool enabled);
+
+    bool showGrid() const { return m_showGrid; }
+
+    void setShowGrid(bool enabled);
+
+    qreal gridSpacing() const { return m_gridSpacing; }
+
+    void setGridSpacing(qreal spacing);
+
+    void refreshAppearance();
+
 
 
     NodeItem* createNode(const QPointF& center);
@@ -576,6 +592,12 @@ public:
 
     const lg::StateSpaceResult& lastStateSpaceResult() const { return m_lastStateSpaceResult; }
 
+    void clearDocument();
+
+    QByteArray documentToJson() const;
+
+    bool documentFromJson(const QByteArray& data, QString* error = nullptr);
+
 
 
     static constexpr qreal kTwoPortHalfWidth = 40.0;
@@ -610,13 +632,15 @@ private:
 
     NodeItem* nodeAt(const QPointF& scenePos, const NodeItem* except = nullptr) const;
 
-    static constexpr qreal kGrid = 20.0;
-
-
-
     Mode m_mode = Mode::Select;
 
     SystemType m_defaultSystemType = SystemType::Mechanical;
+
+    bool m_snapToGrid = true;
+
+    bool m_showGrid = true;
+
+    qreal m_gridSpacing = 20.0;
 
     NodeItem* m_pending = nullptr;
 

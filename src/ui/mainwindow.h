@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app_settings.h"
 #include "canvas.h"
 
 #include <QMainWindow>
@@ -13,12 +14,16 @@ class QTreeWidget;
 class QTreeWidgetItem;
 class QTableWidget;
 class QTableWidgetItem;
+class SettingsWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     void buildMenuBar();
@@ -35,6 +40,17 @@ private:
     void updateFlipBranchAction();
     static QString modeStatusText(GraphScene::Mode mode);
     void syncDefaultSystemTypeCombo(SystemType type);
+    AppSettings currentSettings() const;
+    void applySettings(const AppSettings& settings);
+    void showSettingsWindow();
+    void refreshChromeTheme();
+    void updateWindowTitle();
+    bool confirmDiscardChanges();
+    void fileNew();
+    void fileOpen();
+    bool fileSave();
+    bool fileSaveAs();
+    bool writeDocument(const QString& path);
 
     GraphScene* m_scene = nullptr;
     GraphView* m_view = nullptr;
@@ -50,6 +66,9 @@ private:
     QAction* m_mergeNodesAction = nullptr;
     QComboBox* m_defaultSystemTypeCombo = nullptr;
     bool m_updatingDomainCombo = false;
+    AppTheme m_theme = AppTheme::System;
+    SettingsWindow* m_settingsWindow = nullptr;
+    QString m_currentFilePath;
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;

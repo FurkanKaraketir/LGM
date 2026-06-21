@@ -4,7 +4,9 @@
 
 #include "elemental_equation.h"
 
+#include <QApplication>
 #include <QComboBox>
+#include <QPalette>
 #include <QFontMetricsF>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -27,6 +29,22 @@ namespace {
 constexpr qreal kBowFactor = 0.24;
 constexpr qreal kLaneSpread = 36.0;
 constexpr qreal kTwoPortEgressKick = 48.0;
+
+constexpr QColor kSelectionColor(0, 100, 200);
+constexpr QColor kNormalTreeColor(27, 94, 32);
+constexpr QColor kCotreeColor(158, 158, 158);
+
+QPalette itemPalette(const QWidget* widget) {
+    return widget ? widget->palette() : QApplication::palette();
+}
+
+QColor itemInk(const QWidget* widget) {
+    return itemPalette(widget).color(QPalette::WindowText);
+}
+
+QColor itemFill(const QWidget* widget) {
+    return itemPalette(widget).color(QPalette::Base);
+}
 
 QPointF cubicPoint(const QPointF& p0, const QPointF& p1, const QPointF& p2, const QPointF& p3, qreal t) {
     const qreal u = 1.0 - t;
@@ -255,13 +273,13 @@ void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius) {
 }
 
 void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
-                            const QString& modulus) {
+                            const QString& modulus, const QColor& fill) {
     Q_UNUSED(modulus);
     const qreal midY = (left.y() + right.y()) / 2.0;
     const qreal padX = 8.0;
     const QRectF box(left.x() - padX, midY - kTfHalfHeight, right.x() - left.x() + padX * 2.0,
                      kTfHalfHeight * 2.0);
-    painter->setBrush(Qt::white);
+    painter->setBrush(fill);
     painter->drawPath(stadiumPath(box));
 
     const qreal span = right.x() - left.x();
@@ -506,11 +524,11 @@ QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const 
 
 BranchItem::BranchItem(NodeItem* from, NodeItem* to, int index, int count, qreal bow)
     : m_from(from), m_to(to), m_index(index), m_count(count), m_bow(bow) {
-    setPen(QPen(Qt::black, 2));
     setBrush(Qt::NoBrush);
     setFlags(QGraphicsItem::ItemIsSelectable);
     setFlag(QGraphicsItem::ItemClipsToShape, false);
     setZValue(0);
+    refreshTheme();
     updatePath();
 }
 
@@ -623,15 +641,20 @@ void BranchItem::setNormalTreeRole(bool inTree, bool known) {
 void BranchItem::updateBranchPen() {
     QPen pen;
     if (isSelected()) {
-        pen = QPen(QColor(0, 100, 200), 2);
+        pen = QPen(kSelectionColor, 2);
     } else if (m_normalTreeRoleKnown && m_inNormalTree) {
-        pen = QPen(QColor(27, 94, 32), 3);
+        pen = QPen(kNormalTreeColor, 3);
     } else if (m_normalTreeRoleKnown) {
-        pen = QPen(QColor(158, 158, 158), 1.5);
+        pen = QPen(kCotreeColor, 1.5);
     } else {
-        pen = QPen(Qt::black, 2);
+        pen = QPen(itemInk(nullptr), 2);
     }
     setPen(pen);
+}
+
+void BranchItem::refreshTheme() {
+    updateBranchPen();
+    update();
 }
 
 QRectF BranchItem::boundingRect() const {
@@ -684,7 +707,7 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     QFont font = painter->font();
     font.setPointSizeF(9.0);
     painter->setFont(font);
-    painter->setPen(isSelected() ? QColor(0, 100, 200) : Qt::black);
+    painter->setPen(isSelected() ? kSelectionColor : itemInk(widget));
 
     const QRectF textRect = constantLabelRect(arrow.tip, arrow.tangent, label, font);
     painter->save();
@@ -781,11 +804,16 @@ QVariant BranchItem::itemChange(GraphicsItemChange change, const QVariant& value
 }
 
 NodeItem::NodeItem(qreal radius) : QGraphicsEllipseItem(-radius, -radius, radius * 2, radius * 2) {
-    setBrush(Qt::white);
-    setPen(QPen(Qt::black, 2));
     setFlags(QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemIsSelectable |
              QGraphicsItem::ItemSendsGeometryChanges);
     setZValue(1);
+    refreshTheme();
+}
+
+void NodeItem::refreshTheme() {
+    setBrush(itemFill(nullptr));
+    setPen(QPen(itemInk(nullptr), 2));
+    update();
 }
 
 void NodeItem::setAcrossVariable(const QString& symbol) {
@@ -836,7 +864,7 @@ void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
     QGraphicsEllipseItem::paint(painter, option, widget);
     if (m_ground) {
         painter->save();
-        painter->setPen(QPen(Qt::black, 1.5));
+        painter->setPen(QPen(itemInk(widget), 1.5));
         painter->setBrush(Qt::NoBrush);
         drawGroundSymbol(painter, QPointF(0.0, 0.0), rect().width() / 2.0);
         painter->restore();
@@ -847,7 +875,7 @@ void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
         QFont font = painter->font();
         font.setPointSizeF(9.0);
         painter->setFont(font);
-        painter->setPen(isSelected() ? QColor(0, 100, 200) : Qt::black);
+        painter->setPen(isSelected() ? kSelectionColor : itemInk(widget));
         const QRectF textRect = nodeAcrossLabelRect(label, radius, font);
         painter->save();
         painter->setClipping(false);
@@ -1120,14 +1148,13 @@ QPainterPath TwoPortItem::shape() const {
 
 void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     Q_UNUSED(option);
-    Q_UNUSED(widget);
 
     const QPointF left = couplerLeft();
     const QPointF right = couplerRight();
 
-    painter->setPen(QPen(isSelected() ? QColor(0, 100, 200) : Qt::black, 2.0));
+    painter->setPen(QPen(isSelected() ? kSelectionColor : itemInk(widget), 2.0));
     if (m_kind == TwoPortKind::Transformer) {
-        drawTransformerCoupler(painter, left, right, m_modulus);
+        drawTransformerCoupler(painter, left, right, m_modulus, itemFill(widget));
     } else {
         drawGyratorCoupler(painter, left, right, m_modulus);
     }

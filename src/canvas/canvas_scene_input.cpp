@@ -1,18 +1,24 @@
 #include "canvas.h"
 
+#include <QApplication>
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 #include <cmath>
 
 void GraphScene::drawBackground(QPainter* painter, const QRectF& rect) {
-    painter->fillRect(rect, QColor(250, 250, 250));
+    const QPalette pal =
+        views().isEmpty() ? QApplication::palette() : views().constFirst()->palette();
+    painter->fillRect(rect, pal.color(QPalette::Window));
+    if (!m_showGrid) {
+        return;
+    }
 
-    const qreal left = std::floor(rect.left() / kGrid) * kGrid;
-    const qreal top = std::floor(rect.top() / kGrid) * kGrid;
+    const qreal left = std::floor(rect.left() / m_gridSpacing) * m_gridSpacing;
+    const qreal top = std::floor(rect.top() / m_gridSpacing) * m_gridSpacing;
 
-    painter->setPen(QColor(200, 200, 200));
-    for (qreal x = left; x < rect.right(); x += kGrid) {
-        for (qreal y = top; y < rect.bottom(); y += kGrid) {
+    painter->setPen(pal.color(QPalette::Mid));
+    for (qreal x = left; x < rect.right(); x += m_gridSpacing) {
+        for (qreal y = top; y < rect.bottom(); y += m_gridSpacing) {
             painter->drawPoint(QPointF(x, y));
         }
     }
