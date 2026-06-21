@@ -24,9 +24,9 @@
 
 namespace {
 
-constexpr qreal kBowFactor = 0.20;
+constexpr qreal kBowFactor = 0.24;
 constexpr qreal kLaneSpread = 36.0;
-constexpr qreal kTwoPortEgressKick = 100.0;
+constexpr qreal kTwoPortEgressKick = 48.0;
 
 QPointF cubicPoint(const QPointF& p0, const QPointF& p1, const QPointF& p2, const QPointF& p3, qreal t) {
     const qreal u = 1.0 - t;
@@ -52,17 +52,17 @@ void appendArrowHead(QPainterPath& path, const QPointF& tip, const QPointF& tang
     }
     const QPointF u(tangent.x() / len, tangent.y() / len);
     const QPointF n(-u.y(), u.x());
-    
+
     if (withCircle) {
         // ponytail: current-source symbol: circle + centered arrow
         const qreal circleRadius = 14.0;
         path.addEllipse(tip, circleRadius, circleRadius);
-        
+
         const qreal arrowLen = circleRadius * 0.85;
         const QPointF arrowBase = tip - u * arrowLen * 0.5;
         const QPointF arrowTip = tip + u * arrowLen * 0.5;
         const qreal wingSize = arrowLen * 0.35;
-        
+
         path.moveTo(arrowBase);
         path.lineTo(arrowTip);
         path.lineTo(arrowTip - u * wingSize + n * wingSize * 0.45);
@@ -77,15 +77,45 @@ void appendArrowHead(QPainterPath& path, const QPointF& tip, const QPointF& tang
     }
 }
 
-void drawDownArrow(QPainter* painter, const QPointF& tip, qreal size = 7.0) {
-    painter->drawLine(tip, tip + QPointF(0.0, size));
-    painter->drawLine(tip + QPointF(0.0, size), tip + QPointF(-size * 0.4, size * 0.55));
-    painter->drawLine(tip + QPointF(0.0, size), tip + QPointF(size * 0.4, size * 0.55));
+QPainterPath filledArrowHead(const QPointF& tip, const QPointF& tangent, qreal size = 8.0) {
+    QPainterPath head;
+    const qreal len = std::hypot(tangent.x(), tangent.y());
+    if (len < 1e-6) {
+        return head;
+    }
+    const QPointF u(tangent.x() / len, tangent.y() / len);
+    const QPointF n(-u.y(), u.x());
+    const QPointF base = tip - u * size;
+    head.moveTo(tip);
+    head.lineTo(base + n * (size * 0.42));
+    head.lineTo(base - n * (size * 0.42));
+    head.closeSubpath();
+    return head;
 }
+
+void drawDownArrow(QPainter* painter, const QPointF& top, qreal stemLen = 11.0) {
+    const QPointF bottom = top + QPointF(0.0, stemLen);
+    painter->drawLine(top, bottom);
+    QPainterPath head;
+    head.moveTo(bottom);
+    head.lineTo(bottom + QPointF(-4.5, -5.5));
+    head.lineTo(bottom + QPointF(4.5, -5.5));
+    head.closeSubpath();
+    painter->fillPath(head, painter->pen().color());
+}
+
+QPainterPath stadiumPath(const QRectF& rect) {
+    const qreal radius = rect.height() * 0.5;
+    QPainterPath path;
+    path.addRoundedRect(rect, radius, radius);
+    return path;
+}
+
+constexpr qreal kTfHalfHeight = 14.0;
 
 QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count,
                             const QPointF& kickA = {}, const QPointF& kickB = {}, bool active = false,
-                            bool dashedTail = false) {
+                            bool dashedTail = false, bool drawArrow = true) {
     QPainterPath path;
     QPointF dir = b - a;
     const qreal len = std::hypot(dir.x(), dir.y());
@@ -147,11 +177,14 @@ QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int c
     }
 
     const QPointF mid = cubicPoint(a, c1, c2, b, 0.5);
-    appendArrowHead(path, mid, cubicTangent(a, c1, c2, b, 0.5), 9.0, active);
+    if (drawArrow && active) {
+        appendArrowHead(path, mid, cubicTangent(a, c1, c2, b, 0.5), 9.0, true);
+    }
     return path;
 }
 
-QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false, bool dashedTail = false) {
+QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false,
+                         bool dashedTail = false, bool drawArrow = true) {
     QPainterPath path;
     const QPointF ctrl = (top + bottom) / 2.0 + QPointF(bow, 0.0);
     
@@ -205,7 +238,9 @@ QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, b
 
     const QPointF midActual((1 - 0.5) * (1 - 0.5) * top.x() + 2 * 0.5 * (1 - 0.5) * ctrl.x() + 0.5 * 0.5 * bottom.x(),
                             (1 - 0.5) * (1 - 0.5) * top.y() + 2 * 0.5 * (1 - 0.5) * ctrl.y() + 0.5 * 0.5 * bottom.y());
-    appendArrowHead(path, midActual, quadTangent(top, ctrl, bottom, 0.5), 9.0, active);
+    if (drawArrow && active) {
+        appendArrowHead(path, midActual, quadTangent(top, ctrl, bottom, 0.5), 9.0, true);
+    }
     return path;
 }
 
@@ -221,59 +256,66 @@ void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius) {
 
 void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
                             const QString& modulus) {
+    Q_UNUSED(modulus);
     const qreal midY = (left.y() + right.y()) / 2.0;
-    const qreal padX = 6.0;
-    const QRectF box(left.x() - padX, midY - 14.0, right.x() - left.x() + padX * 2.0, 28.0);
+    const qreal padX = 8.0;
+    const QRectF box(left.x() - padX, midY - kTfHalfHeight, right.x() - left.x() + padX * 2.0,
+                     kTfHalfHeight * 2.0);
     painter->setBrush(Qt::white);
-    painter->drawRect(box);
+    painter->drawPath(stadiumPath(box));
 
     const qreal span = right.x() - left.x();
-    drawDownArrow(painter, QPointF(left.x() + span * 0.25, midY - 2.0));
-    drawDownArrow(painter, QPointF(right.x() - span * 0.25, midY - 2.0));
-
-    QFont font = painter->font();
-    font.setPointSizeF(9.0);
-    font.setBold(true);
-    painter->setFont(font);
-    painter->drawText(box, Qt::AlignCenter, modulus);
-
-    font.setPointSizeF(8.0);
-    font.setBold(false);
-    painter->setFont(font);
-    painter->drawText(QPointF(left.x(), midY - 22.0), QStringLiteral("v\u2081"));
-    painter->drawText(QPointF(right.x() - 10.0, midY - 22.0), QStringLiteral("v\u2082"));
+    drawDownArrow(painter, QPointF(left.x(), midY - 6.0));
+    drawDownArrow(painter, QPointF(right.x(), midY - 6.0));
 }
 
 void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
                         const QString& modulus) {
+    Q_UNUSED(modulus);
     const qreal midY = (left.y() + right.y()) / 2.0;
-    const qreal span = right.x() - left.x();
-    const qreal h = 16.0;
+    const QPointF center((left.x() + right.x()) / 2.0, midY);
+    const qreal w = 12.0;
+    const qreal h = 17.0;
 
     QPainterPath loop;
     loop.moveTo(left);
-    loop.cubicTo(left + QPointF(span * 0.18, -h), left + QPointF(span * 0.42, -h),
-                 QPointF(left.x() + span * 0.5, midY));
-    loop.cubicTo(left + QPointF(span * 0.58, h), left + QPointF(span * 0.82, h), right);
-    loop.cubicTo(right + QPointF(-span * 0.18, h), right + QPointF(-span * 0.42, h),
-                 QPointF(right.x() - span * 0.5, midY));
-    loop.cubicTo(right + QPointF(-span * 0.58, -h), right + QPointF(-span * 0.82, -h), left);
+    loop.cubicTo(QPointF(left.x() - w, midY - h * 0.55), QPointF(center.x() - w * 0.45, midY - h),
+                 center);
+    loop.cubicTo(QPointF(center.x() + w * 0.45, midY + h), QPointF(right.x() + w, midY + h * 0.55),
+                 right);
+    loop.cubicTo(QPointF(right.x() + w, midY - h * 0.55), QPointF(center.x() + w * 0.45, midY - h),
+                 center);
+    loop.cubicTo(QPointF(center.x() - w * 0.45, midY + h), QPointF(left.x() - w, midY + h * 0.55),
+                 left);
+
+    QPen loopPen = painter->pen();
+    loopPen.setWidthF(1.5);
+    painter->setPen(loopPen);
+    painter->setBrush(Qt::NoBrush);
     painter->drawPath(loop);
 
-    drawDownArrow(painter, QPointF(left.x() + span * 0.25, midY - 2.0));
-    drawDownArrow(painter, QPointF(right.x() - span * 0.25, midY - 2.0));
+    painter->setPen(QPen(loopPen.color(), 2.0));
+    drawDownArrow(painter, left + QPointF(0.0, -5.0));
+    drawDownArrow(painter, right + QPointF(0.0, -5.0));
+}
 
-    QFont font = painter->font();
-    font.setPointSizeF(9.0);
-    font.setBold(true);
-    painter->setFont(font);
-    painter->drawText(QRectF(left.x(), midY - 10.0, span, 20.0), Qt::AlignCenter, modulus);
+QPainterPath gyratorInfinityPath(const QPointF& left, const QPointF& right) {
+    const qreal midY = (left.y() + right.y()) / 2.0;
+    const QPointF center((left.x() + right.x()) / 2.0, midY);
+    const qreal w = 12.0;
+    const qreal h = 17.0;
 
-    font.setPointSizeF(8.0);
-    font.setBold(false);
-    painter->setFont(font);
-    painter->drawText(QPointF(left.x(), midY - 22.0), QStringLiteral("v\u2081"));
-    painter->drawText(QPointF(right.x() - 10.0, midY - 22.0), QStringLiteral("v\u2082"));
+    QPainterPath loop;
+    loop.moveTo(left);
+    loop.cubicTo(QPointF(left.x() - w, midY - h * 0.55), QPointF(center.x() - w * 0.45, midY - h),
+                 center);
+    loop.cubicTo(QPointF(center.x() + w * 0.45, midY + h), QPointF(right.x() + w, midY + h * 0.55),
+                 right);
+    loop.cubicTo(QPointF(right.x() + w, midY - h * 0.55), QPointF(center.x() + w * 0.45, midY - h),
+                 center);
+    loop.cubicTo(QPointF(center.x() - w * 0.45, midY + h), QPointF(left.x() - w, midY + h * 0.55),
+                 left);
+    return loop;
 }
 
 struct BranchArrowGeom {
@@ -296,18 +338,31 @@ qreal externalBranchLane(int index, int count) {
     return (count <= 1) ? 0.0 : kLaneSpread * 0.55 * (index - (count - 1) / 2.0);
 }
 
-QPointF twoPortKick(const TwoPortItem* tp, const NodeItem* port, qreal lane) {
+QPointF twoPortKick(const TwoPortItem* tp, const NodeItem* port, qreal lane, qreal chordLen) {
     if (!tp || !port) {
         return {};
     }
-    QPointF away = port->scenePos() - tp->center();
-    const qreal len = std::hypot(away.x(), away.y());
-    if (len < 1e-6) {
-        return {};
+
+    qreal mag = kTwoPortEgressKick;
+    if (chordLen > 1e-6) {
+        mag = std::min(kTwoPortEgressKick, chordLen * 0.42);
     }
-    away /= len;
-    const QPointF perp(-away.y(), away.x());
-    return away * kTwoPortEgressKick + perp * lane;
+
+    QPointF lateral;
+    if (port == tp->v1() || port == tp->g1()) {
+        lateral = QPointF(-mag, 0.0);
+    } else if (port == tp->v2() || port == tp->g2()) {
+        lateral = QPointF(mag, 0.0);
+    } else {
+        QPointF away = port->scenePos() - tp->center();
+        const qreal len = std::hypot(away.x(), away.y());
+        if (len < 1e-6) {
+            return {};
+        }
+        lateral = QPointF(away.x() / len * mag, 0.0);
+    }
+
+    return lateral + QPointF(0.0, lane);
 }
 
 void externalLaneAtPort(const NodeItem* port, const BranchItem* branch, int& index, int& count) {
@@ -353,21 +408,28 @@ struct BranchEgress {
 
 BranchEgress computeBranchEgress(const BranchItem* branch) {
     BranchEgress egress;
-    if (!branch || isTwoPortPortBranch(branch)) {
+    if (!branch || isTwoPortPortBranch(branch) || !branch->from() || !branch->to()) {
         return egress;
     }
+    if (!branch->from()->scene() || !branch->to()->scene()) {
+        return egress;
+    }
+
+    const QPointF a = branch->from()->scenePos();
+    const QPointF b = branch->to()->scenePos();
+    const qreal chordLen = std::hypot(b.x() - a.x(), b.y() - a.y());
 
     if (NodeItem* from = branch->from(); from && from->twoPort()) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(from, branch, index, count);
-        egress.kickA = twoPortKick(from->twoPort(), from, externalBranchLane(index, count));
+        egress.kickA = twoPortKick(from->twoPort(), from, externalBranchLane(index, count), chordLen);
     }
     if (NodeItem* to = branch->to(); to && to->twoPort()) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(to, branch, index, count);
-        egress.kickB = twoPortKick(to->twoPort(), to, externalBranchLane(index, count));
+        egress.kickB = twoPortKick(to->twoPort(), to, externalBranchLane(index, count), chordLen);
     }
     return egress;
 }
@@ -445,6 +507,7 @@ QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const 
 BranchItem::BranchItem(NodeItem* from, NodeItem* to, int index, int count, qreal bow)
     : m_from(from), m_to(to), m_index(index), m_count(count), m_bow(bow) {
     setPen(QPen(Qt::black, 2));
+    setBrush(Qt::NoBrush);
     setFlags(QGraphicsItem::ItemIsSelectable);
     setFlag(QGraphicsItem::ItemClipsToShape, false);
     setZValue(0);
@@ -471,10 +534,12 @@ void BranchItem::updatePath() {
     const QPointF b = m_to->scenePos();
     const bool dashedTail = !m_active && m_type == BranchType::A;
     const BranchEgress egress = computeBranchEgress(this);
+    const bool drawArrow = !isTwoPortPortBranch(this);
     if (std::abs(m_bow) > 1e-6) {
-        setPath(bowedBranch(a, b, m_bow, m_active, dashedTail));
+        setPath(bowedBranch(a, b, m_bow, m_active, dashedTail, drawArrow));
     } else {
-        setPath(parallelBranch(a, b, m_index, m_count, egress.kickA, egress.kickB, m_active, dashedTail));
+        setPath(parallelBranch(a, b, m_index, m_count, egress.kickA, egress.kickB, m_active, dashedTail,
+                                drawArrow));
     }
 }
 
@@ -556,15 +621,17 @@ void BranchItem::setNormalTreeRole(bool inTree, bool known) {
 }
 
 void BranchItem::updateBranchPen() {
+    QPen pen;
     if (isSelected()) {
-        setPen(QPen(QColor(0, 100, 200), 2));
+        pen = QPen(QColor(0, 100, 200), 2);
     } else if (m_normalTreeRoleKnown && m_inNormalTree) {
-        setPen(QPen(QColor(27, 94, 32), 3));
+        pen = QPen(QColor(27, 94, 32), 3);
     } else if (m_normalTreeRoleKnown) {
-        setPen(QPen(QColor(158, 158, 158), 1.5));
+        pen = QPen(QColor(158, 158, 158), 1.5);
     } else {
-        setPen(QPen(Qt::black, 2));
+        pen = QPen(Qt::black, 2);
     }
+    setPen(pen);
 }
 
 QRectF BranchItem::boundingRect() const {
@@ -586,10 +653,11 @@ QRectF BranchItem::boundingRect() const {
 
 void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     QGraphicsPathItem::paint(painter, option, widget);
-    if (m_active) {
+
+    if (!m_from || !m_to || !m_from->scene() || !m_to->scene()) {
         return;
     }
-    if (!m_from || !m_to || !m_from->scene() || !m_to->scene()) {
+    if (isTwoPortPortBranch(this)) {
         return;
     }
 
@@ -598,8 +666,21 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     const BranchEgress egress = computeBranchEgress(this);
     const BranchArrowGeom arrow =
         branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB);
-    const QString label = branchAnnotationLabel(this);
 
+    painter->save();
+    painter->setClipping(false);
+    if (!m_active) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(pen().color());
+        painter->fillPath(filledArrowHead(arrow.tip, arrow.tangent), pen().color());
+    }
+    painter->restore();
+
+    if (m_active) {
+        return;
+    }
+
+    const QString label = branchAnnotationLabel(this);
     QFont font = painter->font();
     font.setPointSizeF(9.0);
     painter->setFont(font);
@@ -895,8 +976,22 @@ TwoPortItem::TwoPortItem(TwoPortKind kind, const QPointF& center, NodeItem* v1, 
       m_right(right),
       m_modulus(lg::defaultTwoPortModulus(kind)) {
     setFlags(QGraphicsItem::ItemIsSelectable);
-    setZValue(2);
+    setZValue(kind == TwoPortKind::Gyrator ? 0.5 : 2.0);
+    applyInternalBranchBows();
     refresh();
+}
+
+void TwoPortItem::applyInternalBranchBows() {
+    if (!m_left || !m_right) {
+        return;
+    }
+    if (m_kind == TwoPortKind::Gyrator) {
+        m_left->setBow(14.0);
+        m_right->setBow(-14.0);
+    } else {
+        m_left->setBow(-14.0);
+        m_right->setBow(14.0);
+    }
 }
 
 void TwoPortItem::setKind(TwoPortKind kind) {
@@ -904,6 +999,8 @@ void TwoPortItem::setKind(TwoPortKind kind) {
         return;
     }
     m_kind = kind;
+    setZValue(kind == TwoPortKind::Gyrator ? 0.5 : 2.0);
+    applyInternalBranchBows();
     update();
 }
 
@@ -1013,11 +1110,12 @@ QRectF TwoPortItem::boundingRect() const {
 QPainterPath TwoPortItem::shape() const {
     const QPointF left = couplerLeft();
     const QPointF right = couplerRight();
+    if (m_kind == TwoPortKind::Gyrator) {
+        return gyratorInfinityPath(left, right);
+    }
     const qreal midY = (left.y() + right.y()) / 2.0;
     const qreal span = right.x() - left.x();
-    QPainterPath path;
-    path.addRect(QRectF(left.x() - 8.0, midY - 18.0, span + 16.0, 36.0));
-    return path;
+    return stadiumPath(QRectF(left.x() - 8.0, midY - kTfHalfHeight, span + 16.0, kTfHalfHeight * 2.0));
 }
 
 void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {

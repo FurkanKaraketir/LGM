@@ -259,6 +259,8 @@ public:
 
     void applyPortDefaults();
 
+    void applyInternalBranchBows();
+
 
 
     void refresh();

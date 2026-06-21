@@ -117,8 +117,8 @@ TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind, 
     g1->setGround(true);
     g2->setGround(true);
 
-    auto* left = createBranch(v1, g1, -14.0);
-    auto* right = createBranch(v2, g2, 14.0);
+    auto* left = createBranch(v1, g1, kind == TwoPortKind::Gyrator ? 14.0 : -14.0);
+    auto* right = createBranch(v2, g2, kind == TwoPortKind::Gyrator ? -14.0 : 14.0);
 
     const QString twoPortName =
         name.isEmpty() ? (kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
