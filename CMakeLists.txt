@@ -52,23 +52,27 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(jkqtplotter)
 
 add_executable(LinearGraphModeling
-    src/main.cpp
-    src/canvas.h
-    src/canvas_items.cpp
-    src/canvas_undo.cpp
-    src/canvas_scene_graph.cpp
-    src/canvas_scene_delete.cpp
-    src/canvas_scene_input.cpp
-    src/canvas_view.cpp
-    src/elemental_equation.cpp
-    src/elemental_equation.h
-    src/normal_tree.cpp
-    src/normal_tree.h
-    src/state_space.cpp
-    src/state_space.h
-    src/latex_widget.cpp
-    src/latex_widget.h
-    src/mainwindow.cpp
+    src/ui/main.cpp
+    src/canvas/canvas.h
+    src/canvas/canvas_items.cpp
+    src/canvas/canvas_undo.cpp
+    src/canvas/canvas_scene_graph.cpp
+    src/canvas/canvas_scene_delete.cpp
+    src/canvas/canvas_scene_input.cpp
+    src/canvas/canvas_view.cpp
+    src/model/elemental_equation.cpp
+    src/model/elemental_equation.h
+    src/model/normal_tree.cpp
+    src/model/normal_tree.h
+    src/model/state_space.cpp
+    src/model/state_space_eliminate.cpp
+    src/model/state_space_graph.cpp
+    src/model/state_space_latex.cpp
+    src/model/state_space_sym.cpp
+    src/model/state_space.h
+    src/ui/latex_widget.cpp
+    src/ui/latex_widget.h
+    src/ui/mainwindow.cpp
 )
 
 target_link_libraries(LinearGraphModeling PRIVATE
@@ -78,6 +82,9 @@ target_link_libraries(LinearGraphModeling PRIVATE
     JKQTPlotter6::JKQTMathText6
 )
 target_include_directories(LinearGraphModeling PRIVATE
+    src/canvas
+    src/model
+    src/ui
     ${symengine_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/_deps/symengine-build
 )
