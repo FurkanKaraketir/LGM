@@ -98,15 +98,17 @@ void eliminateBranchSymbolsInto(
     std::vector<QString> candidates;
     candidates.reserve(branches.size() * 3);
     for (BranchItem* branch : branches) {
-        if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
+        if (!branch || branch->isActive()) {
             continue;
         }
         const bool inTree = treeSet.count(branch) != 0;
+        const bool twoPortPort = isTwoPortInternalBranch(*branch);
         const BranchType type = effectivePassiveBranchType(*branch);
-        if (type == BranchType::A && inTree) {
+        // Two-port ports use BranchType::T by convention, not as through-storage elements.
+        if (!twoPortPort && type == BranchType::A && inTree) {
             continue;
         }
-        if (type == BranchType::T && !inTree) {
+        if (!twoPortPort && type == BranchType::T && !inTree) {
             continue;
         }
         for (const QString& candidate :
@@ -218,6 +220,20 @@ const bool kEliminateSelfCheck = [] {
                                                         SymEngine::symbol("L7")),
                                          SymEngine::div(SymEngine::symbol("Vs1"),
                                                         SymEngine::symbol("L7")))));
+
+    dots.clear();
+    dots[QStringLiteral("v2")] = SymEngine::div(SymEngine::neg(SymEngine::symbol("f2")),
+                                                SymEngine::symbol("m"));
+    const std::vector<RCP<const Basic>> tfRelations = {
+        SymEngine::add(SymEngine::symbol("Fs1"),
+                       SymEngine::div(SymEngine::symbol("f2"), SymEngine::symbol("TF"))),
+    };
+    eliminateSymbolsInto(dots, tfRelations, {QStringLiteral("f2")},
+                         [](const QString&) { return true; });
+    assert(SymEngine::eq(*expand(dots.at(QStringLiteral("v2"))),
+                         *SymEngine::div(SymEngine::mul(SymEngine::symbol("TF"),
+                                                        SymEngine::symbol("Fs1")),
+                                        SymEngine::symbol("m"))));
     return true;
 }();
 
