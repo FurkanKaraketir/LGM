@@ -3,6 +3,7 @@
 #include <symengine/integer.h>
 #include <symengine/parser.h>
 #include <symengine/symbol.h>
+#include <symengine/add.h>
 
 #include <optional>
 
@@ -38,6 +39,25 @@ bool parseElementConstant(const QString& text, SymEngine::RCP<const SymEngine::B
     } catch (...) {
         return false;
     }
+}
+
+namespace {
+
+bool isPureNumericConstant(const QString& text) {
+    static const QRegularExpression pattern(
+        QStringLiteral("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$"));
+    return pattern.match(text.trimmed()).hasMatch();
+}
+
+}  // namespace
+
+bool isValidElementConstant(const QString& text) {
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty() || isPureNumericConstant(trimmed)) {
+        return false;
+    }
+    SymEngine::RCP<const SymEngine::Basic> expr;
+    return parseElementConstant(trimmed, expr);
 }
 
 SymEngine::RCP<const SymEngine::Basic> branchElementConstantExpr(const BranchItem& branch) {
@@ -365,6 +385,24 @@ QString defaultPassiveThroughName(int id, SystemType systemType) {
     return throughNameFromConstant(QStringLiteral("1"), id, systemType);
 }
 
+QString defaultElementConstant(int id, SystemType systemType) {
+    QChar prefix;
+    switch (systemType) {
+    case SystemType::Mechanical:
+        prefix = QLatin1Char('M');
+        break;
+    case SystemType::MechanicalRotational:
+        prefix = QLatin1Char('J');
+        break;
+    case SystemType::Electrical:
+    case SystemType::Fluid:
+    case SystemType::Heat:
+        prefix = QLatin1Char('C');
+        break;
+    }
+    return QString(prefix) + QString::number(id);
+}
+
 namespace {
 
 QString passiveThroughPrefix(SystemType systemType) {
@@ -515,7 +553,7 @@ QString branchSymbolBase(const BranchItem& branch) {
 
 }  // namespace
 
-QString branchFlowSymbol(const BranchItem& branch) {
+QString branchThroughSymbol(const BranchItem& branch) {
     if (branch.isActive() && branch.branchType() == BranchType::T) {
         return branchSourceInputSymbol(branch);
     }
@@ -530,7 +568,7 @@ QString branchAcrossSymbol(const BranchItem& branch) {
     if (isValidVariableSymbol(text)) {
         return text;
     }
-    return branchFlowSymbol(branch) + QStringLiteral("_a");
+    return branchThroughSymbol(branch) + QStringLiteral("_a");
 }
 
 bool usesSyntheticAcrossSymbol(const BranchItem& branch) {
@@ -554,7 +592,18 @@ std::optional<SymEngine::RCP<const SymEngine::Basic>> branchAcrossExpression(
     }
 }
 
+SymEngine::RCP<const SymEngine::Basic> branchNodeAcrossExpr(const BranchItem& branch) {
+    if (const std::optional<SymEngine::RCP<const SymEngine::Basic>> expr = branchAcrossExpression(branch)) {
+        return *expr;
+    }
+    return SymEngine::symbol(branchAcrossSymbol(branch).toStdString());
+}
+
 bool isTwoPortInternalBranch(const BranchItem& branch) {
+    if (branch.isTwoPortPort()) {
+        return true;
+    }
+    // ponytail: shared transformer nodes keep only one NodeItem::twoPort; flag above is authoritative.
     const NodeItem* from = branch.from();
     if (!from) {
         return false;
@@ -564,6 +613,188 @@ bool isTwoPortInternalBranch(const BranchItem& branch) {
         return false;
     }
     return &branch == twoPort->leftBranch() || &branch == twoPort->rightBranch();
+}
+
+namespace {
+
+bool sharesEndpointsImpl(const BranchItem* a, const BranchItem* b) {
+    if (!a || !b) {
+        return false;
+    }
+    const NodeItem* af = a->from();
+    const NodeItem* at = a->to();
+    const NodeItem* bf = b->from();
+    const NodeItem* bt = b->to();
+    return (af == bf && at == bt) || (af == bt && at == bf);
+}
+
+}  // namespace
+
+bool sharesEndpoints(const BranchItem* a, const BranchItem* b) {
+    return sharesEndpointsImpl(a, b);
+}
+
+bool isExternalBranchOnPortSpan(const BranchItem& branch,
+                                const std::vector<BranchItem*>& branches) {
+    if (isTwoPortInternalBranch(branch)) {
+        return false;
+    }
+    for (BranchItem* port : branches) {
+        if (!port || !isTwoPortInternalBranch(*port)) {
+            continue;
+        }
+        if (sharesEndpoints(&branch, port)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isPortSpanStorageBranch(const BranchItem& branch,
+                             const std::vector<BranchItem*>& branches) {
+    if (!isExternalBranchOnPortSpan(branch, branches)) {
+        return false;
+    }
+    const QString constant = branch.elementConstant().trimmed();
+    if (!constant.isEmpty()) {
+        const QChar c = constant.at(0).toUpper();
+        if (c == QLatin1Char('M') || c == QLatin1Char('I') || c == QLatin1Char('J') ||
+            c == QLatin1Char('K') || c == QLatin1Char('C') || c == QLatin1Char('L')) {
+            return true;
+        }
+    }
+    if (effectivePassiveBranchType(branch) != BranchType::A) {
+        return false;
+    }
+    return inferPassiveBranchType(branch.elementConstant(), branchSystemType(branch)).has_value();
+}
+
+BranchItem* externalBranchParallelToPort(const BranchItem* port,
+                                           const std::vector<BranchItem*>& branches,
+                                           const std::vector<TwoPortItem*>& twoPorts) {
+    for (BranchItem* branch : branchesParallelToPort(port, branches, twoPorts)) {
+        if (!branch->isActive()) {
+            return branch;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<BranchItem*> branchesParallelToPort(const BranchItem* port,
+                                                const std::vector<BranchItem*>& branches,
+                                                const std::vector<TwoPortItem*>& twoPorts) {
+    std::vector<BranchItem*> parallels;
+    if (!port || !isTwoPortInternalBranch(*port)) {
+        return parallels;
+    }
+    for (BranchItem* branch : branches) {
+        if (!branch || branch == port) {
+            continue;
+        }
+        if (isTwoPortInternalBranch(*branch)) {
+            continue;
+        }
+        if (sharesEndpoints(port, branch)) {
+            parallels.push_back(branch);
+        }
+    }
+    return parallels;
+}
+
+SymEngine::RCP<const SymEngine::Basic> signedParallelPortSpanFlowSum(
+    const BranchItem& port, const std::vector<BranchItem*>& parallels) {
+    SymEngine::RCP<const SymEngine::Basic> sum = SymEngine::integer(0);
+    for (BranchItem* parallel : parallels) {
+        if (!parallel) {
+            continue;
+        }
+        sum = SymEngine::add(sum, signedParallelFlowExpr(port, *parallel));
+    }
+    return sum;
+}
+
+namespace {
+
+int internalPortCountOnSpan(const BranchItem* ref, const std::vector<BranchItem*>& branches) {
+    if (!ref) {
+        return 0;
+    }
+    int count = 0;
+    for (BranchItem* branch : branches) {
+        if (branch && isTwoPortInternalBranch(*branch) && sharesEndpoints(ref, branch)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool includeInSpanJunction(const BranchItem* member, const BranchItem& port,
+                           const std::vector<BranchItem*>& branches,
+                           const std::vector<TwoPortItem*>& twoPorts, bool excludePort) {
+    if (!member || (excludePort && member == &port)) {
+        return false;
+    }
+    if (!sharesEndpoints(&port, member)) {
+        return false;
+    }
+    if (isTwoPortInternalBranch(*member)) {
+        if (internalPortCountOnSpan(member, branches) > 1) {
+            return true;
+        }
+        return externalBranchParallelToPort(member, branches, twoPorts) == nullptr;
+    }
+    return true;
+}
+
+}  // namespace
+
+SymEngine::RCP<const SymEngine::Basic> signedSpanJunctionFlowSum(
+    const BranchItem& port, const std::vector<BranchItem*>& branches,
+    const std::vector<TwoPortItem*>& twoPorts, bool excludePort) {
+    SymEngine::RCP<const SymEngine::Basic> sum = SymEngine::integer(0);
+    for (BranchItem* branch : branches) {
+        if (!includeInSpanJunction(branch, port, branches, twoPorts, excludePort)) {
+            continue;
+        }
+        sum = SymEngine::add(sum, signedParallelFlowExpr(port, *branch));
+    }
+    return sum;
+}
+
+bool omitFromContinuityCut(const BranchItem* branch,
+                           const std::vector<BranchItem*>& branches,
+                           const std::vector<TwoPortItem*>& twoPorts) {
+    if (!branch) {
+        return true;
+    }
+    if (!isTwoPortInternalBranch(*branch)) {
+        return false;
+    }
+    // ponytail: stacked transformers can share one span; each port bond is an independent flow.
+    if (internalPortCountOnSpan(branch, branches) > 1) {
+        return false;
+    }
+    return externalBranchParallelToPort(branch, branches, twoPorts) != nullptr;
+}
+
+bool skipTwigFlowContinuity(const BranchItem& twig,
+                            const std::vector<TwoPortItem*>& twoPorts,
+                            const std::vector<BranchItem*>& branches) {
+    (void)twoPorts;
+    return isExternalBranchOnPortSpan(twig, branches);
+}
+
+SymEngine::RCP<const SymEngine::Basic> signedParallelFlowExpr(const BranchItem& fromRef,
+                                                                const BranchItem& parallel) {
+    const SymEngine::RCP<const SymEngine::Basic> flow =
+        SymEngine::symbol(branchThroughSymbol(parallel).toStdString());
+    if (parallel.from() == fromRef.from() && parallel.to() == fromRef.to()) {
+        return flow;
+    }
+    if (parallel.from() == fromRef.to() && parallel.to() == fromRef.from()) {
+        return SymEngine::neg(flow);
+    }
+    return SymEngine::integer(0);
 }
 
 SymEngine::RCP<const SymEngine::Basic> twoPortModulusExpr(const TwoPortItem& twoPort) {
@@ -595,7 +826,7 @@ void applyConstantThroughNaming(BranchItem* branch) {
     if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
         return;
     }
-    if (!isAutoPassiveThroughName(*branch)) {
+    if (!branch->name().trimmed().isEmpty() && !isAutoPassiveThroughName(*branch)) {
         return;
     }
     branch->setName(
@@ -642,6 +873,14 @@ const bool kParseSelfCheck = [] {
     SymEngine::RCP<const SymEngine::Basic> expr;
     assert(parseElementConstant(QStringLiteral("1"), expr));
     assert(eq(*expr, *SymEngine::integer(1)));
+    assert(!isValidElementConstant(QStringLiteral("1")));
+    assert(!isValidElementConstant(QStringLiteral("42")));
+    assert(!isValidElementConstant(QStringLiteral("3.14")));
+    assert(isValidElementConstant(QStringLiteral("R1")));
+    assert(isValidElementConstant(QStringLiteral("C2")));
+    assert(defaultElementConstant(3, SystemType::Mechanical) == QStringLiteral("M3"));
+    assert(defaultElementConstant(2, SystemType::Electrical) == QStringLiteral("C2"));
+    assert(defaultElementConstant(5, SystemType::MechanicalRotational) == QStringLiteral("J5"));
     assert(isValidVariableSymbol(QStringLiteral("v1")));
     assert(isValidVariableSymbol(QStringLiteral("f1")));
     assert(isValidVariableSymbol(QStringLiteral("f1_a")));
@@ -659,6 +898,7 @@ const bool kParseSelfCheck = [] {
            QStringLiteral("f_m2"));
     assert(throughNameFromConstant(QStringLiteral("C1"), 2, SystemType::Electrical) ==
            QStringLiteral("i_C1"));
+    assert(!isAutoPassiveThroughName(QString()));
     assert(defaultActiveThroughName(2) == QStringLiteral("I2"));
     assert(isAutoThroughName(QStringLiteral("Is3")));
     assert(isAutoThroughName(QStringLiteral("Vs2")));
@@ -716,6 +956,34 @@ const bool kParseSelfCheck = [] {
     assert(isValidVariableSymbol(QStringLiteral("Omega1")));
     assert(isValidVariableSymbol(QStringLiteral("F1")));
     assert(isValidVariableSymbol(QStringLiteral("T1")));
+    // ponytail: shared-span omit logic; ceiling: stack-only nodes, no scene graph wiring.
+    {
+        NodeItem n1(5.0);
+        NodeItem n2(5.0);
+        BranchItem port1(&n1, &n2, 0, 3);
+        BranchItem port2(&n1, &n2, 1, 3);
+        BranchItem parallel(&n1, &n2, 2, 3);
+        port1.setTwoPortPort(true);
+        port2.setTwoPortPort(true);
+        parallel.setElementConstant(QStringLiteral("I1"));
+        parallel.setBranchType(BranchType::T);
+        const std::vector<BranchItem*> spanBranches = {&port1, &port2, &parallel};
+        const std::vector<TwoPortItem*> noTwoPorts;
+        assert(omitFromContinuityCut(&port1, spanBranches, noTwoPorts));
+        assert(omitFromContinuityCut(&port2, spanBranches, noTwoPorts));
+        assert(!omitFromContinuityCut(&parallel, spanBranches, noTwoPorts));
+        BranchItem port3(&n1, &n2, 3, 3);
+        port3.setTwoPortPort(true);
+        assert(!omitFromContinuityCut(&port1, {&port1, &port2, &port3, &parallel}, noTwoPorts));
+        parallel.setName(QStringLiteral("f_parallel"));
+        port2.setName(QStringLiteral("f_p2"));
+        port3.setName(QStringLiteral("f_p3"));
+        const std::vector<BranchItem*> stacked = {&port1, &port2, &port3, &parallel};
+        const auto junctionSum = signedSpanJunctionFlowSum(port1, stacked, noTwoPorts, true);
+        assert(eq(*junctionSum, *SymEngine::add(SymEngine::symbol("f_parallel"),
+                                                 SymEngine::symbol("f_p2"),
+                                                 SymEngine::symbol("f_p3"))));
+    }
     return true;
 }();
 

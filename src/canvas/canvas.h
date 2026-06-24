@@ -100,17 +100,23 @@ public:
 
     void setSourceInputId(int id) { m_sourceInputId = id; }
 
+    bool isTwoPortPort() const { return m_twoPortPort; }
 
+    void setTwoPortPort(bool port) { m_twoPortPort = port; }
 
 protected:
 
     QRectF boundingRect() const override;
+
+    QPainterPath shape() const override;
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
     QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) override;
+
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
 
 
 
@@ -141,6 +147,8 @@ private:
     int m_serialId = 0;
 
     int m_sourceInputId = 0;
+
+    bool m_twoPortPort = false;
 
     void updateBranchPen();
 
@@ -346,7 +354,7 @@ class GraphScene : public QGraphicsScene {
 
 public:
 
-    enum class Mode { Select, AddNode, AddBranch, AddTwoPort };
+    enum class Mode { Select, AddNode, AddBranch, AddTwoPort, SelectNormalTree };
 
 
 
@@ -413,7 +421,13 @@ public:
     TwoPortItem* createTwoPort(const QPointF& center, TwoPortKind kind,
                                const QString& modulus = QString(), const QString& name = QString());
 
+    TwoPortItem* createTwoPortFromPorts(NodeItem* v1, NodeItem* v2, NodeItem* g1, NodeItem* g2,
+                                        TwoPortKind kind, const QString& modulus = QString(),
+                                        const QString& name = QString());
+
     void destroyTwoPort(TwoPortItem* item);
+
+    void purgeTwoPort(TwoPortItem* item);
 
 
 
@@ -546,6 +560,8 @@ public:
 
     void tryMergeOverlappingNodes(NodeItem* moved);
 
+    QString takeLoadWarning();
+
     std::vector<BranchItem*> branchesBetween(NodeItem* a, NodeItem* b) const;
 
     TwoPortItem* twoPortAt(const QPointF& scenePos) const;
@@ -582,9 +598,27 @@ public:
 
     lg::NormalTreeResult findNormalTree();
 
+    lg::NormalTreeResult commitNormalTreeSelection(const std::vector<BranchItem*>& treeBranches);
+
+    void beginManualNormalTreeSelection();
+
+    void toggleManualNormalTreeBranch(BranchItem* branch);
+
+    void setManualNormalTreeBranchRole(BranchItem* branch, bool inTree);
+
+    void acceptManualNormalTreeSelection();
+
+    void cancelManualNormalTreeSelection();
+
+    const lg::NormalTreeResult& manualNormalTreeValidation() const {
+        return m_manualNormalTreeValidation;
+    }
+
     void clearNormalTreeHighlight();
 
     bool normalTreeHighlightActive() const { return m_normalTreeHighlightActive; }
+
+    bool normalTreeIsManual() const { return m_normalTreeManual; }
 
     const lg::NormalTreeResult& lastNormalTreeResult() const { return m_lastNormalTreeResult; }
 
@@ -611,6 +645,14 @@ signals:
     void modeChanged(Mode mode);
 
     void graphChanged();
+
+    void normalTreeHighlightChanged();
+
+    void manualNormalTreeValidationChanged(const lg::NormalTreeResult& result);
+
+    void manualNormalTreeAccepted(const lg::NormalTreeResult& result);
+
+    void manualNormalTreeRejected(const QString& message);
 
 
 
@@ -656,11 +698,35 @@ private:
 
     bool m_suppressGraphChange = false;
 
+    QString m_loadWarning;
+
     bool m_normalTreeHighlightActive = false;
+
+    bool m_normalTreeManual = false;
 
     lg::NormalTreeResult m_lastNormalTreeResult;
 
     lg::StateSpaceResult m_lastStateSpaceResult;
+
+    struct ManualNormalTreeBackup {
+        bool highlightActive = false;
+        lg::NormalTreeResult result;
+    };
+
+    ManualNormalTreeBackup m_manualNormalTreeBackup;
+
+    lg::NormalTreeResult m_manualNormalTreeValidation;
+
+    void leaveManualNormalTreeMode(bool accept);
+
+    void restoreManualNormalTreeBackup();
+
+    void refreshManualNormalTreeValidation();
+
+    void setNormalTreePickingPassthrough(bool enabled);
+
+    void collectGraphItems(std::vector<NodeItem*>& nodes, std::vector<BranchItem*>& branches,
+                           std::vector<TwoPortItem*>& twoPorts) const;
 
     void notifyGraphChanged();
 
@@ -687,8 +753,6 @@ public:
 
 
 protected:
-
-    void keyPressEvent(QKeyEvent* event) override;
 
     void wheelEvent(QWheelEvent* event) override;
 

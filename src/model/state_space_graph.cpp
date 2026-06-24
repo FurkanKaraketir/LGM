@@ -6,35 +6,68 @@
 #include <symengine/add.h>
 #include <symengine/integer.h>
 #include <symengine/mul.h>
+#include <symengine/subs.h>
+#include <symengine/mul.h>
+#include <symengine/subs.h>
 
 #include <algorithm>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace lg::ss {
 
 using SymEngine::add;
+using SymEngine::eq;
+using SymEngine::expand;
 using SymEngine::integer;
+using SymEngine::div;
 using SymEngine::mul;
 using SymEngine::neg;
+using SymEngine::sub;
+using SymEngine::subs;
 
 QString storageStateSymbol(const BranchItem& branch, bool inTree) {
     const BranchType type = effectivePassiveBranchType(branch);
     if (type == BranchType::A && inTree) {
         return branchAcrossSymbol(branch);
     }
-    return branchFlowSymbol(branch);
+    if (!branch.isActive()) {
+        const QString k = branch.elementConstant().trimmed();
+        const QChar c = k.isEmpty() ? QChar() : k.at(0).toUpper();
+        if (c == QLatin1Char('I') || c == QLatin1Char('J')) {
+            const QString across = branchAcrossSymbol(branch);
+            if (!across.isEmpty() && across != branchThroughSymbol(branch)) {
+                return across;
+            }
+        }
+        // ponytail: K maps to effective T but co-tree storage is still the through (f_K)
+        if (c == QLatin1Char('K') && type == BranchType::T) {
+            return branchThroughSymbol(branch);
+        }
+    }
+    return branchThroughSymbol(branch);
 }
 
-bool isStateBranch(const NormalTreeResult& tree, BranchItem* branch) {
+bool isStateBranch(const NormalTreeResult& tree, BranchItem* branch,
+                   const std::vector<BranchItem*>& branches,
+                   const std::vector<TwoPortItem*>& twoPorts) {
     if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
         return false;
     }
     const bool inTree =
         std::find(tree.treeBranches.begin(), tree.treeBranches.end(), branch) !=
         tree.treeBranches.end();
+    if (inTree && isExternalBranchOnPortSpan(*branch, branches) &&
+        !isPortSpanStorageBranch(*branch, branches)) {
+        return false;
+    }
     const BranchType type = effectivePassiveBranchType(*branch);
     if (type == BranchType::A && inTree) {
+        return true;
+    }
+    if (type == BranchType::A && !inTree &&
+        isExternalBranchOnPortSpan(*branch, branches)) {
         return true;
     }
     if (type == BranchType::T && !inTree) {
@@ -142,7 +175,7 @@ RCP<const Basic> signedThrough(BranchItem* branch, NodeItem* from, NodeItem* to)
     if (!branch || !from || !to) {
         return integer(0);
     }
-    const RCP<const Basic> flow = symOf(branchFlowSymbol(*branch));
+    const RCP<const Basic> flow = symOf(branchThroughSymbol(*branch));
     if (branch->from() == from && branch->to() == to) {
         return flow;
     }
@@ -150,6 +183,107 @@ RCP<const Basic> signedThrough(BranchItem* branch, NodeItem* from, NodeItem* to)
         return neg(flow);
     }
     return integer(0);
+}
+
+RCP<const Basic> signedThroughForContinuityCut(BranchItem* branch, NodeItem* from, NodeItem* to,
+                                               BranchItem* /*twig*/,
+                                               const std::vector<BranchItem*>& /*branches*/,
+                                               const std::vector<TwoPortItem*>& /*twoPorts*/) {
+    if (!branch) {
+        return integer(0);
+    }
+    return signedThrough(branch, from, to);
+}
+
+namespace {
+
+const NodeItem* otherAcrossNode(const TwoPortItem& twoPort, const NodeItem* across) {
+    if (twoPort.v1() == across) {
+        return twoPort.v2();
+    }
+    if (twoPort.v2() == across) {
+        return twoPort.v1();
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+std::optional<RCP<const Basic>> transformerModulusProductBetween(
+    const NodeItem* fromAcross, const NodeItem* toAcross,
+    const std::vector<TwoPortItem*>& twoPorts) {
+    if (!fromAcross || !toAcross || fromAcross == toAcross) {
+        return integer(1);
+    }
+    std::vector<const TwoPortItem*> path;
+    std::unordered_set<const NodeItem*> seen;
+    std::queue<std::pair<const NodeItem*, std::vector<const TwoPortItem*>>> queue;
+    seen.insert(fromAcross);
+    queue.push({fromAcross, {}});
+    while (!queue.empty()) {
+        const auto [node, soFar] = queue.front();
+        queue.pop();
+        if (node == toAcross) {
+            path = soFar;
+            break;
+        }
+        for (TwoPortItem* twoPort : twoPorts) {
+            if (!twoPort || twoPort->kind() != TwoPortKind::Transformer) {
+                continue;
+            }
+            const NodeItem* onPort = nullptr;
+            if (twoPort->v1() == node) {
+                onPort = twoPort->v1();
+            } else if (twoPort->v2() == node) {
+                onPort = twoPort->v2();
+            }
+            if (!onPort) {
+                continue;
+            }
+            const NodeItem* next = otherAcrossNode(*twoPort, onPort);
+            if (!next || seen.count(next) != 0) {
+                continue;
+            }
+            std::vector<const TwoPortItem*> extended = soFar;
+            extended.push_back(twoPort);
+            seen.insert(next);
+            queue.push({next, std::move(extended)});
+        }
+    }
+    if (path.empty()) {
+        return std::nullopt;
+    }
+    RCP<const Basic> product = integer(1);
+    for (const TwoPortItem* twoPort : path) {
+        product = mul(product, lg::twoPortModulusExpr(*twoPort));
+    }
+    return product;
+}
+
+std::optional<RCP<const Basic>> composeReflectedCoTreeForce(
+    const QString& startPortFlow, const QString& complianceFlow,
+    const std::unordered_map<QString, RCP<const Basic>>& replacements,
+    const std::vector<QString>& /*branchThroughSymbols*/) {
+    if (startPortFlow.isEmpty() || complianceFlow.isEmpty()) {
+        return std::nullopt;
+    }
+    const std::unordered_map<QString, RCP<const Basic>> resolved = resolveReplacements(replacements);
+    const SymEngine::map_basic_basic subMap = substitutionMap(resolved);
+    const RCP<const Basic> complianceSym = symOf(complianceFlow);
+    RCP<const Basic> expr = expand(subs(symOf(startPortFlow), subMap));
+    if (eq(*linearCoeffRCP(expr, complianceSym), *integer(0))) {
+        return std::nullopt;
+    }
+    for (const auto& [name, replacement] : resolved) {
+        if (!isValidVariableSymbol(name) || name == complianceFlow) {
+            continue;
+        }
+        if (!eq(*linearCoeffRCP(expr, symOf(name)), *integer(0))) {
+            return std::nullopt;
+        }
+        (void)replacement;
+    }
+    return expr;
 }
 
 std::vector<QString> collectNodeAcrossSymbols(const std::vector<NodeItem*>& nodes) {

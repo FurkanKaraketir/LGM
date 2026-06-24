@@ -1,7 +1,5 @@
 #include "canvas.h"
 
-#include <QKeyEvent>
-#include <QKeySequence>
 #include <QWheelEvent>
 
 GraphView::GraphView(GraphScene* scene, QWidget* parent) : QGraphicsView(scene, parent) {
@@ -23,6 +21,10 @@ void GraphView::setToolMode(GraphScene::Mode mode) {
         break;
     case GraphScene::Mode::AddBranch:
     case GraphScene::Mode::AddTwoPort:
+        setCursor(Qt::PointingHandCursor);
+        setDragMode(QGraphicsView::NoDrag);
+        break;
+    case GraphScene::Mode::SelectNormalTree:
         setCursor(Qt::PointingHandCursor);
         setDragMode(QGraphicsView::NoDrag);
         break;
@@ -74,102 +76,4 @@ void GraphView::wheelEvent(QWheelEvent* event) {
         return;
     }
     QGraphicsView::wheelEvent(event);
-}
-
-void GraphView::keyPressEvent(QKeyEvent* event) {
-    auto* graph = static_cast<GraphScene*>(scene());
-    if (event->matches(QKeySequence::Undo)) {
-        graph->undo();
-        event->accept();
-        return;
-    }
-    if (event->matches(QKeySequence::Redo)) {
-        graph->redo();
-        event->accept();
-        return;
-    }
-    if (event->matches(QKeySequence::ZoomIn)) {
-        zoomIn();
-        event->accept();
-        return;
-    }
-    if (event->matches(QKeySequence::ZoomOut)) {
-        zoomOut();
-        event->accept();
-        return;
-    }
-    if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
-        graph->pushDeleteSelection();
-        event->accept();
-        return;
-    }
-    if (event->key() == Qt::Key_F && graph->mode() == GraphScene::Mode::Select) {
-        BranchItem* branch = nullptr;
-        for (QGraphicsItem* item : graph->selectedItems()) {
-            if (auto* selectedBranch = dynamic_cast<BranchItem*>(item)) {
-                if (branch) {
-                    branch = nullptr;
-                    break;
-                }
-                branch = selectedBranch;
-            }
-        }
-        if (branch) {
-            graph->pushFlipBranch(branch);
-            event->accept();
-            return;
-        }
-    }
-    if (event->key() == Qt::Key_T && graph->mode() == GraphScene::Mode::Select) {
-        for (QGraphicsItem* item : graph->selectedItems()) {
-            if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
-                graph->pushToggleTwoPortKind(twoPort);
-                event->accept();
-                return;
-            }
-            if (auto* node = dynamic_cast<NodeItem*>(item)) {
-                if (TwoPortItem* twoPort = node->twoPort()) {
-                    graph->pushToggleTwoPortKind(twoPort);
-                    event->accept();
-                    return;
-                }
-            }
-        }
-    }
-    if (event->key() == Qt::Key_M && graph->mode() == GraphScene::Mode::Select) {
-        QList<NodeItem*> nodes;
-        for (QGraphicsItem* item : graph->selectedItems()) {
-            if (auto* node = dynamic_cast<NodeItem*>(item)) {
-                if (!nodes.contains(node)) {
-                    nodes.push_back(node);
-                }
-            }
-        }
-        if (nodes.size() == 2) {
-            graph->pushMergeNodes(nodes[0], nodes[1]);
-            event->accept();
-            return;
-        }
-    }
-    switch (event->key()) {
-    case Qt::Key_N:
-        setToolMode(GraphScene::Mode::AddNode);
-        event->accept();
-        return;
-    case Qt::Key_B:
-        setToolMode(GraphScene::Mode::AddBranch);
-        event->accept();
-        return;
-    case Qt::Key_P:
-        setToolMode(GraphScene::Mode::AddTwoPort);
-        event->accept();
-        return;
-    case Qt::Key_Escape:
-        setToolMode(GraphScene::Mode::Select);
-        event->accept();
-        return;
-    default:
-        break;
-    }
-    QGraphicsView::keyPressEvent(event);
 }

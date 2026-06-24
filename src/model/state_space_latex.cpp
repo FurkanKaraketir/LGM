@@ -5,6 +5,8 @@
 #include <symengine/integer.h>
 #include <symengine/printers/latex.h>
 
+#include <QRegularExpression>
+
 #include <cassert>
 
 namespace lg::ss {
@@ -48,6 +50,8 @@ QString displayExprText(const RCP<const Basic>& expr, const QStringList& inputs,
         const QString& input = inputs.at(i);
         const QString label =
             i < inputLabels.size() ? inputLabels.at(i) : input + QStringLiteral("(t)");
+        text.replace(QRegularExpression(QStringLiteral("\\b%1\\b").arg(QRegularExpression::escape(input))),
+                     label);
         text.replace(dotName(input), inputDerivativeDisplay(input, label));
     }
     return text;

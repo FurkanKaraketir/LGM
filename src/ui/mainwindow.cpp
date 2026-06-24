@@ -2,11 +2,12 @@
 
 
 
+#include "app_shortcuts.h"
 #include "canvas.h"
+#include "latex_widget.h"
 #include "settings_window.h"
 
 #include "elemental_equation.h"
-#include "latex_widget.h"
 #include "state_space.h"
 
 
@@ -27,9 +28,17 @@
 
 #include <QFileInfo>
 
+#include <QFont>
+
+#include <QFrame>
+
 #include <QGuiApplication>
 
 #include <QHeaderView>
+
+#include <QInputDialog>
+
+#include <QKeyEvent>
 
 #include <QLabel>
 
@@ -41,13 +50,25 @@
 
 #include <QTreeWidgetItemIterator>
 
+#include <QWidget>
+
+#include <QMenu>
+
 #include <QMenuBar>
 
 #include <QMessageBox>
 
 #include <QSignalBlocker>
 
+#include <QHBoxLayout>
+
 #include <QPushButton>
+
+#include <QShortcut>
+
+#include <QScrollArea>
+
+#include <QSet>
 
 #include <QStatusBar>
 
@@ -60,6 +81,8 @@
 #include <QToolBar>
 
 #include <QVBoxLayout>
+
+#include <QVector>
 
 
 
@@ -111,28 +134,66 @@ void populateSystemTypeCombo(QComboBox* combo) {
 
 
 
-BranchItem* singleSelectedBranch(const GraphScene* scene) {
+struct GraphSelectionEntry {
+    void* ptr = nullptr;
+    GraphObjectKind kind = GraphObjectKind::Node;
+};
 
-    BranchItem* branch = nullptr;
+QString objectLabel(GraphObjectKind kind, void* ptr) {
+    switch (kind) {
+    case GraphObjectKind::Node:
+        return static_cast<NodeItem*>(ptr)->name();
+    case GraphObjectKind::Branch:
+        return static_cast<BranchItem*>(ptr)->name();
+    case GraphObjectKind::TwoPort:
+        return static_cast<TwoPortItem*>(ptr)->name();
+    }
+    return {};
+}
+
+QVector<GraphSelectionEntry> primarySceneSelection(const GraphScene* scene) {
+    QVector<GraphSelectionEntry> entries;
+    QSet<const void*> seen;
+
+    auto add = [&](void* ptr, GraphObjectKind kind) {
+        if (!ptr || seen.contains(ptr)) {
+            return;
+        }
+        seen.insert(ptr);
+        entries.push_back({ptr, kind});
+    };
 
     for (QGraphicsItem* item : scene->selectedItems()) {
-
-        if (auto* selectedBranch = dynamic_cast<BranchItem*>(item)) {
-
-            if (branch) {
-
-                return nullptr;
-
-            }
-
-            branch = selectedBranch;
-
+        if (dynamic_cast<TwoPortItem*>(item)) {
+            add(item, GraphObjectKind::TwoPort);
         }
-
     }
 
-    return branch;
+    for (QGraphicsItem* item : scene->selectedItems()) {
+        if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            if (const TwoPortItem* twoPort = scene->twoPortFor(branch)) {
+                if (seen.contains(twoPort)) {
+                    continue;
+                }
+            }
+            add(branch, GraphObjectKind::Branch);
+        } else if (auto* node = dynamic_cast<NodeItem*>(item)) {
+            if (node->twoPort() && seen.contains(node->twoPort())) {
+                continue;
+            }
+            add(node, GraphObjectKind::Node);
+        }
+    }
 
+    return entries;
+}
+
+BranchItem* singleSelectedBranch(const GraphScene* scene) {
+    const QVector<GraphSelectionEntry> entries = primarySceneSelection(scene);
+    if (entries.size() != 1 || entries.front().kind != GraphObjectKind::Branch) {
+        return nullptr;
+    }
+    return static_cast<BranchItem*>(entries.front().ptr);
 }
 
 
@@ -155,13 +216,13 @@ QIcon themedIcon(const char* name, QStyle::StandardPixmap fallback) {
 
 QAction* addTool(QActionGroup* group, QToolBar* toolbar, const QIcon& icon, const QString& text,
 
-                 const QKeySequence& shortcut, GraphScene::Mode mode, GraphView* view) {
+                 const char* shortcutId, GraphScene::Mode mode, GraphView* view) {
 
     auto* action = toolbar->addAction(icon, text);
 
     action->setCheckable(true);
 
-    action->setShortcut(shortcut);
+    action->setObjectName(QString::fromLatin1(shortcutId));
 
     action->setShortcutContext(Qt::ApplicationShortcut);
 
@@ -193,11 +254,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     setCentralWidget(m_view);
 
+    m_view->installEventFilter(this);
+    m_view->viewport()->installEventFilter(this);
+
     
 
     m_undoAction = new QAction(themedIcon("edit-undo", QStyle::SP_ArrowBack), tr("Undo"), this);
 
-    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_undoAction->setObjectName(QStringLiteral("edit.undo"));
 
     m_undoAction->setShortcutContext(Qt::ApplicationShortcut);
 
@@ -209,13 +273,39 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_redoAction = new QAction(themedIcon("edit-redo", QStyle::SP_ArrowForward), tr("Redo"), this);
 
-    m_redoAction->setShortcut(QKeySequence::Redo);
+    m_redoAction->setObjectName(QStringLiteral("edit.redo"));
 
     m_redoAction->setShortcutContext(Qt::ApplicationShortcut);
 
     m_redoAction->setEnabled(false);
 
     connect(m_redoAction, &QAction::triggered, m_scene, &GraphScene::redo);
+
+
+
+    m_toggleTwoPortAction = new QAction(this);
+    m_toggleTwoPortAction->setObjectName(QStringLiteral("edit.toggleTwoPort"));
+    m_toggleTwoPortAction->setShortcutContext(Qt::ApplicationShortcut);
+    connect(m_toggleTwoPortAction, &QAction::triggered, this, [this]() {
+        if (m_scene->mode() != GraphScene::Mode::Select) {
+            return;
+        }
+        for (QGraphicsItem* item : m_scene->selectedItems()) {
+            if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
+                m_scene->pushToggleTwoPortKind(twoPort);
+                updatePropertyPanel();
+                return;
+            }
+            if (auto* node = dynamic_cast<NodeItem*>(item)) {
+                if (TwoPortItem* twoPort = node->twoPort()) {
+                    m_scene->pushToggleTwoPortKind(twoPort);
+                    updatePropertyPanel();
+                    return;
+                }
+            }
+        }
+    });
+    addAction(m_toggleTwoPortAction);
 
 
 
@@ -262,7 +352,7 @@ void MainWindow::buildMenuBar() {
 
     auto* newAction = fileMenu->addAction(themedIcon("document-new", QStyle::SP_FileIcon), tr("&New"));
 
-    newAction->setShortcut(QKeySequence::New);
+    newAction->setObjectName(QStringLiteral("file.new"));
 
     connect(newAction, &QAction::triggered, this, &MainWindow::fileNew);
 
@@ -270,7 +360,7 @@ void MainWindow::buildMenuBar() {
 
     auto* openAction = fileMenu->addAction(themedIcon("document-open", QStyle::SP_DirIcon), tr("&Open..."));
 
-    openAction->setShortcut(QKeySequence::Open);
+    openAction->setObjectName(QStringLiteral("file.open"));
 
     connect(openAction, &QAction::triggered, this, &MainWindow::fileOpen);
 
@@ -278,7 +368,7 @@ void MainWindow::buildMenuBar() {
 
     auto* saveAction = fileMenu->addAction(themedIcon("document-save", QStyle::SP_DialogSaveButton), tr("&Save"));
 
-    saveAction->setShortcut(QKeySequence::Save);
+    saveAction->setObjectName(QStringLiteral("file.save"));
 
     connect(saveAction, &QAction::triggered, this, &MainWindow::fileSave);
 
@@ -286,7 +376,7 @@ void MainWindow::buildMenuBar() {
 
     auto* saveAsAction = fileMenu->addAction(themedIcon("document-save-as", QStyle::SP_DialogSaveButton), tr("Save &As..."));
 
-    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    saveAsAction->setObjectName(QStringLiteral("file.saveAs"));
 
     connect(saveAsAction, &QAction::triggered, this, &MainWindow::fileSaveAs);
 
@@ -298,7 +388,7 @@ void MainWindow::buildMenuBar() {
 
     auto* exitAction = fileMenu->addAction(themedIcon("application-exit", QStyle::SP_DialogCloseButton), tr("E&xit"));
 
-    exitAction->setShortcut(QKeySequence::Quit);
+    exitAction->setObjectName(QStringLiteral("file.quit"));
 
     connect(exitAction, &QAction::triggered, this, &QMainWindow::close);
 
@@ -319,7 +409,7 @@ void MainWindow::buildMenuBar() {
 
     m_flipBranchAction = editMenu->addAction(tr("Flip &Branch"));
 
-    m_flipBranchAction->setShortcut(QKeySequence(Qt::Key_F));
+    m_flipBranchAction->setObjectName(QStringLiteral("edit.flipBranch"));
 
     m_flipBranchAction->setShortcutContext(Qt::ApplicationShortcut);
 
@@ -347,7 +437,7 @@ void MainWindow::buildMenuBar() {
 
     m_mergeNodesAction = editMenu->addAction(tr("Combine &Nodes"));
 
-    m_mergeNodesAction->setShortcut(QKeySequence(Qt::Key_M));
+    m_mergeNodesAction->setObjectName(QStringLiteral("edit.mergeNodes"));
 
     m_mergeNodesAction->setShortcutContext(Qt::ApplicationShortcut);
 
@@ -381,7 +471,71 @@ void MainWindow::buildMenuBar() {
 
     auto* selectAllAction = editMenu->addAction(tr("Select &All"));
 
-    selectAllAction->setShortcut(QKeySequence::SelectAll);
+    selectAllAction->setObjectName(QStringLiteral("edit.selectAll"));
+
+    connect(selectAllAction, &QAction::triggered, this, [this]() {
+
+        m_blockSceneSelectionSync = true;
+
+        m_scene->clearSelection();
+
+        m_objectTree->clearSelection();
+
+        m_blockSceneSelectionSync = false;
+
+        for (QGraphicsItem* item : m_scene->items()) {
+
+            if (dynamic_cast<TwoPortItem*>(item)) {
+
+                static_cast<TwoPortItem*>(item)->setSelected(true);
+
+            }
+
+        }
+
+        for (QGraphicsItem* item : m_scene->items()) {
+
+            if (auto* node = dynamic_cast<NodeItem*>(item)) {
+
+                if (!node->twoPort()) {
+
+                    node->setSelected(true);
+
+                }
+
+            } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+
+                if (!m_scene->twoPortFor(branch)) {
+
+                    branch->setSelected(true);
+
+                }
+
+            }
+
+        }
+
+    });
+
+
+
+    auto* clearSelectionAction = editMenu->addAction(tr("Clear Selection"));
+
+    clearSelectionAction->setObjectName(QStringLiteral("edit.clearSelection"));
+
+    connect(clearSelectionAction, &QAction::triggered, this, [this]() {
+
+        m_blockSceneSelectionSync = true;
+
+        m_scene->clearSelection();
+
+        m_objectTree->clearSelection();
+
+        m_blockSceneSelectionSync = false;
+
+        updatePropertyPanel();
+
+    });
 
 
 
@@ -417,7 +571,15 @@ void MainWindow::buildMenuBar() {
 
     propertyPanelAction->setChecked(true);
 
-    connect(propertyPanelAction, &QAction::toggled, m_propertyDock, &QDockWidget::setVisible);
+    connect(propertyPanelAction, &QAction::toggled, this, [this](bool checked) {
+
+        if (m_propertyDock) {
+
+            m_propertyDock->setVisible(checked);
+
+        }
+
+    });
 
     
 
@@ -427,7 +589,35 @@ void MainWindow::buildMenuBar() {
 
     objectListAction->setChecked(true);
 
-    connect(objectListAction, &QAction::toggled, m_objectListDock, &QDockWidget::setVisible);
+    connect(objectListAction, &QAction::toggled, this, [this](bool checked) {
+
+        if (m_objectListDock) {
+
+            m_objectListDock->setVisible(checked);
+
+        }
+
+    });
+
+    
+
+    auto* stateSpacePanelAction = viewMenu->addAction(tr("State &Space Results"));
+
+    stateSpacePanelAction->setObjectName(QStringLiteral("view.stateSpacePanel"));
+
+    stateSpacePanelAction->setCheckable(true);
+
+    stateSpacePanelAction->setChecked(false);
+
+    connect(stateSpacePanelAction, &QAction::toggled, this, [this](bool checked) {
+
+        if (m_stateSpaceDock) {
+
+            m_stateSpaceDock->setVisible(checked);
+
+        }
+
+    });
 
     
 
@@ -443,9 +633,13 @@ void MainWindow::buildMenuBar() {
 
         removeDockWidget(m_objectListDock);
 
+        removeDockWidget(m_stateSpaceDock);
+
         addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
 
         addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
+
+        addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
 
         m_objectListDock->show();
 
@@ -460,7 +654,7 @@ void MainWindow::buildMenuBar() {
     auto* findNormalTreeAction =
         analysisMenu->addAction(tr("Find &Normal Tree..."));
 
-    findNormalTreeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T));
+    findNormalTreeAction->setObjectName(QStringLiteral("analysis.normalTree"));
 
     connect(findNormalTreeAction, &QAction::triggered, this, [this]() {
 
@@ -493,7 +687,7 @@ void MainWindow::buildMenuBar() {
 
             statusBar()->showMessage(
 
-                tr("Normal tree — %1 branches, %2 links, order %3: %4")
+                tr("Normal tree — %1 branches, %2 links, order %3: %4.")
                     .arg(normalTree.treeBranches.size())
                     .arg(branchCount - static_cast<int>(normalTree.treeBranches.size()))
                     .arg(normalTree.stateVariables.size())
@@ -521,7 +715,7 @@ void MainWindow::buildMenuBar() {
 
     auto* stateSpaceAction = analysisMenu->addAction(tr("Compute &State Space..."));
 
-    stateSpaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+    stateSpaceAction->setObjectName(QStringLiteral("analysis.stateSpace"));
 
     connect(stateSpaceAction, &QAction::triggered, this, [this]() {
 
@@ -531,7 +725,7 @@ void MainWindow::buildMenuBar() {
 
             statusBar()->showMessage(result.message, 10000);
 
-            updatePropertyPanel();
+            updateStateSpacePanel();
 
             return;
 
@@ -553,9 +747,22 @@ void MainWindow::buildMenuBar() {
 
         m_scene->clearNormalTreeHighlight();
 
-        updatePropertyPanel();
-
         statusBar()->showMessage(tr("Normal tree highlight cleared."), 2000);
+
+    });
+
+    auto* selectNormalTreeAction =
+        analysisMenu->addAction(tr("Select Normal Tree..."));
+
+    selectNormalTreeAction->setObjectName(QStringLiteral("analysis.selectNormalTree"));
+
+    connect(selectNormalTreeAction, &QAction::triggered, this, [this]() {
+
+        m_scene->beginManualNormalTreeSelection();
+
+        m_view->setToolMode(GraphScene::Mode::SelectNormalTree);
+
+        updatePropertyPanel();
 
     });
 
@@ -606,23 +813,23 @@ void MainWindow::buildToolbar() {
 
         addTool(m_modeGroup, toolbar, themedIcon("cursor-arrow", QStyle::SP_FileDialogContentsView),
 
-                tr("Select"), QKeySequence(Qt::Key_Escape), GraphScene::Mode::Select, m_view);
+                tr("Select"), "tool.select", GraphScene::Mode::Select, m_view);
 
     m_addNodeAction = addTool(m_modeGroup, toolbar, themedIcon("list-add", QStyle::SP_FileDialogNewFolder),
 
-                               tr("Node"), QKeySequence(Qt::Key_N), GraphScene::Mode::AddNode, m_view);
+                               tr("Node"), "tool.addNode", GraphScene::Mode::AddNode, m_view);
 
     m_addBranchAction =
 
         addTool(m_modeGroup, toolbar, themedIcon("draw-line", QStyle::SP_ArrowRight), tr("Branch"),
 
-                QKeySequence(Qt::Key_B), GraphScene::Mode::AddBranch, m_view);
+                "tool.addBranch", GraphScene::Mode::AddBranch, m_view);
 
     m_addTwoPortAction = addTool(m_modeGroup, toolbar,
 
                                  themedIcon("insert-object", QStyle::SP_FileDialogDetailedView),
 
-                                 tr("Two-Port"), QKeySequence(Qt::Key_P), GraphScene::Mode::AddTwoPort,
+                                 tr("Two-Port"), "tool.addTwoPort", GraphScene::Mode::AddTwoPort,
 
                                  m_view);
 
@@ -659,7 +866,9 @@ void MainWindow::buildToolbar() {
     toolbar->addWidget(m_defaultSystemTypeCombo);
 
     m_deleteAction = toolbar->addAction(themedIcon("edit-delete", QStyle::SP_TrashIcon), tr("Delete"));
-    m_deleteAction->setToolTip(tr("Delete selection (Delete)"));
+    m_deleteAction->setObjectName(QStringLiteral("edit.delete"));
+    m_deleteAction->setShortcutContext(Qt::ApplicationShortcut);
+    m_deleteAction->setToolTip(tr("Delete selection"));
     connect(m_deleteAction, &QAction::triggered, m_scene, &GraphScene::pushDeleteSelection);
 
     m_selectAction->setChecked(true);
@@ -674,11 +883,11 @@ void MainWindow::buildToolbar() {
 
         toolbar->addAction(themedIcon("go-home", QStyle::SP_DirHomeIcon), tr("Home"));
 
-    homeAction->setShortcut(QKeySequence(Qt::Key_Home));
+    homeAction->setObjectName(QStringLiteral("view.home"));
 
     homeAction->setShortcutContext(Qt::ApplicationShortcut);
 
-    homeAction->setToolTip(tr("Center view on the graph (Home)"));
+    homeAction->setToolTip(tr("Center view on the graph"));
 
     connect(homeAction, &QAction::triggered, m_view, &GraphView::goHome);
 
@@ -688,11 +897,11 @@ void MainWindow::buildToolbar() {
 
         toolbar->addAction(themedIcon("zoom-in", QStyle::SP_ArrowUp), tr("Zoom In"));
 
-    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    zoomInAction->setObjectName(QStringLiteral("view.zoomIn"));
 
     zoomInAction->setShortcutContext(Qt::ApplicationShortcut);
 
-    zoomInAction->setToolTip(tr("Zoom in (Ctrl++, Shift+scroll)"));
+    zoomInAction->setToolTip(tr("Zoom in (Shift+scroll)"));
 
     connect(zoomInAction, &QAction::triggered, m_view, &GraphView::zoomIn);
 
@@ -702,11 +911,11 @@ void MainWindow::buildToolbar() {
 
         toolbar->addAction(themedIcon("zoom-out", QStyle::SP_ArrowDown), tr("Zoom Out"));
 
-    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    zoomOutAction->setObjectName(QStringLiteral("view.zoomOut"));
 
     zoomOutAction->setShortcutContext(Qt::ApplicationShortcut);
 
-    zoomOutAction->setToolTip(tr("Zoom out (Ctrl+-, Shift+scroll)"));
+    zoomOutAction->setToolTip(tr("Zoom out (Shift+scroll)"));
 
     connect(zoomOutAction, &QAction::triggered, m_view, &GraphView::zoomOut);
 
@@ -816,7 +1025,9 @@ void MainWindow::buildDockPanels() {
 
     m_objectTree->setAlternatingRowColors(true);
 
-    m_objectTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_objectTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    m_objectTree->setSelectionBehavior(QAbstractItemView::SelectRows);
 
     m_objectTree->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
 
@@ -828,7 +1039,141 @@ void MainWindow::buildDockPanels() {
 
 
 
+    m_stateSpaceDock = new QDockWidget(tr("State Space"), this);
+
+    m_stateSpaceDock->setObjectName(QStringLiteral("stateSpaceDock"));
+
+    m_stateSpaceDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+
+    m_stateSpaceDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+
+    m_stateSpaceDock->setMinimumHeight(120);
+
+
+
+    auto* stateSpaceScroll = new QScrollArea(m_stateSpaceDock);
+
+    stateSpaceScroll->setWidgetResizable(true);
+
+    stateSpaceScroll->setFrameShape(QFrame::NoFrame);
+
+    stateSpaceScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+
+
+    m_stateSpaceScrollContent = new QWidget(stateSpaceScroll);
+
+    m_stateSpaceLayout = new QVBoxLayout(m_stateSpaceScrollContent);
+
+    m_stateSpaceLayout->setContentsMargins(8, 8, 8, 8);
+
+    m_stateSpaceLayout->setSpacing(4);
+
+    stateSpaceScroll->setWidget(m_stateSpaceScrollContent);
+
+    m_stateSpaceDock->setWidget(stateSpaceScroll);
+
+    addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
+
+    m_stateSpaceDock->hide();
+
+
+
+    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
+
+        connect(m_stateSpaceDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
+
+    }
+
+
+
     connect(m_scene, &GraphScene::graphChanged, this, &MainWindow::updateObjectList);
+
+    connect(m_scene, &GraphScene::normalTreeHighlightChanged, this,
+            &MainWindow::updatePropertyPanel);
+
+    connect(m_scene, &GraphScene::manualNormalTreeValidationChanged, this,
+            [this](const lg::NormalTreeResult& result) {
+                if (m_scene->mode() != GraphScene::Mode::SelectNormalTree) {
+                    return;
+                }
+                updatePropertyPanel();
+                if (result.status == lg::NormalTreeResult::Status::Ok) {
+                    QStringList stateVarText;
+                    stateVarText.reserve(static_cast<int>(result.stateVariables.size()));
+                    for (const lg::NormalTreeResult::StateVariable& state : result.stateVariables) {
+                        stateVarText.push_back(state.symbol);
+                    }
+                    const QString stateVarSummary =
+                        stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
+                    statusBar()->showMessage(
+                        tr("Manual normal tree — valid, order %1: %2")
+                            .arg(result.stateVariables.size())
+                            .arg(stateVarSummary),
+                        0);
+                    return;
+                }
+                statusBar()->showMessage(
+                    result.message.isEmpty()
+                        ? tr("Manual normal tree — invalid selection.")
+                        : result.message,
+                    0);
+            });
+
+    connect(m_scene, &GraphScene::manualNormalTreeRejected, this,
+            [this](const QString& message) {
+                QMessageBox::warning(this, tr("Normal Tree"), message);
+                statusBar()->showMessage(tr("Manual normal tree selection discarded."), 4000);
+                updatePropertyPanel();
+            });
+
+    connect(m_scene, &GraphScene::manualNormalTreeAccepted, this,
+            [this](const lg::NormalTreeResult& result) {
+                QStringList stateVarText;
+                for (const lg::NormalTreeResult::StateVariable& state : result.stateVariables) {
+                    stateVarText.push_back(state.symbol);
+                }
+                const QString stateVarSummary =
+                    stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
+                statusBar()->showMessage(
+                    tr("Manual normal tree applied — %1 branches, order %2: %3.")
+                        .arg(result.treeBranches.size())
+                        .arg(result.stateVariables.size())
+                        .arg(stateVarSummary),
+                    8000);
+                m_view->setToolMode(GraphScene::Mode::Select);
+                updatePropertyPanel();
+            });
+
+    const auto applyManualTree = [this]() {
+        if (m_scene->mode() != GraphScene::Mode::SelectNormalTree) {
+            return;
+        }
+        m_scene->acceptManualNormalTreeSelection();
+        m_view->setToolMode(GraphScene::Mode::Select);
+    };
+
+    m_applyManualTreeReturnShortcut =
+        new QShortcut(QKeySequence(Qt::Key_Return), this, nullptr, nullptr, Qt::ApplicationShortcut);
+    m_applyManualTreeReturnShortcut->setEnabled(false);
+    connect(m_applyManualTreeReturnShortcut, &QShortcut::activated, this, applyManualTree);
+
+    m_applyManualTreeEnterShortcut =
+        new QShortcut(QKeySequence(Qt::Key_Enter), this, nullptr, nullptr, Qt::ApplicationShortcut);
+    m_applyManualTreeEnterShortcut->setEnabled(false);
+    connect(m_applyManualTreeEnterShortcut, &QShortcut::activated, this, applyManualTree);
+
+    m_cancelManualTreeShortcut =
+        new QShortcut(QKeySequence(Qt::Key_Escape), this, nullptr, nullptr, Qt::ApplicationShortcut);
+    m_cancelManualTreeShortcut->setEnabled(false);
+    connect(m_cancelManualTreeShortcut, &QShortcut::activated, this, [this]() {
+        m_scene->cancelManualNormalTreeSelection();
+        m_view->setToolMode(GraphScene::Mode::Select);
+        statusBar()->showMessage(tr("Manual normal tree selection cancelled."), 3000);
+        updatePropertyPanel();
+    });
+
+    connect(m_scene, &GraphScene::graphChanged, this, &MainWindow::updateStateSpacePanel);
 
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::syncObjectTreeSelection);
 
@@ -848,11 +1193,19 @@ void MainWindow::buildDockPanels() {
 
     updateFlipBranchAction();
 
+    updateStateSpacePanel();
+
 }
 
 
 
 void MainWindow::updateObjectList() {
+
+    if (m_clearingDocument) {
+
+        return;
+
+    }
 
     m_syncingObjectTree = true;
 
@@ -982,9 +1335,15 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
     }
 
-    QTreeWidgetItem* item = m_objectTree->currentItem();
+    const QList<QTreeWidgetItem*> items = m_objectTree->selectedItems();
 
-    if (!item || !objectPtr(item)) {
+    if (items.isEmpty()) {
+
+        m_blockSceneSelectionSync = true;
+
+        m_scene->clearSelection();
+
+        m_blockSceneSelectionSync = false;
 
         updatePropertyPanel();
 
@@ -998,49 +1357,85 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
     m_scene->clearSelection();
 
-    switch (objectKind(item)) {
+    const bool singleSelect = items.size() == 1;
 
-    case GraphObjectKind::Node: {
+    for (QTreeWidgetItem* item : items) {
 
-        auto* node = static_cast<NodeItem*>(objectPtr(item));
+        if (!objectPtr(item)) {
 
-        if (node->twoPort()) {
-
-            m_scene->selectTwoPortNode(node);
-
-        } else {
-
-            node->setSelected(true);
+            continue;
 
         }
 
-        break;
+        switch (objectKind(item)) {
 
-    }
+        case GraphObjectKind::Node: {
 
-    case GraphObjectKind::Branch: {
+            auto* node = static_cast<NodeItem*>(objectPtr(item));
 
-        auto* branch = static_cast<BranchItem*>(objectPtr(item));
+            if (node->twoPort()) {
 
-        if (TwoPortItem* twoPort = m_scene->twoPortFor(branch)) {
+                if (singleSelect) {
 
-            m_scene->selectTwoPort(twoPort);
+                    m_scene->selectTwoPortNode(node);
 
-        } else {
+                } else {
 
-            branch->setSelected(true);
+                    node->setSelected(true);
+
+                }
+
+            } else {
+
+                node->setSelected(true);
+
+            }
+
+            break;
 
         }
 
-        break;
+        case GraphObjectKind::Branch: {
 
-    }
+            auto* branch = static_cast<BranchItem*>(objectPtr(item));
 
-    case GraphObjectKind::TwoPort:
+            if (TwoPortItem* twoPort = m_scene->twoPortFor(branch)) {
 
-        m_scene->selectTwoPort(static_cast<TwoPortItem*>(objectPtr(item)));
+                if (singleSelect) {
 
-        break;
+                    m_scene->selectTwoPort(twoPort);
+
+                } else {
+
+                    branch->setSelected(true);
+
+                }
+
+            } else {
+
+                branch->setSelected(true);
+
+            }
+
+            break;
+
+        }
+
+        case GraphObjectKind::TwoPort:
+
+            if (singleSelect) {
+
+                m_scene->selectTwoPort(static_cast<TwoPortItem*>(objectPtr(item)));
+
+            } else {
+
+                static_cast<TwoPortItem*>(objectPtr(item))->setSelected(true);
+
+            }
+
+            break;
+
+        }
 
     }
 
@@ -1062,7 +1457,14 @@ void MainWindow::onPropertyTableItemChanged(QTableWidgetItem* item) {
 
     QTableWidgetItem* propItem = m_propertyTable->item(item->row(), 0);
 
-    if (!propItem || propItem->text() != tr("Name")) {
+    if (!propItem) {
+
+        return;
+
+    }
+
+    const QString property = propItem->text();
+    if (property != tr("Name") && property != tr("Through variable")) {
 
         return;
 
@@ -1142,7 +1544,7 @@ void MainWindow::onObjectTreeItemChanged(QTreeWidgetItem* item, int column) {
 
 void MainWindow::syncObjectTreeSelection() {
 
-    if (m_syncingObjectTree || m_blockSceneSelectionSync) {
+    if (m_syncingObjectTree || m_blockSceneSelectionSync || m_clearingDocument) {
 
         return;
 
@@ -1150,63 +1552,47 @@ void MainWindow::syncObjectTreeSelection() {
 
 
 
-    QGraphicsItem* selected = nullptr;
-
-    GraphObjectKind kind = GraphObjectKind::Node;
-
-
-
-    for (QGraphicsItem* item : m_scene->selectedItems()) {
-
-        if (dynamic_cast<TwoPortItem*>(item)) {
-
-            selected = item;
-
-            kind = GraphObjectKind::TwoPort;
-
-            break;
-
-        }
-
-        if (dynamic_cast<BranchItem*>(item)) {
-
-            selected = item;
-
-            kind = GraphObjectKind::Branch;
-
-        } else if (dynamic_cast<NodeItem*>(item) && !selected) {
-
-            selected = item;
-
-            kind = GraphObjectKind::Node;
-
-        }
-
-    }
+    const QVector<GraphSelectionEntry> entries = primarySceneSelection(m_scene);
 
 
 
     m_syncingObjectTree = true;
 
-    if (!selected) {
+    m_objectTree->clearSelection();
 
-        m_objectTree->clearSelection();
+    if (!entries.isEmpty()) {
 
-    } else {
+        QTreeWidgetItem* firstMatch = nullptr;
 
         QTreeWidgetItemIterator it(m_objectTree);
 
         while (*it) {
 
-            if (objectPtr(*it) == selected && objectKind(*it) == kind) {
+            for (const GraphSelectionEntry& entry : entries) {
 
-                m_objectTree->setCurrentItem(*it);
+                if (objectPtr(*it) == entry.ptr && objectKind(*it) == entry.kind) {
 
-                break;
+                    (*it)->setSelected(true);
+
+                    if (!firstMatch) {
+
+                        firstMatch = *it;
+
+                    }
+
+                    break;
+
+                }
 
             }
 
             ++it;
+
+        }
+
+        if (firstMatch) {
+
+            m_objectTree->setCurrentItem(firstMatch);
 
         }
 
@@ -1242,7 +1628,148 @@ void MainWindow::updateFlipBranchAction() {
 
 
 
+void MainWindow::updateStateSpacePanel() {
+
+    if (m_clearingDocument || !m_stateSpaceLayout || !m_stateSpaceScrollContent) {
+
+        return;
+
+    }
+
+    while (QLayoutItem* child = m_stateSpaceLayout->takeAt(0)) {
+
+        if (QWidget* widget = child->widget()) {
+
+            delete widget;
+
+        }
+
+        delete child;
+
+    }
+
+
+
+    const lg::StateSpaceResult& stateSpace = m_scene->lastStateSpaceResult();
+
+
+
+    auto addSection = [this](const QString& title, const QStringList& lines) {
+
+        if (lines.isEmpty()) {
+
+            return;
+
+        }
+
+        auto* header = new QLabel(title, m_stateSpaceScrollContent);
+
+        QFont font = header->font();
+
+        font.setBold(true);
+
+        header->setFont(font);
+
+        m_stateSpaceLayout->addWidget(header);
+
+        for (const QString& line : lines) {
+
+            auto* label = new QLabel(line, m_stateSpaceScrollContent);
+
+            label->setWordWrap(true);
+
+            label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+            m_stateSpaceLayout->addWidget(label);
+
+        }
+
+    };
+
+
+
+    if (stateSpace.status == lg::StateSpaceResult::Status::Ok) {
+
+        if (!stateSpace.inputs.isEmpty()) {
+
+            const QString inputSummary =
+
+                stateSpace.inputLabels.isEmpty()
+
+                    ? stateSpace.inputs.join(QStringLiteral(", "))
+
+                    : stateSpace.inputLabels.join(QStringLiteral(", "));
+
+            addSection(tr("Inputs"), {inputSummary});
+
+        }
+
+        addSection(tr("Elemental equations"), stateSpace.elementalEquations);
+
+        addSection(tr("Continuity equations"), stateSpace.continuityEquations);
+
+        addSection(tr("Compatibility equations"), stateSpace.compatibilityEquations);
+
+        addSection(tr("State equations"), stateSpace.stateEquations);
+
+
+
+        if (!stateSpace.matrixForm.isEmpty()) {
+
+            auto* header = new QLabel(tr("Matrix form"), m_stateSpaceScrollContent);
+
+            QFont font = header->font();
+
+            font.setBold(true);
+
+            header->setFont(font);
+
+            m_stateSpaceLayout->addWidget(header);
+
+            m_stateSpaceLayout->addWidget(
+                lg::createLatexDisplayWidget(stateSpace.matrixForm, m_stateSpaceScrollContent));
+
+        }
+
+
+
+        m_stateSpaceLayout->addStretch();
+
+        if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
+
+            QSignalBlocker blocker(panelAction);
+
+            panelAction->setChecked(true);
+
+        }
+
+        m_stateSpaceDock->show();
+
+    } else {
+
+        if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
+
+            QSignalBlocker blocker(panelAction);
+
+            panelAction->setChecked(false);
+
+        }
+
+        m_stateSpaceDock->hide();
+
+    }
+
+}
+
+
+
 void MainWindow::updatePropertyPanel() {
+
+    if (m_clearingDocument) {
+
+        return;
+
+    }
 
     m_updatingPropertyPanel = true;
 
@@ -1298,25 +1825,17 @@ void MainWindow::updatePropertyPanel() {
 
 
 
-    auto addLatexRow = [this, &addLabelRow](const QString& property, const QString& latex) {
-
-        const int row = addLabelRow(property);
-
-        QWidget* widget = lg::createLatexDisplayWidget(latex, m_propertyTable);
-
-        widget->setToolTip(latex);
-
-        m_propertyTable->setCellWidget(row, 1, widget);
-
-        m_propertyTable->resizeRowToContents(row);
-
-    };
-
-
-
     auto appendNormalTreeAnalysis = [this, &addRow](const lg::NormalTreeResult& normalTree) {
 
         addRow(tr("Analysis"), tr("Normal tree"));
+
+        if (m_scene->mode() == GraphScene::Mode::SelectNormalTree) {
+            addRow(tr("Source"), tr("Manual selection (editing)"));
+        } else if (m_scene->normalTreeIsManual()) {
+            addRow(tr("Source"), tr("Manual selection"));
+        } else {
+            addRow(tr("Source"), tr("Auto-detected"));
+        }
 
         addRow(tr("Tree branches"), QString::number(normalTree.treeBranches.size()));
 
@@ -1345,58 +1864,23 @@ void MainWindow::updatePropertyPanel() {
 
     };
 
-    auto appendStateSpaceAnalysis = [this, &addRow, &addLatexRow](const lg::StateSpaceResult& stateSpace) {
 
-        if (stateSpace.status != lg::StateSpaceResult::Status::Ok) {
 
-            return;
+    QVector<GraphSelectionEntry> entries = primarySceneSelection(m_scene);
 
-        }
+    if (entries.isEmpty()) {
 
-        addRow(tr("Analysis"), tr("State space"));
+        for (QTreeWidgetItem* item : m_objectTree->selectedItems()) {
 
-        if (!stateSpace.inputs.isEmpty()) {
+            if (objectPtr(item)) {
 
-            const QString inputSummary =
-                stateSpace.inputLabels.isEmpty()
-                    ? stateSpace.inputs.join(QStringLiteral(", "))
-                    : stateSpace.inputLabels.join(QStringLiteral(", "));
+                entries.push_back({objectPtr(item), objectKind(item)});
 
-            addRow(tr("Inputs"), inputSummary);
+            }
 
         }
 
-        for (const QString& eq : stateSpace.elementalEquations) {
-
-            addRow(tr("Elemental"), eq);
-
-        }
-
-        for (const QString& eq : stateSpace.continuityEquations) {
-
-            addRow(tr("Continuity"), eq);
-
-        }
-
-        for (const QString& eq : stateSpace.compatibilityEquations) {
-
-            addRow(tr("Compatibility"), eq);
-
-        }
-
-        for (const QString& eq : stateSpace.stateEquations) {
-
-            addRow(tr("State equation"), eq);
-
-        }
-
-        if (!stateSpace.matrixForm.isEmpty()) {
-
-            addLatexRow(tr("Matrix form"), stateSpace.matrixForm);
-
-        }
-
-    };
+    }
 
 
 
@@ -1406,77 +1890,85 @@ void MainWindow::updatePropertyPanel() {
 
 
 
-    QTreeWidgetItem* treeItem = m_objectTree->currentItem();
-
-    if (treeItem && objectPtr(treeItem)) {
-
-        ptr = objectPtr(treeItem);
-
-        kind = objectKind(treeItem);
-
-    } else {
-
-        TwoPortItem* twoPort = nullptr;
-
-        BranchItem* branch = nullptr;
-
-        NodeItem* node = nullptr;
-
-        for (QGraphicsItem* item : m_scene->selectedItems()) {
-
-            if (auto* tp = dynamic_cast<TwoPortItem*>(item)) {
-
-                twoPort = tp;
-
-                break;
-
-            }
-
-            if (auto* br = dynamic_cast<BranchItem*>(item)) {
-
-                branch = br;
-
-            } else if (auto* nd = dynamic_cast<NodeItem*>(item)) {
-
-                node = nd;
-
-            }
-
-        }
-
-        if (twoPort) {
-
-            ptr = twoPort;
-
-            kind = GraphObjectKind::TwoPort;
-
-        } else if (branch) {
-
-            ptr = branch;
-
-            kind = GraphObjectKind::Branch;
-
-        } else if (node) {
-
-            ptr = node;
-
-            kind = GraphObjectKind::Node;
-
-        }
-
-    }
-
-
-
     if (m_scene->normalTreeHighlightActive()) {
 
         appendNormalTreeAnalysis(m_scene->lastNormalTreeResult());
 
     }
 
-    if (m_scene->lastStateSpaceResult().status == lg::StateSpaceResult::Status::Ok) {
+    if (m_scene->mode() == GraphScene::Mode::SelectNormalTree) {
+        int inTreeCount = 0;
+        for (QGraphicsItem* item : m_scene->items()) {
+            if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+                if (branch->normalTreeRoleKnown() && branch->inNormalTree()) {
+                    ++inTreeCount;
+                }
+            }
+        }
+        const lg::NormalTreeResult& validation = m_scene->manualNormalTreeValidation();
+        const bool valid = validation.status == lg::NormalTreeResult::Status::Ok;
+        addRow(tr("Selection mode"), tr("Editing normal tree"));
+        addRow(tr("Branches in tree"), QString::number(inTreeCount));
+        addRow(tr("Validation"),
+               valid ? tr("Valid")
+                     : (validation.message.isEmpty() ? tr("Invalid") : validation.message));
 
-        appendStateSpaceAnalysis(m_scene->lastStateSpaceResult());
+        const int actionsRow = addLabelRow(tr("Actions"));
+        auto* actions = new QWidget(m_propertyTable);
+        auto* actionsLayout = new QHBoxLayout(actions);
+        actionsLayout->setContentsMargins(0, 0, 0, 0);
+        auto* applyBtn = new QPushButton(tr("Apply"), actions);
+        auto* cancelBtn = new QPushButton(tr("Cancel"), actions);
+        applyBtn->setEnabled(valid);
+        actionsLayout->addWidget(applyBtn);
+        actionsLayout->addWidget(cancelBtn);
+        connect(applyBtn, &QPushButton::clicked, this, [this]() {
+            m_scene->acceptManualNormalTreeSelection();
+            m_view->setToolMode(GraphScene::Mode::Select);
+        });
+        connect(cancelBtn, &QPushButton::clicked, this, [this]() {
+            m_scene->cancelManualNormalTreeSelection();
+            m_view->setToolMode(GraphScene::Mode::Select);
+            statusBar()->showMessage(tr("Manual normal tree selection cancelled."), 3000);
+            updatePropertyPanel();
+        });
+        m_propertyTable->setCellWidget(actionsRow, 1, actions);
+        addRow(tr("Hint"), tr("Click branches to toggle; Enter to apply, Esc to cancel"));
+    }
+
+
+
+    if (entries.size() > 1) {
+
+        addRow(tr("Selection"), tr("%1 objects selected").arg(entries.size()));
+
+        QStringList names;
+
+        names.reserve(entries.size());
+
+        for (const GraphSelectionEntry& entry : entries) {
+
+            names.push_back(objectLabel(entry.kind, entry.ptr));
+
+        }
+
+        addRow(tr("Objects"), names.join(QStringLiteral(", ")));
+
+        m_updatingPropertyPanel = false;
+
+        updateFlipBranchAction();
+
+        return;
+
+    }
+
+
+
+    if (entries.size() == 1) {
+
+        ptr = entries.front().ptr;
+
+        kind = entries.front().kind;
 
     }
 
@@ -1620,7 +2112,7 @@ void MainWindow::updatePropertyPanel() {
 
             auto* branch = static_cast<BranchItem*>(ptr);
 
-            addRow(tr("Through variable"), branch->name(), true);
+            addRow(tr("Through variable"), lg::branchThroughSymbol(*branch), true);
 
             addRow(tr("Across variable"), lg::branchAcrossVariableText(*branch));
 
@@ -1633,7 +2125,7 @@ void MainWindow::updatePropertyPanel() {
             if (TwoPortItem* twoPort = m_scene->twoPortFor(branch);
                 twoPort && GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
                 addRow(tr("Parent"), twoPort->name());
-                addRow(tr("Through variable"), branch->name());
+                addRow(tr("Through variable"), lg::branchThroughSymbol(*branch));
                 addRow(tr("Element"), tr("T-type (port branch)"));
                 addRow(tr("Elemental equation"), branch->elementalEquationText());
                 addRow(tr("Two-port equations"), twoPort->elementalEquationText());
@@ -1744,14 +2236,35 @@ void MainWindow::updatePropertyPanel() {
 
             if (m_scene->normalTreeHighlightActive() && branch->normalTreeRoleKnown()) {
 
-                addRow(tr("Normal tree"), branch->inNormalTree() ? tr("Tree branch") : tr("Link"));
+                if (m_scene->mode() == GraphScene::Mode::SelectNormalTree) {
+                    const int treeRoleRow = addLabelRow(tr("Normal tree"));
+                    auto* treeRoleCombo = new QComboBox(m_propertyTable);
+                    treeRoleCombo->addItem(tr("Tree branch"), true);
+                    treeRoleCombo->addItem(tr("Link"), false);
+                    treeRoleCombo->setCurrentIndex(branch->inNormalTree() ? 0 : 1);
+                    if (branch->isActive() && branch->branchType() == BranchType::A) {
+                        treeRoleCombo->setEnabled(false);
+                    }
+                    connect(treeRoleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                            [this, branch, treeRoleCombo](int index) {
+                                if (m_updatingPropertyPanel) {
+                                    return;
+                                }
+                                m_scene->setManualNormalTreeBranchRole(
+                                    branch, treeRoleCombo->itemData(index).toBool());
+                                updatePropertyPanel();
+                            });
+                    m_propertyTable->setCellWidget(treeRoleRow, 1, treeRoleCombo);
+                } else {
+                    addRow(tr("Normal tree"), branch->inNormalTree() ? tr("Tree branch") : tr("Link"));
+                }
 
                 if (!branch->isActive()) {
                     if (branch->inNormalTree() && branch->branchType() == BranchType::A) {
                         addRow(tr("State variable"),
                                lg::branchAcrossSymbol(*branch));
                     } else if (!branch->inNormalTree() && branch->branchType() == BranchType::T) {
-                        addRow(tr("State variable"), lg::branchFlowSymbol(*branch));
+                        addRow(tr("State variable"), lg::branchThroughSymbol(*branch));
                     }
                 }
 
@@ -1766,7 +2279,7 @@ void MainWindow::updatePropertyPanel() {
                 const int constantRow = addLabelRow(tr("Constant"));
 
                 auto* constantEdit = new QLineEdit(branch->elementConstant(), m_propertyTable);
-
+                constantEdit->setPlaceholderText(tr("e.g. R1, C2, M3"));
                 connect(constantEdit, &QLineEdit::editingFinished, this, [this, branch, constantEdit]() {
 
                     if (m_updatingPropertyPanel) {
@@ -1775,7 +2288,14 @@ void MainWindow::updatePropertyPanel() {
 
                     }
 
-                    m_scene->pushSetBranchConstant(branch, constantEdit->text());
+                    const QString text = constantEdit->text();
+                    if (!lg::isValidElementConstant(text)) {
+                        constantEdit->setText(branch->elementConstant());
+                        return;
+                    }
+
+                    m_scene->pushSetBranchConstant(branch, text);
+                    updatePropertyPanel();
 
                 });
 
@@ -1882,6 +2402,10 @@ void MainWindow::updatePropertyPanel() {
 
         addRow(tr("Grid"), tr("Enabled"));
 
+    } else {
+
+        addRow(tr("Selection"), tr("Nothing selected"));
+
     }
 
     m_updatingPropertyPanel = false;
@@ -1893,6 +2417,17 @@ void MainWindow::updatePropertyPanel() {
 
 
 void MainWindow::syncModeUi(GraphScene::Mode mode) {
+
+    const bool manualTree = mode == GraphScene::Mode::SelectNormalTree;
+    if (m_applyManualTreeReturnShortcut) {
+        m_applyManualTreeReturnShortcut->setEnabled(manualTree);
+    }
+    if (m_applyManualTreeEnterShortcut) {
+        m_applyManualTreeEnterShortcut->setEnabled(manualTree);
+    }
+    if (m_cancelManualTreeShortcut) {
+        m_cancelManualTreeShortcut->setEnabled(manualTree);
+    }
 
     switch (mode) {
 
@@ -1920,8 +2455,36 @@ void MainWindow::syncModeUi(GraphScene::Mode mode) {
 
         break;
 
+    case GraphScene::Mode::SelectNormalTree:
+
+        break;
+
     }
 
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() != QEvent::KeyPress) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+    if (watched != m_view && watched != m_view->viewport()) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+
+    const auto* key = static_cast<QKeyEvent*>(event);
+    if (key->key() != Qt::Key_Escape || key->modifiers() != Qt::NoModifier) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+    if (m_scene->mode() != GraphScene::Mode::Select || m_scene->selectedItems().isEmpty()) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+
+    m_blockSceneSelectionSync = true;
+    m_scene->clearSelection();
+    m_objectTree->clearSelection();
+    m_blockSceneSelectionSync = false;
+    updatePropertyPanel();
+    return true;
 }
 
 
@@ -1946,6 +2509,10 @@ QString MainWindow::modeStatusText(GraphScene::Mode mode) {
     case GraphScene::Mode::AddTwoPort:
 
         return tr("Add two-port — click empty grid; drag port nodes to reshape; combine ref nodes (M) for shared reference");
+
+    case GraphScene::Mode::SelectNormalTree:
+
+        return tr("Normal tree — click branches to toggle tree/link (green=tree); Enter to apply, Esc to cancel");
 
     }
 
@@ -1973,7 +2540,30 @@ AppSettings MainWindow::currentSettings() const {
     s.showGrid = m_scene->showGrid();
     s.gridSpacing = static_cast<int>(m_scene->gridSpacing());
     s.antialiasing = m_view->renderHints().testFlag(QPainter::Antialiasing);
+
+    for (QAction* action : findChildren<QAction*>()) {
+        const QString& id = action->objectName();
+        if (!AppShortcuts::isKnown(id)) {
+            continue;
+        }
+        const QKeySequence current = action->shortcut();
+        const QKeySequence def = AppShortcuts::defaultFor(id);
+        if (current != def) {
+            s.shortcutOverrides.insert(id, current.toString());
+        }
+    }
     return s;
+}
+
+void MainWindow::applyShortcuts(const AppSettings& settings) {
+    for (QAction* action : findChildren<QAction*>()) {
+        const QString& id = action->objectName();
+        if (!AppShortcuts::isKnown(id)) {
+            continue;
+        }
+        action->setShortcut(settings.shortcut(id));
+        action->setShortcutContext(Qt::ApplicationShortcut);
+    }
 }
 
 void MainWindow::applySettings(const AppSettings& settings) {
@@ -1985,6 +2575,7 @@ void MainWindow::applySettings(const AppSettings& settings) {
     m_scene->setShowGrid(settings.showGrid);
     m_scene->setGridSpacing(settings.gridSpacing);
     m_view->setRenderHint(QPainter::Antialiasing, settings.antialiasing);
+    applyShortcuts(settings);
     m_scene->refreshAppearance();
     refreshChromeTheme();
 }
@@ -2062,12 +2653,16 @@ void MainWindow::fileNew() {
     if (!confirmDiscardChanges()) {
         return;
     }
+    m_clearingDocument = true;
     m_scene->clearDocument();
+    m_clearingDocument = false;
     m_currentFilePath.clear();
     m_scene->undoStack()->setClean();
     updateWindowTitle();
+    m_objectTree->clearSelection();
     updateObjectList();
     updatePropertyPanel();
+    updateStateSpacePanel();
 }
 
 void MainWindow::fileOpen() {
@@ -2092,12 +2687,18 @@ void MainWindow::fileOpen() {
         return;
     }
 
+    const QString loadWarning = m_scene->takeLoadWarning();
+    if (!loadWarning.isEmpty()) {
+        QMessageBox::warning(this, tr("Open"), loadWarning);
+    }
+
     m_currentFilePath = path;
     m_scene->undoStack()->setClean();
     syncDefaultSystemTypeCombo(m_scene->defaultSystemType());
     updateWindowTitle();
     updateObjectList();
     updatePropertyPanel();
+    updateStateSpacePanel();
 }
 
 bool MainWindow::fileSave() {

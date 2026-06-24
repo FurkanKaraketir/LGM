@@ -75,6 +75,8 @@ add_executable(LinearGraphModeling
     src/ui/latex_widget.h
     src/ui/app_settings.cpp
     src/ui/app_settings.h
+    src/ui/app_shortcuts.cpp
+    src/ui/app_shortcuts.h
     src/ui/settings_window.cpp
     src/ui/settings_window.h
     src/ui/mainwindow.cpp
@@ -104,3 +106,4 @@ if(WIN32)
             COMMENT "Deploying Qt runtime DLLs")
     endif()
 endif()
+

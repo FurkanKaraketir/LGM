@@ -26,10 +26,16 @@ struct NormalTreeResult {
 };
 
 void populateNormalTreeStateVariables(NormalTreeResult& result,
-                                      const std::vector<BranchItem*>& branches);
+                                      const std::vector<BranchItem*>& branches,
+                                      const std::vector<TwoPortItem*>& twoPorts = {});
 
 NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
                                    const std::vector<BranchItem*>& branches,
                                    const std::vector<TwoPortItem*>& twoPorts = {});
+
+NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
+                                          const std::vector<BranchItem*>& branches,
+                                          const std::vector<TwoPortItem*>& twoPorts,
+                                          const std::vector<BranchItem*>& treeBranches);
 
 }  // namespace lg

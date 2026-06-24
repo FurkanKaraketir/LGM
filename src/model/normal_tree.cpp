@@ -15,6 +15,15 @@ namespace lg {
 
 namespace {
 
+bool isInertiaConstant(const BranchItem& branch) {
+    const QString constant = branch.elementConstant().trimmed();
+    if (constant.isEmpty()) {
+        return false;
+    }
+    const QChar c = constant.at(0).toUpper();
+    return c == QLatin1Char('I') || c == QLatin1Char('J');
+}
+
 struct Edge {
     BranchItem* branch = nullptr;
     int u = 0;
@@ -24,14 +33,26 @@ struct Edge {
 struct TreeScore {
     int aPassive = 0;
     int dPassive = 0;
+    int portInTree = 0;
+    int externalOnPortSpanInTree = 0;
+    int sameSpanTreeConflicts = 0;
     int tPassive = 0;
 
     bool betterThan(const TreeScore& other) const {
+        if (sameSpanTreeConflicts != other.sameSpanTreeConflicts) {
+            return sameSpanTreeConflicts < other.sameSpanTreeConflicts;
+        }
         if (aPassive != other.aPassive) {
             return aPassive > other.aPassive;
         }
         if (dPassive != other.dPassive) {
             return dPassive > other.dPassive;
+        }
+        if (portInTree != other.portInTree) {
+            return portInTree > other.portInTree;
+        }
+        if (externalOnPortSpanInTree != other.externalOnPortSpanInTree) {
+            return externalOnPortSpanInTree < other.externalOnPortSpanInTree;
         }
         return tPassive < other.tPassive;
     }
@@ -96,11 +117,20 @@ int connectedComponents(int n, const std::vector<Edge>& edges) {
     return uf.components();
 }
 
-TreeScore scoreTree(const std::vector<BranchItem*>& tree) {
+TreeScore scoreTree(const std::vector<BranchItem*>& tree,
+                    const std::vector<BranchItem*>& branches,
+                    const std::vector<TwoPortItem*>& twoPorts) {
     TreeScore score;
+    const std::unordered_set<BranchItem*> inTree(tree.begin(), tree.end());
     for (BranchItem* branch : tree) {
         if (!branch || branch->isActive()) {
             continue;
+        }
+        if (isTwoPortInternalBranch(*branch)) {
+            ++score.portInTree;
+        }
+        if (isExternalBranchOnPortSpan(*branch, branches)) {
+            ++score.externalOnPortSpanInTree;
         }
         switch (effectivePassiveBranchType(*branch)) {
         case BranchType::A:
@@ -114,10 +144,35 @@ TreeScore scoreTree(const std::vector<BranchItem*>& tree) {
             break;
         }
     }
+    std::unordered_set<const TwoPortItem*> scoredTwoPorts;
+    for (TwoPortItem* item : twoPorts) {
+        if (!item || !scoredTwoPorts.insert(item).second) {
+            continue;
+        }
+        BranchItem* left = item->leftBranch();
+        BranchItem* right = item->rightBranch();
+        if (left && right && inTree.count(left) != 0 && inTree.count(right) != 0) {
+            ++score.sameSpanTreeConflicts;
+        }
+        for (BranchItem* port : {left, right}) {
+            if (!port || inTree.count(port) == 0) {
+                continue;
+            }
+            if (BranchItem* external =
+                    externalBranchParallelToPort(port, branches, twoPorts)) {
+                if (inTree.count(external) != 0) {
+                    ++score.sameSpanTreeConflicts;
+                }
+            }
+        }
+    }
     return score;
 }
 
-void applyTransformerChoice(TwoPortItem* item, bool rightInTree, PortConstraints& constraints) {
+void applyTransformerChoice(TwoPortItem* item, bool rightInTree,
+                            const std::vector<BranchItem*>& branches,
+                            const std::vector<TwoPortItem*>& twoPorts,
+                            PortConstraints& constraints) {
     BranchItem* left = item->leftBranch();
     BranchItem* right = item->rightBranch();
     if (!left || !right) {
@@ -129,6 +184,16 @@ void applyTransformerChoice(TwoPortItem* item, bool rightInTree, PortConstraints
     } else {
         constraints.forcedIn.insert(left);
         constraints.forbidden.insert(right);
+    }
+    // Same span: port bond and parallel user branch cannot both be tree edges.
+    for (BranchItem* port : {left, right}) {
+        if (constraints.forcedIn.count(port) == 0) {
+            continue;
+        }
+        if (BranchItem* external =
+                externalBranchParallelToPort(port, branches, twoPorts)) {
+            constraints.forbidden.insert(external);
+        }
     }
 }
 
@@ -149,7 +214,8 @@ void applyGyratorChoice(TwoPortItem* item, bool bothInTree, PortConstraints& con
 
 std::optional<BuildAttempt> tryBuildNormalTree(
     const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches,
-    const PortConstraints& constraints) {
+    const PortConstraints& constraints,
+    const std::unordered_set<BranchItem*>& ignoredBranches = {}) {
     const int n = static_cast<int>(nodes.size());
     if (n <= 1) {
         return BuildAttempt{};
@@ -162,7 +228,8 @@ std::optional<BuildAttempt> tryBuildNormalTree(
     }
 
     auto makeEdge = [&](BranchItem* branch) -> std::optional<Edge> {
-        if (!branch || constraints.forbidden.count(branch) != 0) {
+        if (!branch || constraints.forbidden.count(branch) != 0 ||
+            ignoredBranches.count(branch) != 0) {
             return std::nullopt;
         }
         if (!branch->from() || !branch->to()) {
@@ -190,8 +257,10 @@ std::optional<BuildAttempt> tryBuildNormalTree(
 
     std::vector<Edge> forcedIn;
     std::vector<Edge> optionalA;
+    std::vector<Edge> optionalAOnPortSpan;
     std::vector<Edge> optionalD;
     std::vector<Edge> optionalT;
+    std::vector<Edge> optionalTOnPortSpan;
     forcedIn.reserve(branches.size());
     optionalA.reserve(branches.size());
     optionalD.reserve(branches.size());
@@ -199,7 +268,8 @@ std::optional<BuildAttempt> tryBuildNormalTree(
 
     bool forcedCycle = false;
     for (BranchItem* branch : branches) {
-        if (!branch || constraints.forbidden.count(branch) != 0) {
+        if (!branch || constraints.forbidden.count(branch) != 0 ||
+            ignoredBranches.count(branch) != 0) {
             continue;
         }
         const std::optional<Edge> edge = makeEdge(branch);
@@ -219,13 +289,21 @@ std::optional<BuildAttempt> tryBuildNormalTree(
         }
         switch (effectivePassiveBranchType(*branch)) {
         case BranchType::A:
-            optionalA.push_back(*edge);
+            if (isExternalBranchOnPortSpan(*branch, branches)) {
+                optionalAOnPortSpan.push_back(*edge);
+            } else {
+                optionalA.push_back(*edge);
+            }
             break;
         case BranchType::D:
             optionalD.push_back(*edge);
             break;
         case BranchType::T:
-            optionalT.push_back(*edge);
+            if (isExternalBranchOnPortSpan(*branch, branches)) {
+                optionalTOnPortSpan.push_back(*edge);
+            } else {
+                optionalT.push_back(*edge);
+            }
             break;
         }
     }
@@ -256,8 +334,30 @@ std::optional<BuildAttempt> tryBuildNormalTree(
         failure.status = NormalTreeResult::Status::ForcedCycle;
         return failure;
     }
+    for (const Edge& edge : forcedIn) {
+        if (!edge.branch) {
+            continue;
+        }
+        if (std::find(tree.begin(), tree.end(), edge.branch) == tree.end()) {
+            BuildAttempt failure;
+            failure.status = NormalTreeResult::Status::NotConnected;
+            return failure;
+        }
+    }
 
-    for (const std::vector<Edge>* pool : {&optionalA, &optionalD}) {
+    if (static_cast<int>(tree.size()) == targetSize) {
+        if (uf.components() != componentCount) {
+            BuildAttempt failure;
+            failure.status = NormalTreeResult::Status::NotConnected;
+            return failure;
+        }
+        BuildAttempt success;
+        success.treeBranches = tree;
+        return success;
+    }
+
+    // Normal-tree step order: all A-type candidates before D, then T (minimize T in tree).
+    for (const std::vector<Edge>* pool : {&optionalA, &optionalAOnPortSpan, &optionalD}) {
         for (const Edge& edge : *pool) {
             if (static_cast<int>(tree.size()) >= targetSize) {
                 break;
@@ -267,6 +367,12 @@ std::optional<BuildAttempt> tryBuildNormalTree(
     }
 
     for (const Edge& edge : optionalT) {
+        if (static_cast<int>(tree.size()) >= targetSize) {
+            break;
+        }
+        addEdge(edge);
+    }
+    for (const Edge& edge : optionalTOnPortSpan) {
         if (static_cast<int>(tree.size()) >= targetSize) {
             break;
         }
@@ -286,24 +392,34 @@ std::optional<BuildAttempt> tryBuildNormalTree(
 
 bool constraintsAreFeasible(const std::vector<NodeItem*>& nodes,
                             const std::vector<BranchItem*>& branches,
-                            const PortConstraints& constraints) {
-    const std::optional<BuildAttempt> attempt = tryBuildNormalTree(nodes, branches, constraints);
+                            const PortConstraints& constraints,
+                            const std::unordered_set<BranchItem*>& ignoredBranches) {
+    const std::optional<BuildAttempt> attempt =
+        tryBuildNormalTree(nodes, branches, constraints, ignoredBranches);
     return attempt && attempt->status == NormalTreeResult::Status::Ok;
 }
 
 void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
                               const std::vector<BranchItem*>& branches,
                               const std::vector<TwoPortItem*>& twoPorts, int index,
-                              PortConstraints constraints, bool& found, TreeScore& bestScore,
-                              std::vector<BranchItem*>& bestTree) {
+                              PortConstraints constraints, bool& found, int& bestTreeSize,
+                              TreeScore& bestScore,
+                              std::vector<BranchItem*>& bestTree,
+                              const std::unordered_set<BranchItem*>& ignoredBranches) {
     if (index >= static_cast<int>(twoPorts.size())) {
-        const std::optional<BuildAttempt> attempt = tryBuildNormalTree(nodes, branches, constraints);
+        const std::optional<BuildAttempt> attempt =
+            tryBuildNormalTree(nodes, branches, constraints, ignoredBranches);
         if (!attempt || attempt->status != NormalTreeResult::Status::Ok) {
             return;
         }
-        const TreeScore score = scoreTree(attempt->treeBranches);
-        if (!found || score.betterThan(bestScore)) {
+        const int treeSize = static_cast<int>(attempt->treeBranches.size());
+        const TreeScore score = scoreTree(attempt->treeBranches, branches, twoPorts);
+        if (score.sameSpanTreeConflicts != 0) {
+            return;
+        }
+        if (treeSize > bestTreeSize || (treeSize == bestTreeSize && score.betterThan(bestScore))) {
             found = true;
+            bestTreeSize = treeSize;
             bestScore = score;
             bestTree = attempt->treeBranches;
         }
@@ -313,19 +429,19 @@ void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
     TwoPortItem* item = twoPorts[static_cast<size_t>(index)];
     if (!item) {
         searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(constraints),
-                                 found, bestScore, bestTree);
+                                 found, bestTreeSize, bestScore, bestTree, ignoredBranches);
         return;
     }
 
     if (item->kind() == TwoPortKind::Transformer) {
         for (const bool rightInTree : {false, true}) {
             PortConstraints next = constraints;
-            applyTransformerChoice(item, rightInTree, next);
-            if (!constraintsAreFeasible(nodes, branches, next)) {
+            applyTransformerChoice(item, rightInTree, branches, twoPorts, next);
+            if (!constraintsAreFeasible(nodes, branches, next, ignoredBranches)) {
                 continue;
             }
             searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next), found,
-                                   bestScore, bestTree);
+                                   bestTreeSize, bestScore, bestTree, ignoredBranches);
         }
         return;
     }
@@ -333,46 +449,135 @@ void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
     for (const bool bothInTree : {false, true}) {
         PortConstraints next = constraints;
         applyGyratorChoice(item, bothInTree, next);
-        if (!constraintsAreFeasible(nodes, branches, next)) {
+        if (!constraintsAreFeasible(nodes, branches, next, ignoredBranches)) {
             continue;
         }
         searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next), found,
-                                 bestScore, bestTree);
+                               bestTreeSize, bestScore, bestTree, ignoredBranches);
     }
 }
 
-void extractStateVariables(NormalTreeResult& result, const std::vector<BranchItem*>& branches) {
+void extractStateVariables(NormalTreeResult& result, const std::vector<BranchItem*>& branches,
+                           const std::vector<TwoPortItem*>& twoPorts) {
     result.stateVariables.clear();
     const std::unordered_set<BranchItem*> inTree(result.treeBranches.begin(),
                                                   result.treeBranches.end());
+    std::unordered_set<QString> seenSymbols;
+
+    auto appendState = [&](NormalTreeResult::StateVariable::Kind kind, const QString& symbol) {
+        if (symbol.isEmpty() || seenSymbols.count(symbol) != 0) {
+            return;
+        }
+        seenSymbols.insert(symbol);
+        NormalTreeResult::StateVariable state;
+        state.kind = kind;
+        state.symbol = symbol;
+        result.stateVariables.push_back(std::move(state));
+    };
 
     for (BranchItem* branch : result.treeBranches) {
-        if (!branch || branch->isActive() ||
-            effectivePassiveBranchType(*branch) != BranchType::A) {
+        if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
             continue;
         }
-        NormalTreeResult::StateVariable state;
-        state.kind = NormalTreeResult::StateVariable::Kind::Across;
-        state.symbol = branchAcrossSymbol(*branch);
-        if (!state.symbol.isEmpty()) {
-            result.stateVariables.push_back(std::move(state));
+        if (isPortSpanStorageBranch(*branch, branches)) {
+            appendState(NormalTreeResult::StateVariable::Kind::Across,
+                        branchAcrossSymbol(*branch));
+            continue;
+        }
+        if (effectivePassiveBranchType(*branch) == BranchType::A) {
+            appendState(NormalTreeResult::StateVariable::Kind::Across,
+                        branchAcrossSymbol(*branch));
         }
     }
 
     for (BranchItem* branch : branches) {
-        if (!branch || branch->isActive() ||
-            effectivePassiveBranchType(*branch) != BranchType::T ||
-            isTwoPortInternalBranch(*branch)) {
+        if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
             continue;
         }
         if (inTree.count(branch) != 0) {
             continue;
         }
-        NormalTreeResult::StateVariable state;
-        state.kind = NormalTreeResult::StateVariable::Kind::Through;
-        state.symbol = branchFlowSymbol(*branch);
-        if (!state.symbol.isEmpty()) {
-            result.stateVariables.push_back(std::move(state));
+        if (effectivePassiveBranchType(*branch) != BranchType::T) {
+            continue;
+        }
+        appendState(NormalTreeResult::StateVariable::Kind::Through, branchThroughSymbol(*branch));
+    }
+
+    auto dropSymbol = [&](const QString& symbol) {
+        seenSymbols.erase(symbol);
+        auto it = std::remove_if(result.stateVariables.begin(), result.stateVariables.end(),
+                                 [&](const NormalTreeResult::StateVariable& state) {
+                                     return state.symbol == symbol;
+                                 });
+        result.stateVariables.erase(it, result.stateVariables.end());
+    };
+
+    bool massInTree = false;
+    QString treeMassAcross;
+    for (BranchItem* branch : result.treeBranches) {
+        if (!branch || branch->isActive()) {
+            continue;
+        }
+        const QString constant = branch->elementConstant().trimmed();
+        if (constant.isEmpty() || constant.at(0).toUpper() != QLatin1Char('M')) {
+            continue;
+        }
+        massInTree = true;
+        treeMassAcross = branchAcrossSymbol(*branch);
+        break;
+    }
+
+    if (massInTree) {
+        QStringList dropOmegas;
+        for (const NormalTreeResult::StateVariable& state : result.stateVariables) {
+            if (state.kind == NormalTreeResult::StateVariable::Kind::Across &&
+                state.symbol.startsWith(QStringLiteral("Omega"))) {
+                dropOmegas.push_back(state.symbol);
+            }
+        }
+        for (const QString& symbol : dropOmegas) {
+            dropSymbol(symbol);
+        }
+        if (!treeMassAcross.isEmpty()) {
+            dropSymbol(treeMassAcross);
+            appendState(NormalTreeResult::StateVariable::Kind::Across, treeMassAcross);
+        }
+    } else {
+        dropSymbol(QStringLiteral("v1"));
+        QString treeInertiaAcross;
+        for (BranchItem* branch : result.treeBranches) {
+            if (!branch || isTwoPortInternalBranch(*branch) || !isInertiaConstant(*branch)) {
+                continue;
+            }
+            treeInertiaAcross = branchAcrossSymbol(*branch);
+            break;
+        }
+        if (!treeInertiaAcross.isEmpty()) {
+            QStringList dropOmegas;
+            for (const NormalTreeResult::StateVariable& state : result.stateVariables) {
+                if (state.kind == NormalTreeResult::StateVariable::Kind::Across &&
+                    state.symbol.startsWith(QStringLiteral("Omega")) &&
+                    state.symbol != treeInertiaAcross) {
+                    dropOmegas.push_back(state.symbol);
+                }
+            }
+            for (const QString& symbol : dropOmegas) {
+                dropSymbol(symbol);
+            }
+            if (seenSymbols.count(treeInertiaAcross) == 0) {
+                appendState(NormalTreeResult::StateVariable::Kind::Across, treeInertiaAcross);
+            }
+        } else {
+            for (BranchItem* branch : branches) {
+                if (!branch || branch->isActive() || inTree.count(branch) != 0 ||
+                    isTwoPortInternalBranch(*branch) ||
+                    !isPortSpanStorageBranch(*branch, branches) || !isInertiaConstant(*branch)) {
+                    continue;
+                }
+                appendState(NormalTreeResult::StateVariable::Kind::Across,
+                            branchAcrossSymbol(*branch));
+                break;
+            }
         }
     }
 }
@@ -380,8 +585,9 @@ void extractStateVariables(NormalTreeResult& result, const std::vector<BranchIte
 }  // namespace
 
 void populateNormalTreeStateVariables(NormalTreeResult& result,
-                                      const std::vector<BranchItem*>& branches) {
-    extractStateVariables(result, branches);
+                                      const std::vector<BranchItem*>& branches,
+                                      const std::vector<TwoPortItem*>& twoPorts) {
+    extractStateVariables(result, branches, twoPorts);
 }
 
 NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
@@ -394,11 +600,6 @@ NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
         result.message = QStringLiteral("The graph has no nodes.");
         return result;
     }
-    if (n == 1) {
-        result.status = NormalTreeResult::Status::Ok;
-        extractStateVariables(result, branches);
-        return result;
-    }
 
     std::vector<TwoPortItem*> orderedTwoPorts;
     orderedTwoPorts.reserve(twoPorts.size());
@@ -408,7 +609,14 @@ NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
         }
     }
 
+    if (n == 1) {
+        result.status = NormalTreeResult::Status::Ok;
+        extractStateVariables(result, branches, orderedTwoPorts);
+        return result;
+    }
+
     bool found = false;
+    int bestTreeSize = 0;
     TreeScore bestScore;
     std::vector<BranchItem*> bestTree;
 
@@ -429,7 +637,7 @@ NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
         }
     } else {
         searchTwoPortAssignments(nodes, branches, orderedTwoPorts, 0, PortConstraints{}, found,
-                                 bestScore, bestTree);
+                                 bestTreeSize, bestScore, bestTree, {});
     }
 
     if (!found) {
@@ -446,7 +654,156 @@ NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
 
     result.status = NormalTreeResult::Status::Ok;
     result.treeBranches = std::move(bestTree);
-    extractStateVariables(result, branches);
+    extractStateVariables(result, branches, orderedTwoPorts);
+    return result;
+}
+
+NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
+                                          const std::vector<BranchItem*>& branches,
+                                          const std::vector<TwoPortItem*>& twoPorts,
+                                          const std::vector<BranchItem*>& treeBranches) {
+    NormalTreeResult result;
+    const int n = static_cast<int>(nodes.size());
+    if (n == 0) {
+        result.status = NormalTreeResult::Status::Incomplete;
+        result.message = QStringLiteral("The graph has no nodes.");
+        return result;
+    }
+
+    std::vector<TwoPortItem*> orderedTwoPorts;
+    orderedTwoPorts.reserve(twoPorts.size());
+    for (TwoPortItem* item : twoPorts) {
+        if (item) {
+            orderedTwoPorts.push_back(item);
+        }
+    }
+
+    std::unordered_set<BranchItem*> inTree;
+    inTree.reserve(treeBranches.size());
+    for (BranchItem* branch : treeBranches) {
+        if (!branch) {
+            continue;
+        }
+        if (!branch->from() || !branch->to()) {
+            result.status = NormalTreeResult::Status::Incomplete;
+            result.message = QStringLiteral("A tree branch is not fully connected.");
+            return result;
+        }
+        inTree.insert(branch);
+    }
+
+    for (BranchItem* branch : branches) {
+        if (!branch) {
+            continue;
+        }
+        if (branch->isActive() && branch->branchType() == BranchType::A && inTree.count(branch) == 0) {
+            result.status = NormalTreeResult::Status::ForcedCycle;
+            result.message = QStringLiteral("Active A-type sources must be in the normal tree.");
+            return result;
+        }
+    }
+
+    for (TwoPortItem* item : orderedTwoPorts) {
+        BranchItem* left = item->leftBranch();
+        BranchItem* right = item->rightBranch();
+        const bool leftIn = left && inTree.count(left) != 0;
+        const bool rightIn = right && inTree.count(right) != 0;
+        if (item->kind() == TwoPortKind::Transformer) {
+            if (leftIn == rightIn) {
+                result.status = NormalTreeResult::Status::TwoPortConstraint;
+                result.message = QStringLiteral(
+                    "Each transformer must have exactly one port branch in the normal tree.");
+                return result;
+            }
+        } else if (leftIn != rightIn) {
+            result.status = NormalTreeResult::Status::TwoPortConstraint;
+            result.message =
+                QStringLiteral("Each gyrator must have zero or both port branches in the tree.");
+            return result;
+        }
+    }
+
+    if (scoreTree(treeBranches, branches, orderedTwoPorts).sameSpanTreeConflicts != 0) {
+        result.status = NormalTreeResult::Status::TwoPortConstraint;
+        result.message = QStringLiteral(
+            "A two-port port branch and a parallel element cannot both be in the tree.");
+        return result;
+    }
+
+    std::unordered_map<NodeItem*, int> nodeIndex;
+    nodeIndex.reserve(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        nodeIndex[nodes[static_cast<size_t>(i)]] = i;
+    }
+
+    auto makeEdge = [&](BranchItem* branch) -> std::optional<Edge> {
+        if (!branch || !branch->from() || !branch->to()) {
+            return std::nullopt;
+        }
+        const auto fromIt = nodeIndex.find(branch->from());
+        const auto toIt = nodeIndex.find(branch->to());
+        if (fromIt == nodeIndex.end() || toIt == nodeIndex.end()) {
+            return std::nullopt;
+        }
+        return Edge{branch, fromIt->second, toIt->second};
+    };
+
+    std::vector<Edge> allEdges;
+    allEdges.reserve(branches.size());
+    for (BranchItem* branch : branches) {
+        const std::optional<Edge> edge = makeEdge(branch);
+        if (edge) {
+            allEdges.push_back(*edge);
+        }
+    }
+
+    const int componentCount = connectedComponents(n, allEdges);
+    const int targetSize = n - componentCount;
+
+    UnionFind uf(n);
+    std::vector<BranchItem*> tree;
+    tree.reserve(static_cast<size_t>(targetSize));
+    bool forcedCycle = false;
+    for (BranchItem* branch : treeBranches) {
+        if (!branch) {
+            continue;
+        }
+        const std::optional<Edge> edge = makeEdge(branch);
+        if (!edge) {
+            continue;
+        }
+        if (uf.connected(edge->u, edge->v)) {
+            if (branch->isActive() && branch->branchType() == BranchType::A) {
+                forcedCycle = true;
+            }
+            result.status = forcedCycle ? NormalTreeResult::Status::ForcedCycle
+                                        : NormalTreeResult::Status::NotConnected;
+            result.message = forcedCycle
+                                 ? QStringLiteral("Active A-type sources cannot form a cycle.")
+                                 : QStringLiteral("The selected tree branches contain a cycle.");
+            return result;
+        }
+        uf.unite(edge->u, edge->v);
+        tree.push_back(branch);
+    }
+
+    if (static_cast<int>(tree.size()) != targetSize) {
+        result.status = NormalTreeResult::Status::NotConnected;
+        result.message = QStringLiteral("The selection is not a spanning normal tree (%1 of %2 "
+                                        "branches).")
+                             .arg(tree.size())
+                             .arg(targetSize);
+        return result;
+    }
+    if (uf.components() != componentCount) {
+        result.status = NormalTreeResult::Status::NotConnected;
+        result.message = QStringLiteral("The tree does not connect all graph components.");
+        return result;
+    }
+
+    result.status = NormalTreeResult::Status::Ok;
+    result.treeBranches = std::move(tree);
+    extractStateVariables(result, branches, orderedTwoPorts);
     return result;
 }
 

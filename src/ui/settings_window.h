@@ -8,6 +8,7 @@ class QCheckBox;
 class QComboBox;
 class QPushButton;
 class QSpinBox;
+class QTableWidget;
 
 class SettingsWindow : public QWidget {
     Q_OBJECT
@@ -23,6 +24,9 @@ signals:
 
 private:
     void apply();
+    void resetGeneral();
+    void resetShortcuts();
+    void populateShortcutTable(const AppSettings& settings);
 
     QComboBox* m_defaultSystemType = nullptr;
     QComboBox* m_theme = nullptr;
@@ -30,4 +34,5 @@ private:
     QCheckBox* m_showGrid = nullptr;
     QSpinBox* m_gridSpacing = nullptr;
     QCheckBox* m_antialiasing = nullptr;
+    QTableWidget* m_shortcutTable = nullptr;
 };

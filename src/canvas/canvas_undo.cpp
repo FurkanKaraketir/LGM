@@ -85,8 +85,8 @@ public:
             m_key.index = branch->index();
             m_scene->clearSelection();
             branch->setSelected(true);
+            m_exists = true;
         }
-        m_exists = true;
     }
 
 private:
@@ -107,7 +107,7 @@ public:
             return;
         }
         if (TwoPortItem* item = m_scene->twoPortAtCenter(m_key.center)) {
-            m_scene->destroyTwoPort(item);
+            m_scene->purgeTwoPort(item);
         }
         m_exists = false;
     }
@@ -329,8 +329,8 @@ private:
 
 class SetBranchTypeCommand : public QUndoCommand {
 public:
-    SetBranchTypeCommand(BranchItem* branch, BranchType oldType, BranchType newType)
-        : m_branch(branch), m_old(oldType), m_new(newType) {
+    SetBranchTypeCommand(GraphScene* scene, BranchItem* branch, BranchType oldType, BranchType newType)
+        : m_scene(scene), m_branch(branch), m_old(oldType), m_new(newType) {
         setText("Change branch element");
     }
 
@@ -345,6 +345,7 @@ private:
         }
     }
 
+    GraphScene* m_scene;
     BranchItem* m_branch;
     BranchType m_old;
     BranchType m_new;
@@ -352,8 +353,8 @@ private:
 
 class SetNodeSystemTypeCommand : public QUndoCommand {
 public:
-    SetNodeSystemTypeCommand(NodeItem* node, SystemType oldType, SystemType newType)
-        : m_node(node), m_old(oldType), m_new(newType) {
+    SetNodeSystemTypeCommand(GraphScene* scene, NodeItem* node, SystemType oldType, SystemType newType)
+        : m_scene(scene), m_node(node), m_old(oldType), m_new(newType) {
         setText("Change node system type");
     }
 
@@ -368,6 +369,7 @@ private:
         }
     }
 
+    GraphScene* m_scene;
     NodeItem* m_node;
     SystemType m_old;
     SystemType m_new;
@@ -375,8 +377,9 @@ private:
 
 class SetBranchConstantCommand : public QUndoCommand {
 public:
-    SetBranchConstantCommand(BranchItem* branch, const QString& oldConstant, const QString& newConstant)
-        : m_branch(branch), m_old(oldConstant), m_new(newConstant) {
+    SetBranchConstantCommand(GraphScene* scene, BranchItem* branch, const QString& oldConstant,
+                             const QString& newConstant)
+        : m_scene(scene), m_branch(branch), m_old(oldConstant), m_new(newConstant) {
         setText("Change branch constant");
     }
 
@@ -403,6 +406,7 @@ private:
         }
     }
 
+    GraphScene* m_scene;
     BranchItem* m_branch;
     QString m_old;
     QString m_new;
@@ -755,7 +759,7 @@ void GraphScene::pushSetBranchType(BranchItem* branch, BranchType type) {
     if (!branch || branch->branchType() == type) {
         return;
     }
-    m_undoStack.push(new SetBranchTypeCommand(branch, branch->branchType(), type));
+    m_undoStack.push(new SetBranchTypeCommand(this, branch, branch->branchType(), type));
 }
 
 void GraphScene::pushSetNodeSystemType(NodeItem* node, SystemType type) {
@@ -763,14 +767,17 @@ void GraphScene::pushSetNodeSystemType(NodeItem* node, SystemType type) {
         return;
     }
     m_defaultSystemType = type;
-    m_undoStack.push(new SetNodeSystemTypeCommand(node, node->systemType(), type));
+    m_undoStack.push(new SetNodeSystemTypeCommand(this, node, node->systemType(), type));
 }
 
 void GraphScene::pushSetBranchConstant(BranchItem* branch, const QString& constant) {
     if (!branch || branch->elementConstant() == constant) {
         return;
     }
-    m_undoStack.push(new SetBranchConstantCommand(branch, branch->elementConstant(), constant));
+    if (!lg::isValidElementConstant(constant)) {
+        return;
+    }
+    m_undoStack.push(new SetBranchConstantCommand(this, branch, branch->elementConstant(), constant));
 }
 
 void GraphScene::pushBranchProperties(BranchItem* branch, bool active, BranchType type, const QString& constant) {
@@ -781,6 +788,9 @@ void GraphScene::pushBranchProperties(BranchItem* branch, bool active, BranchTyp
     const BranchType oldType = branch->branchType();
     const QString oldConstant = branch->elementConstant();
     if (oldActive == active && oldType == type && oldConstant == constant) {
+        return;
+    }
+    if (!active && !lg::isValidElementConstant(constant)) {
         return;
     }
     m_undoStack.push(

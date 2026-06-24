@@ -7,13 +7,16 @@
 
 class QAction;
 class QActionGroup;
+class QShortcut;
 class QComboBox;
 class QDockWidget;
 class QListWidget;
+class QListWidgetItem;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTableWidget;
 class QTableWidgetItem;
+class QVBoxLayout;
 class SettingsWindow;
 
 class MainWindow : public QMainWindow {
@@ -24,6 +27,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void buildMenuBar();
@@ -33,6 +37,7 @@ private:
     void syncModeUi(GraphScene::Mode mode);
     void updateObjectList();
     void updatePropertyPanel();
+    void updateStateSpacePanel();
     void syncObjectTreeSelection();
     void onObjectTreeSelectionChanged();
     void onObjectTreeItemChanged(QTreeWidgetItem* item, int column);
@@ -42,6 +47,7 @@ private:
     void syncDefaultSystemTypeCombo(SystemType type);
     AppSettings currentSettings() const;
     void applySettings(const AppSettings& settings);
+    void applyShortcuts(const AppSettings& settings);
     void showSettingsWindow();
     void refreshChromeTheme();
     void updateWindowTitle();
@@ -64,6 +70,7 @@ private:
     QAction* m_redoAction = nullptr;
     QAction* m_flipBranchAction = nullptr;
     QAction* m_mergeNodesAction = nullptr;
+    QAction* m_toggleTwoPortAction = nullptr;
     QComboBox* m_defaultSystemTypeCombo = nullptr;
     bool m_updatingDomainCombo = false;
     AppTheme m_theme = AppTheme::System;
@@ -72,11 +79,18 @@ private:
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
+    QDockWidget* m_stateSpaceDock = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;
+    QWidget* m_stateSpaceScrollContent = nullptr;
+    QVBoxLayout* m_stateSpaceLayout = nullptr;
     bool m_syncingObjectTree = false;
     bool m_blockSceneSelectionSync = false;
     bool m_updatingPropertyPanel = false;
+    bool m_clearingDocument = false;
     void* m_propertyTargetPtr = nullptr;
     int m_propertyTargetKind = -1;
+    QShortcut* m_applyManualTreeReturnShortcut = nullptr;
+    QShortcut* m_applyManualTreeEnterShortcut = nullptr;
+    QShortcut* m_cancelManualTreeShortcut = nullptr;
 };

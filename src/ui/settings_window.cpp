@@ -1,11 +1,17 @@
 #include "settings_window.h"
 
+#include "app_shortcuts.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QHeaderView>
+#include <QKeySequenceEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTabWidget>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
 namespace {
@@ -44,13 +50,46 @@ SettingsWindow::SettingsWindow(QWidget* parent) : QWidget(parent, Qt::Window) {
 
     m_antialiasing = new QCheckBox(tr("Antialiased rendering"), this);
 
-    auto* form = new QFormLayout;
-    form->addRow(tr("Theme:"), m_theme);
-    form->addRow(tr("Default domain:"), m_defaultSystemType);
-    form->addRow(m_snapToGrid);
-    form->addRow(m_showGrid);
-    form->addRow(tr("Grid spacing:"), m_gridSpacing);
-    form->addRow(m_antialiasing);
+    auto* generalForm = new QFormLayout;
+    generalForm->addRow(tr("Theme:"), m_theme);
+    generalForm->addRow(tr("Default domain:"), m_defaultSystemType);
+    generalForm->addRow(m_snapToGrid);
+    generalForm->addRow(m_showGrid);
+    generalForm->addRow(tr("Grid spacing:"), m_gridSpacing);
+    generalForm->addRow(m_antialiasing);
+
+    auto* resetGeneralButton = new QPushButton(tr("Reset General to Defaults"), this);
+    connect(resetGeneralButton, &QPushButton::clicked, this, &SettingsWindow::resetGeneral);
+
+    auto* generalLayout = new QVBoxLayout;
+    generalLayout->addLayout(generalForm);
+    generalLayout->addWidget(resetGeneralButton);
+
+    auto* generalPage = new QWidget(this);
+    generalPage->setLayout(generalLayout);
+
+    m_shortcutTable = new QTableWidget(this);
+    m_shortcutTable->setColumnCount(2);
+    m_shortcutTable->setHorizontalHeaderLabels({tr("Action"), tr("Shortcut")});
+    m_shortcutTable->horizontalHeader()->setStretchLastSection(true);
+    m_shortcutTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_shortcutTable->verticalHeader()->setVisible(false);
+    m_shortcutTable->setSelectionMode(QAbstractItemView::NoSelection);
+    m_shortcutTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    auto* resetShortcutsButton = new QPushButton(tr("Reset Shortcuts to Defaults"), this);
+    connect(resetShortcutsButton, &QPushButton::clicked, this, &SettingsWindow::resetShortcuts);
+
+    auto* shortcutsLayout = new QVBoxLayout;
+    shortcutsLayout->addWidget(m_shortcutTable);
+    shortcutsLayout->addWidget(resetShortcutsButton);
+
+    auto* shortcutsPage = new QWidget(this);
+    shortcutsPage->setLayout(shortcutsLayout);
+
+    auto* tabs = new QTabWidget(this);
+    tabs->addTab(generalPage, tr("General"));
+    tabs->addTab(shortcutsPage, tr("Shortcuts"));
 
     auto* applyButton = new QPushButton(tr("Apply"), this);
     auto* closeButton = new QPushButton(tr("Close"), this);
@@ -63,9 +102,25 @@ SettingsWindow::SettingsWindow(QWidget* parent) : QWidget(parent, Qt::Window) {
     buttons->addWidget(closeButton);
 
     auto* layout = new QVBoxLayout(this);
-    layout->addLayout(form);
+    layout->addWidget(tabs);
     layout->addLayout(buttons);
-    resize(360, 250);
+    resize(480, 420);
+}
+
+void SettingsWindow::populateShortcutTable(const AppSettings& settings) {
+    m_shortcutTable->setRowCount(0);
+    for (const ShortcutDef& def : AppShortcuts::defs()) {
+        const int row = m_shortcutTable->rowCount();
+        m_shortcutTable->insertRow(row);
+
+        auto* labelItem = new QTableWidgetItem(tr(def.label));
+        labelItem->setData(Qt::UserRole, QString::fromLatin1(def.id));
+        m_shortcutTable->setItem(row, 0, labelItem);
+
+        auto* editor = new QKeySequenceEdit(m_shortcutTable);
+        editor->setKeySequence(settings.shortcut(QString::fromLatin1(def.id)));
+        m_shortcutTable->setCellWidget(row, 1, editor);
+    }
 }
 
 void SettingsWindow::setFrom(const AppSettings& settings) {
@@ -81,6 +136,7 @@ void SettingsWindow::setFrom(const AppSettings& settings) {
     m_showGrid->setChecked(settings.showGrid);
     m_gridSpacing->setValue(settings.gridSpacing);
     m_antialiasing->setChecked(settings.antialiasing);
+    populateShortcutTable(settings);
 }
 
 AppSettings SettingsWindow::settings() const {
@@ -92,7 +148,37 @@ AppSettings SettingsWindow::settings() const {
     s.showGrid = m_showGrid->isChecked();
     s.gridSpacing = m_gridSpacing->value();
     s.antialiasing = m_antialiasing->isChecked();
+
+    for (int row = 0; row < m_shortcutTable->rowCount(); ++row) {
+        const QString id = m_shortcutTable->item(row, 0)->data(Qt::UserRole).toString();
+        const auto* editor = qobject_cast<const QKeySequenceEdit*>(m_shortcutTable->cellWidget(row, 1));
+        if (!editor) {
+            continue;
+        }
+        const QKeySequence sequence = editor->keySequence();
+        if (sequence == AppShortcuts::defaultFor(id)) {
+            s.shortcutOverrides.remove(id);
+        } else {
+            s.shortcutOverrides.insert(id, sequence.toString());
+        }
+    }
     return s;
+}
+
+void SettingsWindow::resetGeneral() {
+    AppSettings current = settings();
+    AppSettings defaults;
+    defaults.shortcutOverrides = current.shortcutOverrides;
+    setFrom(defaults);
+}
+
+void SettingsWindow::resetShortcuts() {
+    for (int row = 0; row < m_shortcutTable->rowCount(); ++row) {
+        const QString id = m_shortcutTable->item(row, 0)->data(Qt::UserRole).toString();
+        if (auto* editor = qobject_cast<QKeySequenceEdit*>(m_shortcutTable->cellWidget(row, 1))) {
+            editor->setKeySequence(AppShortcuts::defaultFor(id));
+        }
+    }
 }
 
 void SettingsWindow::apply() {

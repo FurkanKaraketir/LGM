@@ -102,16 +102,23 @@ SymEngine::map_basic_basic substitutionMap(
 
 std::unordered_map<QString, RCP<const Basic>> resolveReplacements(
     std::unordered_map<QString, RCP<const Basic>> replacements) {
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        const SymEngine::map_basic_basic map = substitutionMap(replacements);
+    // ponytail: bounded fixpoint; mutual deps can expand without ever stabilizing
+    const size_t maxPasses = replacements.size() + 1;
+    for (size_t pass = 0; pass < maxPasses; ++pass) {
+        bool changed = false;
         for (auto& [name, expr] : replacements) {
+            SymEngine::map_basic_basic map = substitutionMap(replacements);
+            if (const std::optional<RCP<const Basic>> self = trySymOf(name)) {
+                map.erase(*self);
+            }
             const RCP<const Basic> next = expand(subs(expr, map));
             if (!eq(*next, *expr)) {
                 expr = next;
                 changed = true;
             }
+        }
+        if (!changed) {
+            break;
         }
     }
     return replacements;
@@ -239,6 +246,7 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
     if (n == 0) {
         return;
     }
+    ssLog(QStringLiteral("coupling"), QStringLiteral("start n=%1").arg(n));
     std::vector<RCP<const Basic>> dotVars;
     dotVars.reserve(n);
     for (const QString& symbolName : stateSymbols) {
@@ -265,8 +273,17 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
         if (eq(*t_ii, *integer(0))) {
             continue;
         }
+        if (eq(*t_ii, *integer(1))) {
+            ssLog(QStringLiteral("coupling_degenerate"),
+                  QStringLiteral("%1_dot is underdetermined (coefficient 1 on own derivative)")
+                      .arg(stateSymbols[i]));
+            throw std::runtime_error("degenerate state derivative equation");
+        }
         const RCP<const Basic> rhs = linearRemainder(expr, dotVars);
         stateDots[stateSymbols[i]] = expand(div(rhs, sub(integer(1), t_ii)));
+        ssLog(QStringLiteral("coupling_decouple"),
+              QStringLiteral("%1_dot = %2")
+                  .arg(stateSymbols[i], exprText(stateDots[stateSymbols[i]])));
     }
 
     std::vector<size_t> coupled;
@@ -278,10 +295,19 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
         }
     }
     if (coupled.empty()) {
+        ssLog(QStringLiteral("coupling"), QStringLiteral("end (all decoupled)"));
         return;
     }
 
     const size_t m = coupled.size();
+    {
+        QStringList names;
+        for (size_t i : coupled) {
+            names.push_back(stateSymbols[i]);
+        }
+        ssLog(QStringLiteral("coupling"),
+              QStringLiteral("solving coupled block size=%1: [%2]").arg(m).arg(names.join(QStringLiteral(", "))));
+    }
     std::vector<std::vector<RCP<const Basic>>> matrix(
         m, std::vector<RCP<const Basic>>(m, integer(0)));
     std::vector<RCP<const Basic>> rhs(m, integer(0));
@@ -313,12 +339,23 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
     }
     for (size_t ri = 0; ri < m; ++ri) {
         stateDots[stateSymbols[coupled[ri]]] = expand((*solved)[ri]);
+        ssLog(QStringLiteral("coupling_solved"),
+              QStringLiteral("%1_dot = %2")
+                  .arg(stateSymbols[coupled[ri]], exprText((*solved)[ri])));
     }
+    ssLog(QStringLiteral("coupling"), QStringLiteral("end"));
 }
 
 namespace {
 
 const bool kStateSpaceSelfCheck = [] {
+    {
+        std::unordered_map<QString, RCP<const Basic>> reps;
+        reps[QStringLiteral("A")] = add(symbol("B"), integer(1));
+        reps[QStringLiteral("B")] = add(symbol("A"), integer(1));
+        const auto resolved = resolveReplacements(reps);
+        assert(resolved.size() == 2);
+    }
     RCP<const Basic> x = symbol("x");
     RCP<const Basic> y = symbol("y");
     RCP<const Basic> f1 = symbol("f1");
@@ -392,6 +429,13 @@ const bool kStateSpaceSelfCheck = [] {
         assert(eq(*linearRemainder(reduced, stateInputVars), *integer(0)));
         const RCP<const Basic> leftover = add(reduced, symbol("i7"));
         assert(eq(*linearRemainder(leftover, stateInputVars), *symbol("i7")));
+    }
+    {
+        std::unordered_map<QString, RCP<const Basic>> reps;
+        reps[QStringLiteral("A")] = add(symbol("B"), integer(1));
+        reps[QStringLiteral("B")] = add(symbol("A"), integer(1));
+        const auto resolved = resolveReplacements(reps);
+        assert(resolved.size() == 2);
     }
     {
         std::unordered_map<QString, RCP<const Basic>> dots;

@@ -87,7 +87,7 @@ void GraphScene::executeDelete(const std::vector<NodeSnapshot>& nodes,
 
     for (const TwoPortKey& key : twoPorts) {
         if (TwoPortItem* item = twoPortAtCenter(key.center)) {
-            destroyTwoPort(item);
+            purgeTwoPort(item);
         }
     }
 
@@ -152,10 +152,10 @@ void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
             continue;
         }
         if (BranchItem* branch = createBranch(a, b, snap.bow)) {
-            branch->setName(snap.name);
             branch->setActive(snap.active);
-            branch->setBranchType(snap.type);
             branch->setElementConstant(snap.constant);
+            branch->setBranchType(snap.type);
+            branch->setName(snap.name);
         }
     }
 }

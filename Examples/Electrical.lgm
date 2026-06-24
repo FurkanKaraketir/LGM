@@ -1,0 +1,214 @@
+{
+    "branches": [
+        {
+            "active": true,
+            "bow": 0,
+            "constant": "1",
+            "from": {
+                "x": 300,
+                "y": 120
+            },
+            "index": 0,
+            "name": "Is2",
+            "serialId": 8,
+            "sourceInputId": 2,
+            "to": {
+                "x": 140,
+                "y": 40
+            },
+            "type": 1
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "R2",
+            "from": {
+                "x": 300,
+                "y": 120
+            },
+            "index": 0,
+            "name": "i_R2",
+            "serialId": 7,
+            "sourceInputId": 0,
+            "to": {
+                "x": 80,
+                "y": 220
+            },
+            "type": 2
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "L3",
+            "from": {
+                "x": 80,
+                "y": 220
+            },
+            "index": 0,
+            "name": "i_L3",
+            "serialId": 6,
+            "sourceInputId": 0,
+            "to": {
+                "x": -20,
+                "y": 120
+            },
+            "type": 1
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "L7",
+            "from": {
+                "x": 120,
+                "y": -100
+            },
+            "index": 0,
+            "name": "i_L7",
+            "serialId": 5,
+            "sourceInputId": 0,
+            "to": {
+                "x": 300,
+                "y": 120
+            },
+            "type": 1
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "R1",
+            "from": {
+                "x": 120,
+                "y": -100
+            },
+            "index": 0,
+            "name": "i_R1",
+            "serialId": 4,
+            "sourceInputId": 0,
+            "to": {
+                "x": 140,
+                "y": 40
+            },
+            "type": 2
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "C4",
+            "from": {
+                "x": 140,
+                "y": 40
+            },
+            "index": 0,
+            "name": "i_C4",
+            "serialId": 3,
+            "sourceInputId": 0,
+            "to": {
+                "x": -20,
+                "y": 120
+            },
+            "type": 0
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "C5",
+            "from": {
+                "x": 120,
+                "y": -100
+            },
+            "index": 1,
+            "name": "i_C5",
+            "serialId": 2,
+            "sourceInputId": 0,
+            "to": {
+                "x": 140,
+                "y": 40
+            },
+            "type": 0
+        },
+        {
+            "active": true,
+            "bow": 0,
+            "constant": "1",
+            "from": {
+                "x": 120,
+                "y": -100
+            },
+            "index": 0,
+            "name": "Vs1",
+            "serialId": 1,
+            "sourceInputId": 1,
+            "to": {
+                "x": -20,
+                "y": 120
+            },
+            "type": 0
+        }
+    ],
+    "format": "LinearGraphModeling",
+    "nodes": [
+        {
+            "across": "0",
+            "ground": true,
+            "name": "Node 5",
+            "pos": {
+                "x": -20,
+                "y": 120
+            },
+            "systemType": 1
+        },
+        {
+            "across": "V4",
+            "ground": false,
+            "name": "Node 4",
+            "pos": {
+                "x": 80,
+                "y": 220
+            },
+            "systemType": 1
+        },
+        {
+            "across": "V3",
+            "ground": false,
+            "name": "Node 3",
+            "pos": {
+                "x": 300,
+                "y": 120
+            },
+            "systemType": 1
+        },
+        {
+            "across": "V2",
+            "ground": false,
+            "name": "Node 2",
+            "pos": {
+                "x": 140,
+                "y": 40
+            },
+            "systemType": 1
+        },
+        {
+            "across": "V1",
+            "ground": false,
+            "name": "Node 1",
+            "pos": {
+                "x": 120,
+                "y": -100
+            },
+            "systemType": 1
+        }
+    ],
+    "settings": {
+        "defaultSystemType": 1,
+        "gridSpacing": 20,
+        "nextBranchId": 9,
+        "nextNodeId": 6,
+        "nextSourceInputId": 3,
+        "nextTwoPortId": 1,
+        "showGrid": true,
+        "snapToGrid": true
+    },
+    "twoPorts": [
+    ],
+    "version": 2
+}

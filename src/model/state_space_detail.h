@@ -57,7 +57,9 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
 // --- graph ---
 
 QString storageStateSymbol(const BranchItem& branch, bool inTree);
-bool isStateBranch(const NormalTreeResult& tree, BranchItem* branch);
+bool isStateBranch(const NormalTreeResult& tree, BranchItem* branch,
+                   const std::vector<BranchItem*>& branches,
+                   const std::vector<TwoPortItem*>& twoPorts = {});
 std::unordered_set<NodeItem*> reachableTreeNodes(NodeItem* start,
                                                   const std::vector<BranchItem*>& treeBranches,
                                                   BranchItem* excludedTwig);
@@ -65,7 +67,23 @@ std::optional<std::vector<BranchItem*>> treePathBetween(
     NodeItem* start, NodeItem* goal, const std::vector<BranchItem*>& treeBranches);
 RCP<const Basic> signedAcross(BranchItem* branch, NodeItem* from, NodeItem* to);
 RCP<const Basic> signedThrough(BranchItem* branch, NodeItem* from, NodeItem* to);
+// ponytail: omitFromContinuityCut drops duplicate port bonds; parallel user flow counted once.
+RCP<const Basic> signedThroughForContinuityCut(BranchItem* branch, NodeItem* from, NodeItem* to,
+                                               BranchItem* twig,
+                                               const std::vector<BranchItem*>& branches,
+                                               const std::vector<TwoPortItem*>& twoPorts);
 std::vector<QString> collectNodeAcrossSymbols(const std::vector<NodeItem*>& nodes);
+
+// Chains port-flow replacements to a co-tree compliance through-state (e.g. f_K).
+std::optional<RCP<const Basic>> composeReflectedCoTreeForce(
+    const QString& startPortFlow, const QString& complianceFlow,
+    const std::unordered_map<QString, RCP<const Basic>>& replacements,
+    const std::vector<QString>& branchThroughSymbols);
+
+// Effort-node path between two ports through transformers; returns TF modulus product.
+std::optional<RCP<const Basic>> transformerModulusProductBetween(
+    const NodeItem* fromAcross, const NodeItem* toAcross,
+    const std::vector<TwoPortItem*>& twoPorts);
 
 // --- elimination ---
 
@@ -83,7 +101,8 @@ void eliminateSymbolsInto(
     const std::vector<QString>& candidates,
     const std::function<bool(const QString&)>& canEliminate,
     const std::function<bool(const RCP<const Basic>&)>& acceptSolution = {},
-    const SubstitutionFilter& acceptSubstitution = {});
+    const SubstitutionFilter& acceptSubstitution = {},
+    const QString& phase = {});
 
 QString branchTautologyAcrossSymbol(const BranchItem& branch);
 
@@ -92,7 +111,9 @@ void eliminateBranchSymbolsInto(
     const std::vector<RCP<const Basic>>& relations,
     const std::vector<BranchItem*>& branches,
     const std::unordered_set<BranchItem*>& treeSet,
-    const std::function<bool(const QString&)>& canEliminate);
+    const std::function<bool(const QString&)>& canEliminate,
+    const SubstitutionFilter& acceptSubstitution = {},
+    const QString& phase = {});
 
 std::vector<RCP<const Basic>> constraintRelations(
     const std::unordered_map<QString, RCP<const Basic>>& replacements);

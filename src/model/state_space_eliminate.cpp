@@ -8,6 +8,8 @@
 #include <symengine/mul.h>
 #include <symengine/subs.h>
 
+#include <QDebug>
+
 #include <cassert>
 
 namespace lg::ss {
@@ -29,14 +31,21 @@ void eliminateSymbolsInto(
     const std::vector<QString>& candidates,
     const std::function<bool(const QString&)>& canEliminate,
     const std::function<bool(const RCP<const Basic>&)>& acceptSolution,
-    const SubstitutionFilter& acceptSubstitution) {
+    const SubstitutionFilter& acceptSubstitution,
+    const QString& phase) {
     if (candidates.empty() || relations.empty()) {
         return;
     }
+    const QString stage = phase.isEmpty() ? QStringLiteral("eliminate") : phase;
+    ssLog(stage, QStringLiteral("start relations=%1 candidates=%2 targets=%3")
+                      .arg(relations.size())
+                      .arg(candidates.size())
+                      .arg(targets.size()));
     const size_t maxPasses = relations.size() * candidates.size() + candidates.size();
     for (size_t pass = 0; pass < maxPasses; ++pass) {
         bool progress = false;
-        for (const RCP<const Basic>& relation : relations) {
+        for (size_t relIdx = 0; relIdx < relations.size(); ++relIdx) {
+            const RCP<const Basic>& relation = relations[relIdx];
             bool solvedRelation = false;
             for (const QString& candidate : candidates) {
                 if (!canEliminate(candidate)) {
@@ -62,6 +71,11 @@ void eliminateSymbolsInto(
                     }
                     const RCP<const Basic> next = expand(subs(expr, {{primarySym, *solved}}));
                     if (!eq(*next, *expr)) {
+                        ssLog(stage,
+                              QStringLiteral("pass %1 rel[%2] %3 -> %4 in %5: %6")
+                                  .arg(pass)
+                                  .arg(relIdx)
+                                  .arg(candidate, exprText(*solved), name, exprText(next)));
                         expr = next;
                         changed = true;
                     }
@@ -76,9 +90,12 @@ void eliminateSymbolsInto(
             (void)solvedRelation;
         }
         if (!progress) {
+            ssLog(stage, QStringLiteral("pass %1 done (no progress)").arg(pass));
             break;
         }
+        ssLog(stage, QStringLiteral("pass %1 done").arg(pass));
     }
+    ssLog(stage, QStringLiteral("end"));
 }
 
 QString branchTautologyAcrossSymbol(const BranchItem& branch) {
@@ -86,7 +103,7 @@ QString branchTautologyAcrossSymbol(const BranchItem& branch) {
     if (text.isEmpty() || text == QStringLiteral("0") || isValidVariableSymbol(text)) {
         return {};
     }
-    return branchFlowSymbol(branch) + QStringLiteral("_a");
+    return branchThroughSymbol(branch) + QStringLiteral("_a");
 }
 
 void eliminateBranchSymbolsInto(
@@ -94,35 +111,29 @@ void eliminateBranchSymbolsInto(
     const std::vector<RCP<const Basic>>& relations,
     const std::vector<BranchItem*>& branches,
     const std::unordered_set<BranchItem*>& treeSet,
-    const std::function<bool(const QString&)>& canEliminate) {
+    const std::function<bool(const QString&)>& canEliminate,
+    const SubstitutionFilter& acceptSubstitution,
+    const QString& phase) {
+    (void)treeSet;
     std::vector<QString> candidates;
     candidates.reserve(branches.size() * 3);
     for (BranchItem* branch : branches) {
         if (!branch || branch->isActive()) {
             continue;
         }
-        const bool inTree = treeSet.count(branch) != 0;
-        const bool twoPortPort = isTwoPortInternalBranch(*branch);
-        const BranchType type = effectivePassiveBranchType(*branch);
-        // Two-port ports use BranchType::T by convention, not as through-storage elements.
-        if (!twoPortPort && type == BranchType::A && inTree) {
-            continue;
-        }
-        if (!twoPortPort && type == BranchType::T && !inTree) {
-            continue;
-        }
         for (const QString& candidate :
-             {branchFlowSymbol(*branch), branchAcrossSymbol(*branch)}) {
-            if (!candidate.isEmpty()) {
+             {branchThroughSymbol(*branch), branchAcrossSymbol(*branch)}) {
+            if (!candidate.isEmpty() && canEliminate(candidate)) {
                 candidates.push_back(candidate);
             }
         }
         const QString acrossText = branchAcrossVariableText(*branch);
-        if (isValidVariableSymbol(acrossText)) {
+        if (isValidVariableSymbol(acrossText) && canEliminate(acrossText)) {
             candidates.push_back(acrossText);
         }
     }
-    eliminateSymbolsInto(targets, relations, candidates, canEliminate);
+    eliminateSymbolsInto(targets, relations, candidates, canEliminate, {}, acceptSubstitution,
+                         phase);
 }
 
 std::vector<RCP<const Basic>> constraintRelations(
@@ -234,6 +245,64 @@ const bool kEliminateSelfCheck = [] {
                          *SymEngine::div(SymEngine::mul(SymEngine::symbol("TF"),
                                                         SymEngine::symbol("Fs1")),
                                         SymEngine::symbol("m"))));
+
+    dots.clear();
+    dots[QStringLiteral("Omega1")] =
+        SymEngine::div(SymEngine::symbol("T_I1"), SymEngine::symbol("I1"));
+    const std::vector<RCP<const Basic>> tI1Relations = {
+        SymEngine::sub(SymEngine::symbol("T_I1"), SymEngine::symbol("Fs1")),
+    };
+    eliminateSymbolsInto(dots, tI1Relations, {QStringLiteral("T_I1")},
+                         [](const QString&) { return true; });
+    assert(SymEngine::eq(*expand(dots.at(QStringLiteral("Omega1"))),
+                         *SymEngine::div(SymEngine::symbol("Fs1"), SymEngine::symbol("I1"))));
+
+    dots.clear();
+    dots[QStringLiteral("v1_dot")] =
+        SymEngine::div(SymEngine::symbol("f_M"), SymEngine::symbol("M"));
+    const RCP<const Basic> tfProd =
+        SymEngine::mul(SymEngine::symbol("TF1"),
+                       SymEngine::mul(SymEngine::symbol("TF2"), SymEngine::symbol("TF3")));
+    const std::vector<RCP<const Basic>> massSpringRelations = {
+        SymEngine::sub(SymEngine::symbol("f_M"),
+                       SymEngine::sub(SymEngine::symbol("Fs1"),
+                                      SymEngine::div(SymEngine::symbol("f_K"), tfProd))),
+    };
+    eliminateSymbolsInto(dots, massSpringRelations, {QStringLiteral("f_M")},
+                         [](const QString&) { return true; });
+    const RCP<const Basic> expectedV1Dot = SymEngine::add(
+        SymEngine::div(SymEngine::symbol("Fs1"), SymEngine::symbol("M")),
+        SymEngine::div(SymEngine::neg(SymEngine::symbol("f_K")),
+                       SymEngine::mul(SymEngine::symbol("M"), tfProd)));
+    assert(SymEngine::eq(*expand(dots.at(QStringLiteral("v1_dot"))), *expand(expectedV1Dot)));
+
+    dots.clear();
+    dots[QStringLiteral("OmegaJ")] =
+        SymEngine::div(SymEngine::symbol("T_J"), SymEngine::symbol("J"));
+    const std::vector<RCP<const Basic>> motorJunctionRelations = {
+        SymEngine::sub(SymEngine::symbol("T_J"),
+                       SymEngine::add(SymEngine::neg(SymEngine::symbol("T_port")),
+                                      SymEngine::neg(SymEngine::symbol("T_B")))),
+        SymEngine::sub(SymEngine::symbol("T_B"),
+                       SymEngine::mul(SymEngine::symbol("B"), SymEngine::symbol("OmegaJ"))),
+        SymEngine::sub(SymEngine::symbol("T_port"),
+                       SymEngine::div(SymEngine::symbol("i_L"), SymEngine::symbol("Ka"))),
+    };
+    eliminateSymbolsInto(dots, motorJunctionRelations, {QStringLiteral("T_J"), QStringLiteral("T_B"),
+                                                          QStringLiteral("T_port")},
+                         [](const QString&) { return true; });
+    resolveStateDotCoupling({QStringLiteral("OmegaJ")}, dots);
+    const RCP<const Basic> expectedOmegaJDot = SymEngine::div(
+        SymEngine::add(SymEngine::div(SymEngine::neg(SymEngine::symbol("i_L")),
+                                      SymEngine::symbol("Ka")),
+                       SymEngine::mul(SymEngine::neg(SymEngine::symbol("B")),
+                                      SymEngine::symbol("OmegaJ"))),
+        SymEngine::symbol("J"));
+    assert(SymEngine::eq(*expand(dots.at(QStringLiteral("OmegaJ"))), *expand(expectedOmegaJDot)));
+    assert(SymEngine::eq(*linearCoeffRCP(dots.at(QStringLiteral("OmegaJ")),
+                                         dotSym(QStringLiteral("OmegaJ"))),
+                         *integer(0)));
+
     return true;
 }();
 

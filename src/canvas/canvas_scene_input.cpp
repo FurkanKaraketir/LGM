@@ -75,5 +75,11 @@ void GraphScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (m_pending) {
         clearBranchPending();
     }
+
+    if (m_mode == Mode::Select && m_normalTreeHighlightActive &&
+        !itemAt(event->scenePos(), QTransform())) {
+        clearNormalTreeHighlight();
+    }
+
     QGraphicsScene::mousePressEvent(event);
 }

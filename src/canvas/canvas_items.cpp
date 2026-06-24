@@ -16,6 +16,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QPainter>
+#include <QPainterPathStroker>
 #include <QRadioButton>
 #include <QStyleOptionGraphicsItem>
 #include <QVBoxLayout>
@@ -28,6 +29,18 @@ namespace {
 
 constexpr qreal kBowFactor = 0.24;
 constexpr qreal kLaneSpread = 36.0;
+constexpr qreal kBranchPickWidth = 6.0;
+
+QPainterPath strokedPickShape(const QPainterPath& source, qreal width = kBranchPickWidth) {
+    if (source.isEmpty()) {
+        return source;
+    }
+    QPainterPathStroker stroker;
+    stroker.setWidth(width);
+    stroker.setCapStyle(Qt::RoundCap);
+    stroker.setJoinStyle(Qt::RoundJoin);
+    return stroker.createStroke(source);
+}
 constexpr qreal kTwoPortEgressKick = 48.0;
 
 constexpr QColor kSelectionColor(0, 100, 200);
@@ -342,14 +355,7 @@ struct BranchArrowGeom {
 };
 
 bool isTwoPortPortBranch(const BranchItem* branch) {
-    if (!branch || !branch->from()) {
-        return false;
-    }
-    TwoPortItem* twoPort = branch->from()->twoPort();
-    if (!twoPort) {
-        return false;
-    }
-    return branch == twoPort->leftBranch() || branch == twoPort->rightBranch();
+    return branch && branch->isTwoPortPort();
 }
 
 qreal externalBranchLane(int index, int count) {
@@ -455,6 +461,9 @@ BranchEgress computeBranchEgress(const BranchItem* branch) {
 QString branchAnnotationLabel(const BranchItem* branch) {
     if (isTwoPortPortBranch(branch)) {
         return branch->name();
+    }
+    if (branch->isActive()) {
+        return lg::branchSourceInputSymbol(*branch);
     }
     const QString constant = branch->elementConstant().trimmed();
     return constant.isEmpty() ? QStringLiteral("1") : constant;
@@ -659,7 +668,7 @@ void BranchItem::refreshTheme() {
 
 QRectF BranchItem::boundingRect() const {
     QRectF rect = QGraphicsPathItem::boundingRect();
-    if (m_active || !m_from || !m_to || !m_from->scene() || !m_to->scene()) {
+    if (!m_from || !m_to || !m_from->scene() || !m_to->scene()) {
         return rect;
     }
     const QPointF a = m_from->scenePos();
@@ -672,6 +681,10 @@ QRectF BranchItem::boundingRect() const {
     font.setPointSizeF(9.0);
     rect |= constantLabelRect(arrow.tip, arrow.tangent, label, font);
     return rect.marginsAdded(QMarginsF(2.0, 2.0, 2.0, 2.0));
+}
+
+QPainterPath BranchItem::shape() const {
+    return strokedPickShape(path());
 }
 
 void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
@@ -699,10 +712,6 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     }
     painter->restore();
 
-    if (m_active) {
-        return;
-    }
-
     const QString label = branchAnnotationLabel(this);
     QFont font = painter->font();
     font.setPointSizeF(9.0);
@@ -716,8 +725,28 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     painter->restore();
 }
 
+void BranchItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    if (!shape().contains(event->pos())) {
+        event->ignore();
+        return;
+    }
+    if (scene() && event->button() == Qt::LeftButton) {
+        auto* graph = static_cast<GraphScene*>(scene());
+        if (graph->mode() == GraphScene::Mode::SelectNormalTree) {
+            graph->toggleManualNormalTreeBranch(this);
+            event->accept();
+            return;
+        }
+    }
+    QGraphicsPathItem::mousePressEvent(event);
+}
+
 void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     if (!scene()) {
+        return;
+    }
+    if (static_cast<GraphScene*>(scene())->mode() == GraphScene::Mode::SelectNormalTree) {
+        event->accept();
         return;
     }
     if (isTwoPortPortBranch(this)) {
@@ -767,6 +796,7 @@ void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
 
     auto* constantLabel = new QLabel("Constant:");
     auto* constantEdit = new QLineEdit(m_elementConstant);
+    constantEdit->setPlaceholderText(QStringLiteral("e.g. R1, C2, M3"));
     layout->addWidget(constantLabel);
     layout->addWidget(constantEdit);
 
@@ -782,9 +812,17 @@ void BranchItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     layout->addWidget(buttons);
     
-    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, [=]() {
+        if (!categoryCombo->currentData().toBool() &&
+            !lg::isValidElementConstant(constantEdit->text())) {
+            constantEdit->setFocus();
+            constantEdit->selectAll();
+            return;
+        }
+        dialog->accept();
+    });
+
     if (dialog->exec() == QDialog::Accepted) {
         auto* graph = static_cast<GraphScene*>(scene());
         graph->pushBranchProperties(
@@ -852,11 +890,9 @@ QRectF NodeItem::boundingRect() const {
         const qreal extra = rect().width() / 2.0 + 18.0;
         r.setBottom(r.bottom() + extra);
     }
-    if (!m_twoPort) {
-        QFont font;
-        font.setPointSizeF(9.0);
-        r |= nodeAcrossLabelRect(acrossVariable(), rect().width() / 2.0, font);
-    }
+    QFont font;
+    font.setPointSizeF(9.0);
+    r |= nodeAcrossLabelRect(acrossVariable(), rect().width() / 2.0, font);
     return r;
 }
 
@@ -869,19 +905,17 @@ void NodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, 
         drawGroundSymbol(painter, QPointF(0.0, 0.0), rect().width() / 2.0);
         painter->restore();
     }
-    if (!m_twoPort) {
-        const qreal radius = rect().width() / 2.0;
-        const QString label = acrossVariable();
-        QFont font = painter->font();
-        font.setPointSizeF(9.0);
-        painter->setFont(font);
-        painter->setPen(isSelected() ? kSelectionColor : itemInk(widget));
-        const QRectF textRect = nodeAcrossLabelRect(label, radius, font);
-        painter->save();
-        painter->setClipping(false);
-        painter->drawText(textRect, Qt::AlignCenter, label);
-        painter->restore();
-    }
+    const qreal radius = rect().width() / 2.0;
+    const QString label = acrossVariable();
+    QFont font = painter->font();
+    font.setPointSizeF(9.0);
+    painter->setFont(font);
+    painter->setPen(isSelected() ? kSelectionColor : itemInk(widget));
+    const QRectF textRect = nodeAcrossLabelRect(label, radius, font);
+    painter->save();
+    painter->setClipping(false);
+    painter->drawText(textRect, Qt::AlignCenter, label);
+    painter->restore();
 }
 
 void NodeItem::addBranch(BranchItem* branch) {
@@ -918,6 +952,10 @@ void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     m_dragStart = pos();
     if (m_twoPort && scene()) {
         auto* graph = static_cast<GraphScene*>(scene());
+        if (graph->mode() == GraphScene::Mode::SelectNormalTree) {
+            event->accept();
+            return;
+        }
         if (graph->mode() == GraphScene::Mode::Select) {
             if (!(event->modifiers() & Qt::ShiftModifier)) {
                 graph->selectTwoPortNode(this);
@@ -946,6 +984,10 @@ void NodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     if (!scene() || m_twoPort) {
         QGraphicsEllipseItem::mouseDoubleClickEvent(event);
+        return;
+    }
+    if (static_cast<GraphScene*>(scene())->mode() == GraphScene::Mode::SelectNormalTree) {
+        event->accept();
         return;
     }
     auto* dialog = new QDialog(scene()->views().first());
@@ -1051,16 +1093,13 @@ void TwoPortItem::applyPortDefaults() {
     m_v2->setName(QStringLiteral("v\u2082"));
     m_g1->setName(QStringLiteral("ref\u2081"));
     m_g2->setName(QStringLiteral("ref\u2082"));
-    m_v1->setAcrossVariable(QStringLiteral("v1"));
-    m_v2->setAcrossVariable(QStringLiteral("v2"));
+    // ponytail: keep createBranch/createNode symbolic names (f3, v4, …) — shared f1/f2 breaks multi two-port models
 
     for (BranchItem* branch : {m_left, m_right}) {
         branch->setBranchType(BranchType::T);
         branch->setActive(false);
         branch->setElementConstant(QStringLiteral("1"));
     }
-    m_left->setName(QStringLiteral("f1"));
-    m_right->setName(QStringLiteral("f2"));
 }
 
 void TwoPortItem::refresh() {
@@ -1129,10 +1168,7 @@ QPointF TwoPortItem::couplerRight() const {
 }
 
 QRectF TwoPortItem::boundingRect() const {
-    const QPointF left = couplerLeft();
-    const QPointF right = couplerRight();
-    const qreal midY = (left.y() + right.y()) / 2.0;
-    return QRectF(left.x() - 24.0, midY - 48.0, right.x() - left.x() + 48.0, 96.0);
+    return shape().boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
 }
 
 QPainterPath TwoPortItem::shape() const {
@@ -1161,8 +1197,17 @@ void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* optio
 }
 
 void TwoPortItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    if (!shape().contains(event->pos())) {
+        event->ignore();
+        return;
+    }
     if (scene()) {
-        static_cast<GraphScene*>(scene())->selectTwoPort(this);
+        auto* graph = static_cast<GraphScene*>(scene());
+        if (graph->mode() == GraphScene::Mode::SelectNormalTree) {
+            event->accept();
+            return;
+        }
+        graph->selectTwoPort(this);
         m_dragScenePos = event->scenePos();
         m_dragCenterStart = center();
         m_dragMoved = false;
@@ -1194,6 +1239,10 @@ void TwoPortItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 void TwoPortItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
     if (scene()) {
         auto* graph = static_cast<GraphScene*>(scene());
+        if (graph->mode() == GraphScene::Mode::SelectNormalTree) {
+            event->accept();
+            return;
+        }
         graph->pushToggleTwoPortKind(this);
     }
     event->accept();
