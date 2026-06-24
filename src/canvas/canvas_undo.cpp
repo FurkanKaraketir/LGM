@@ -1,9 +1,11 @@
 #include "canvas.h"
 
 #include "elemental_equation.h"
+#include "normal_tree.h"
 
 #include <QMessageBox>
 #include <QUndoCommand>
+#include <algorithm>
 #include <vector>
 
 namespace {
@@ -914,6 +916,42 @@ void GraphScene::pushDeleteSelection() {
 
 void GraphScene::undo() {
     m_undoStack.undo();
+}
+
+class SavedNormalTreesCommand : public QUndoCommand {
+public:
+    SavedNormalTreesCommand(GraphScene* scene, std::vector<GraphScene::SavedNormalTree> before,
+                            int beforeActive, std::vector<GraphScene::SavedNormalTree> after,
+                            int afterActive)
+        : m_scene(scene),
+          m_before(std::move(before)),
+          m_after(std::move(after)),
+          m_beforeActive(beforeActive),
+          m_afterActive(afterActive) {
+        setText("Edit saved normal trees");
+    }
+
+    void undo() override { m_scene->setSavedNormalTreesState(m_before, m_beforeActive); }
+
+    void redo() override { m_scene->setSavedNormalTreesState(m_after, m_afterActive); }
+
+private:
+    GraphScene* m_scene = nullptr;
+    std::vector<GraphScene::SavedNormalTree> m_before;
+    std::vector<GraphScene::SavedNormalTree> m_after;
+    int m_beforeActive = -1;
+    int m_afterActive = -1;
+};
+
+void GraphScene::pushSavedNormalTreesUndo(const std::vector<SavedNormalTree>& before, int beforeActive,
+                                          const std::vector<SavedNormalTree>& after, int afterActive) {
+    m_undoStack.push(new SavedNormalTreesCommand(this, before, beforeActive, after, afterActive));
+}
+
+void GraphScene::setSavedNormalTreesState(const std::vector<SavedNormalTree>& trees, int activeIndex) {
+    m_savedNormalTrees = trees;
+    m_activeSavedNormalTreeIndex = activeIndex;
+    emit savedNormalTreesChanged();
 }
 
 void GraphScene::redo() {

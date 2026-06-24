@@ -6,7 +6,11 @@
 
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QAbstractItemView>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -118,6 +122,32 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     normalTreeLayout->addWidget(m_normalTreeStatus);
     normalTreeLayout->addWidget(m_manualTreePanel);
 
+    auto* savedTreesGroup = new QGroupBox(tr("Saved Normal Trees"), this);
+    m_savedTreesList = new QListWidget(savedTreesGroup);
+    m_savedTreesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    connect(m_savedTreesList, &QListWidget::itemDoubleClicked, this, &AnalyzeWindow::runUseSavedTree);
+    connect(m_savedTreesList, &QListWidget::itemSelectionChanged, this, [this]() {
+        const bool hasSelection = m_savedTreesList->currentRow() >= 0;
+        m_removeTreeBtn->setEnabled(hasSelection);
+        m_useTreeBtn->setEnabled(hasSelection);
+    });
+
+    m_saveTreeBtn = new QPushButton(tr("Save Current"), savedTreesGroup);
+    m_removeTreeBtn = new QPushButton(tr("Remove"), savedTreesGroup);
+    m_useTreeBtn = new QPushButton(tr("Use Selected"), savedTreesGroup);
+    connect(m_saveTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runSaveCurrentTree);
+    connect(m_removeTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runRemoveSavedTree);
+    connect(m_useTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runUseSavedTree);
+
+    auto* savedTreeButtons = new QHBoxLayout;
+    savedTreeButtons->addWidget(m_saveTreeBtn);
+    savedTreeButtons->addWidget(m_removeTreeBtn);
+    savedTreeButtons->addWidget(m_useTreeBtn);
+
+    auto* savedTreesLayout = new QVBoxLayout(savedTreesGroup);
+    savedTreesLayout->addWidget(m_savedTreesList);
+    savedTreesLayout->addLayout(savedTreeButtons);
+
     auto* stateSpaceGroup = new QGroupBox(tr("State Space"), this);
     auto* computeBtn = new QPushButton(tr("Compute State Space"), stateSpaceGroup);
     connect(computeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runComputeStateSpace);
@@ -131,18 +161,46 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->addWidget(normalTreeGroup);
+    layout->addWidget(savedTreesGroup);
     layout->addWidget(stateSpaceGroup);
     layout->addStretch();
 
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::manualNormalTreeValidationChanged, this,
             &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeAccepted, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeRejected, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::modeChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::savedNormalTreesChanged, this, &AnalyzeWindow::refreshSavedTreesList);
 
     refreshNormalTreeSection();
+    refreshSavedTreesList();
+}
+
+void AnalyzeWindow::refreshSavedTreesList() {
+    const int previousRow = m_savedTreesList->currentRow();
+    m_savedTreesList->clear();
+    const std::vector<GraphScene::SavedNormalTree>& trees = m_scene->savedNormalTrees();
+    for (int i = 0; i < static_cast<int>(trees.size()); ++i) {
+        m_savedTreesList->addItem(m_scene->savedNormalTreeListLabel(i));
+    }
+    if (previousRow >= 0 && previousRow < m_savedTreesList->count()) {
+        m_savedTreesList->setCurrentRow(previousRow);
+    } else if (m_scene->activeSavedNormalTreeIndex() >= 0) {
+        m_savedTreesList->setCurrentRow(m_scene->activeSavedNormalTreeIndex());
+    }
+
+    const bool hasActiveTree =
+        m_scene->normalTreeHighlightActive() &&
+        m_scene->lastNormalTreeResult().status == lg::NormalTreeResult::Status::Ok;
+    m_saveTreeBtn->setEnabled(hasActiveTree);
+
+    const bool hasSelection = m_savedTreesList->currentRow() >= 0;
+    m_removeTreeBtn->setEnabled(hasSelection);
+    m_useTreeBtn->setEnabled(hasSelection);
 }
 
 void AnalyzeWindow::refreshNormalTreeSection() {
@@ -178,6 +236,9 @@ void AnalyzeWindow::refreshNormalTreeSection() {
 
     const lg::NormalTreeResult& normalTree = m_scene->lastNormalTreeResult();
     const QString source = m_scene->normalTreeIsManual() ? tr("Manual selection") : tr("Auto-detected");
+    const int savedIndex = m_scene->activeSavedNormalTreeIndex();
+    const QString savedName =
+        savedIndex >= 0 ? m_scene->savedNormalTrees()[static_cast<size_t>(savedIndex)].name : QString();
 
     QStringList stateVarText;
     for (const lg::NormalTreeResult::StateVariable& state : normalTree.stateVariables) {
@@ -186,9 +247,12 @@ void AnalyzeWindow::refreshNormalTreeSection() {
     const QString stateVarSummary =
         stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
 
+    const QString sourceLabel =
+        savedName.isEmpty() ? source : tr("%1 (saved: %2)").arg(source, savedName);
+
     m_normalTreeStatus->setText(
         tr("%1 — %2 tree branches, system order %3.\nState variables: %4")
-            .arg(source)
+            .arg(sourceLabel)
             .arg(normalTree.treeBranches.size())
             .arg(normalTree.stateVariables.size())
             .arg(stateVarSummary));
@@ -198,6 +262,7 @@ void AnalyzeWindow::runFindNormalTree() {
     const lg::NormalTreeResult result = m_scene->findNormalTree();
     if (result.status == lg::NormalTreeResult::Status::Ok) {
         refreshNormalTreeSection();
+        refreshSavedTreesList();
         if (m_refreshCallback) {
             m_refreshCallback();
         }
@@ -220,6 +285,60 @@ void AnalyzeWindow::runSelectNormalTree() {
 void AnalyzeWindow::runClearNormalTree() {
     m_scene->clearNormalTreeHighlight();
     refreshNormalTreeSection();
+    refreshSavedTreesList();
+    if (m_refreshCallback) {
+        m_refreshCallback();
+    }
+}
+
+void AnalyzeWindow::runSaveCurrentTree() {
+    const int nextIndex = static_cast<int>(m_scene->savedNormalTrees().size()) + 1;
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, tr("Save Normal Tree"), tr("Tree name:"), QLineEdit::Normal,
+        tr("Tree %1").arg(nextIndex), &ok);
+    if (!ok) {
+        return;
+    }
+    if (!m_scene->addSavedNormalTree(name)) {
+        QMessageBox::warning(this, tr("Save Normal Tree"),
+                             tr("Find or select a valid normal tree first."));
+        return;
+    }
+    refreshNormalTreeSection();
+    refreshSavedTreesList();
+    if (m_refreshCallback) {
+        m_refreshCallback();
+    }
+}
+
+void AnalyzeWindow::runRemoveSavedTree() {
+    const int row = m_savedTreesList->currentRow();
+    if (row < 0) {
+        return;
+    }
+    if (!m_scene->removeSavedNormalTree(row)) {
+        return;
+    }
+    refreshNormalTreeSection();
+    refreshSavedTreesList();
+    if (m_refreshCallback) {
+        m_refreshCallback();
+    }
+}
+
+void AnalyzeWindow::runUseSavedTree() {
+    const int row = m_savedTreesList->currentRow();
+    if (row < 0) {
+        return;
+    }
+    if (!m_scene->applySavedNormalTree(row)) {
+        QMessageBox::warning(this, tr("Normal Tree"),
+                             tr("Could not apply the selected saved normal tree."));
+        return;
+    }
+    refreshNormalTreeSection();
+    refreshSavedTreesList();
     if (m_refreshCallback) {
         m_refreshCallback();
     }

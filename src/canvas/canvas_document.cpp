@@ -13,7 +13,7 @@
 
 namespace {
 
-constexpr int kDocumentVersion = 2;
+constexpr int kDocumentVersion = 3;
 
 enum class DocVersionStatus { Ok, Older, TooNew, Invalid };
 
@@ -31,11 +31,12 @@ DocVersionStatus classifyDocumentVersion(int version) {
 }
 
 const bool kDocVersionSelfCheck = [] {
-    static_assert(kDocumentVersion == 2, "Self-check expectations assume kDocumentVersion == 2.");
+    static_assert(kDocumentVersion == 3, "Self-check expectations assume kDocumentVersion == 3.");
     assert(classifyDocumentVersion(0) == DocVersionStatus::Invalid);
     assert(classifyDocumentVersion(1) == DocVersionStatus::Older);
-    assert(classifyDocumentVersion(2) == DocVersionStatus::Ok);
-    assert(classifyDocumentVersion(3) == DocVersionStatus::TooNew);
+    assert(classifyDocumentVersion(2) == DocVersionStatus::Older);
+    assert(classifyDocumentVersion(3) == DocVersionStatus::Ok);
+    assert(classifyDocumentVersion(4) == DocVersionStatus::TooNew);
     return true;
 }();
 
@@ -190,6 +191,24 @@ TwoPortLoadData twoPortFromJson(const QJsonObject& obj) {
     return data;
 }
 
+QJsonObject savedNormalTreeToJson(const GraphScene::SavedNormalTree& tree) {
+    QJsonArray branchIds;
+    for (int serialId : tree.treeBranchSerialIds) {
+        branchIds.append(serialId);
+    }
+    return QJsonObject{{QStringLiteral("name"), tree.name},
+                       {QStringLiteral("treeBranchSerialIds"), branchIds}};
+}
+
+GraphScene::SavedNormalTree savedNormalTreeFromJson(const QJsonObject& obj) {
+    GraphScene::SavedNormalTree tree;
+    tree.name = obj.value(QStringLiteral("name")).toString();
+    for (const QJsonValue& value : obj.value(QStringLiteral("treeBranchSerialIds")).toArray()) {
+        tree.treeBranchSerialIds.push_back(value.toInt());
+    }
+    return tree;
+}
+
 bool hasNodeSnapshotAt(const std::vector<GraphScene::NodeSnapshot>& nodes, const QPointF& pos) {
     return std::any_of(nodes.begin(), nodes.end(),
                        [&](const GraphScene::NodeSnapshot& snap) { return snap.pos == pos; });
@@ -296,6 +315,8 @@ void GraphScene::clearDocument() {
     m_normalTreeManual = false;
     m_lastNormalTreeResult = {};
     m_lastStateSpaceResult = {};
+    m_savedNormalTrees.clear();
+    m_activeSavedNormalTreeIndex = -1;
     for (QGraphicsItem* item : items()) {
         if (auto* branch = dynamic_cast<BranchItem*>(item)) {
             branch->setNormalTreeRole(false, false);
@@ -406,6 +427,11 @@ QByteArray GraphScene::documentToJson() const {
         branchArray.append(branchToJson(record.snap, record.serialId, record.sourceInputId));
     }
 
+    QJsonArray normalTreeArray;
+    for (const SavedNormalTree& tree : m_savedNormalTrees) {
+        normalTreeArray.append(savedNormalTreeToJson(tree));
+    }
+
     QJsonObject root{
         {QStringLiteral("format"), QStringLiteral("LinearGraphModeling")},
         {QStringLiteral("version"), kDocumentVersion},
@@ -421,7 +447,11 @@ QByteArray GraphScene::documentToJson() const {
         {QStringLiteral("twoPorts"), twoPortArray},
         {QStringLiteral("nodes"), nodeArray},
         {QStringLiteral("branches"), branchArray},
+        {QStringLiteral("normalTrees"), normalTreeArray},
     };
+    if (m_activeSavedNormalTreeIndex >= 0) {
+        root.insert(QStringLiteral("activeNormalTreeIndex"), m_activeSavedNormalTreeIndex);
+    }
 
     return QJsonDocument(root).toJson(QJsonDocument::Indented);
 }
@@ -490,6 +520,12 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
     for (const QJsonValue& value : root.value(QStringLiteral("branches")).toArray()) {
         branches.push_back(branchFromJson(value.toObject()));
     }
+
+    std::vector<SavedNormalTree> savedNormalTrees;
+    for (const QJsonValue& value : root.value(QStringLiteral("normalTrees")).toArray()) {
+        savedNormalTrees.push_back(savedNormalTreeFromJson(value.toObject()));
+    }
+    const int activeNormalTreeIndex = root.value(QStringLiteral("activeNormalTreeIndex")).toInt(-1);
 
     QSet<int> twoPortBranchSerialIds;
     for (const TwoPortLoadData& data : twoPorts) {
@@ -587,8 +623,18 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
     m_nextSourceInputId = std::max(m_nextSourceInputId, savedNextSourceInputId);
     m_nextTwoPortId = std::max(m_nextTwoPortId, savedNextTwoPortId);
 
+    m_savedNormalTrees = std::move(savedNormalTrees);
+    m_activeSavedNormalTreeIndex = -1;
+    if (activeNormalTreeIndex >= 0 &&
+        activeNormalTreeIndex < static_cast<int>(m_savedNormalTrees.size())) {
+        if (!applySavedNormalTree(activeNormalTreeIndex)) {
+            m_activeSavedNormalTreeIndex = -1;
+        }
+    }
+
     m_undoStack.clear();
     refreshAppearance();
     notifyGraphChanged();
+    emit savedNormalTreesChanged();
     return true;
 }

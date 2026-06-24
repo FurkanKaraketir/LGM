@@ -622,6 +622,28 @@ public:
 
     const lg::NormalTreeResult& lastNormalTreeResult() const { return m_lastNormalTreeResult; }
 
+    struct SavedNormalTree {
+        QString name;
+        std::vector<int> treeBranchSerialIds;
+    };
+
+    const std::vector<SavedNormalTree>& savedNormalTrees() const { return m_savedNormalTrees; }
+
+    int activeSavedNormalTreeIndex() const { return m_activeSavedNormalTreeIndex; }
+
+    bool addSavedNormalTree(const QString& name);
+
+    bool removeSavedNormalTree(int index);
+
+    bool applySavedNormalTree(int index);
+
+    QString savedNormalTreeListLabel(int index) const;
+
+    void setSavedNormalTreesState(const std::vector<SavedNormalTree>& trees, int activeIndex);
+
+    void pushSavedNormalTreesUndo(const std::vector<SavedNormalTree>& before, int beforeActive,
+                                  const std::vector<SavedNormalTree>& after, int afterActive);
+
     lg::StateSpaceResult computeStateSpaceRep();
 
     const lg::StateSpaceResult& lastStateSpaceResult() const { return m_lastStateSpaceResult; }
@@ -647,6 +669,8 @@ signals:
     void graphChanged();
 
     void normalTreeHighlightChanged();
+
+    void savedNormalTreesChanged();
 
     void manualNormalTreeValidationChanged(const lg::NormalTreeResult& result);
 
@@ -716,6 +740,16 @@ private:
     ManualNormalTreeBackup m_manualNormalTreeBackup;
 
     lg::NormalTreeResult m_manualNormalTreeValidation;
+
+    std::vector<SavedNormalTree> m_savedNormalTrees;
+
+    int m_activeSavedNormalTreeIndex = -1;
+
+    BranchItem* branchBySerialId(int serialId) const;
+
+    std::vector<int> currentTreeBranchSerialIds() const;
+
+    void syncActiveSavedNormalTreeIndex();
 
     void leaveManualNormalTreeMode(bool accept);
 

@@ -9,6 +9,7 @@
 class GraphScene;
 class GraphView;
 class QLabel;
+class QListWidget;
 class QPushButton;
 class QVBoxLayout;
 
@@ -31,9 +32,13 @@ signals:
 
 private:
     void refreshNormalTreeSection();
+    void refreshSavedTreesList();
     void runFindNormalTree();
     void runSelectNormalTree();
     void runClearNormalTree();
+    void runSaveCurrentTree();
+    void runRemoveSavedTree();
+    void runUseSavedTree();
     void runComputeStateSpace();
 
     GraphScene* m_scene = nullptr;
@@ -44,4 +49,8 @@ private:
     QWidget* m_manualTreePanel = nullptr;
     QLabel* m_manualTreeStatus = nullptr;
     QPushButton* m_manualApplyBtn = nullptr;
+    QListWidget* m_savedTreesList = nullptr;
+    QPushButton* m_saveTreeBtn = nullptr;
+    QPushButton* m_removeTreeBtn = nullptr;
+    QPushButton* m_useTreeBtn = nullptr;
 };
