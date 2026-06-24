@@ -18,6 +18,7 @@ class QTableWidget;
 class QTableWidgetItem;
 class QVBoxLayout;
 class SettingsWindow;
+class AnalyzeWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -49,6 +50,7 @@ private:
     void applySettings(const AppSettings& settings);
     void applyShortcuts(const AppSettings& settings);
     void showSettingsWindow();
+    void showAnalyzeWindow();
     void refreshChromeTheme();
     void updateWindowTitle();
     bool confirmDiscardChanges();
@@ -75,10 +77,12 @@ private:
     bool m_updatingDomainCombo = false;
     AppTheme m_theme = AppTheme::System;
     SettingsWindow* m_settingsWindow = nullptr;
+    AnalyzeWindow* m_analyzePanel = nullptr;
     QString m_currentFilePath;
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
+    QDockWidget* m_analyzeDock = nullptr;
     QDockWidget* m_stateSpaceDock = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;

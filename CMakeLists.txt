@@ -79,6 +79,8 @@ add_executable(LinearGraphModeling
     src/ui/app_shortcuts.h
     src/ui/settings_window.cpp
     src/ui/settings_window.h
+    src/ui/analyze_window.cpp
+    src/ui/analyze_window.h
     src/ui/mainwindow.cpp
 )
 

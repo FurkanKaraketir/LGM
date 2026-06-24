@@ -2,9 +2,9 @@
 
 
 
+#include "analyze_window.h"
 #include "app_shortcuts.h"
 #include "canvas.h"
-#include "latex_widget.h"
 #include "settings_window.h"
 
 #include "elemental_equation.h"
@@ -599,6 +599,16 @@ void MainWindow::buildMenuBar() {
 
     });
 
+    auto* analyzePanelAction = viewMenu->addAction(tr("&Analyze Panel"));
+    analyzePanelAction->setObjectName(QStringLiteral("view.analyzePanel"));
+    analyzePanelAction->setCheckable(true);
+    analyzePanelAction->setChecked(false);
+    connect(analyzePanelAction, &QAction::toggled, this, [this](bool checked) {
+        if (m_analyzeDock) {
+            m_analyzeDock->setVisible(checked);
+        }
+    });
+
     
 
     auto* stateSpacePanelAction = viewMenu->addAction(tr("State &Space Results"));
@@ -633,11 +643,17 @@ void MainWindow::buildMenuBar() {
 
         removeDockWidget(m_objectListDock);
 
+        removeDockWidget(m_analyzeDock);
+
         removeDockWidget(m_stateSpaceDock);
 
         addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
 
         addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
+
+        addDockWidget(Qt::RightDockWidgetArea, m_analyzeDock);
+
+        tabifyDockWidget(m_propertyDock, m_analyzeDock);
 
         addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
 
@@ -650,6 +666,12 @@ void MainWindow::buildMenuBar() {
 
 
     auto* analysisMenu = menuBar()->addMenu(tr("&Analysis"));
+
+    auto* startAnalyzingAction = analysisMenu->addAction(tr("Start &Analyzing..."));
+    startAnalyzingAction->setObjectName(QStringLiteral("analysis.start"));
+    connect(startAnalyzingAction, &QAction::triggered, this, &MainWindow::showAnalyzeWindow);
+
+    analysisMenu->addSeparator();
 
     auto* findNormalTreeAction =
         analysisMenu->addAction(tr("Find &Normal Tree..."));
@@ -931,6 +953,15 @@ void MainWindow::buildToolbar() {
 
 
 
+    toolbar->addSeparator();
+
+    auto* analyzeAction =
+        toolbar->addAction(themedIcon("system-run", QStyle::SP_MediaPlay), tr("Analyze"));
+    analyzeAction->setObjectName(QStringLiteral("tool.analyze"));
+    analyzeAction->setShortcutContext(Qt::ApplicationShortcut);
+    analyzeAction->setToolTip(tr("Open analyze panel"));
+    connect(analyzeAction, &QAction::triggered, this, &MainWindow::showAnalyzeWindow);
+
     connect(m_scene->undoStack(), &QUndoStack::canUndoChanged, m_undoAction, &QAction::setEnabled);
 
     connect(m_scene->undoStack(), &QUndoStack::canRedoChanged, m_redoAction, &QAction::setEnabled);
@@ -1036,6 +1067,23 @@ void MainWindow::buildDockPanels() {
     m_objectListDock->setWidget(m_objectTree);
 
     addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
+
+
+
+    m_analyzeDock = new QDockWidget(tr("Analyze"), this);
+    m_analyzeDock->setObjectName(QStringLiteral("analyzeDock"));
+    m_analyzeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_analyzePanel = new AnalyzeWindow(m_scene, m_view, m_analyzeDock);
+    m_analyzePanel->setRefreshCallback([this]() { updatePropertyPanel(); });
+    connect(m_analyzePanel, &AnalyzeWindow::stateSpaceComputed, this, &MainWindow::updateStateSpacePanel);
+    m_analyzeDock->setWidget(m_analyzePanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_analyzeDock);
+    tabifyDockWidget(m_propertyDock, m_analyzeDock);
+    m_analyzeDock->hide();
+
+    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.analyzePanel"))) {
+        connect(m_analyzeDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
+    }
 
 
 
@@ -1652,88 +1700,9 @@ void MainWindow::updateStateSpacePanel() {
 
     const lg::StateSpaceResult& stateSpace = m_scene->lastStateSpaceResult();
 
-
-
-    auto addSection = [this](const QString& title, const QStringList& lines) {
-
-        if (lines.isEmpty()) {
-
-            return;
-
-        }
-
-        auto* header = new QLabel(title, m_stateSpaceScrollContent);
-
-        QFont font = header->font();
-
-        font.setBold(true);
-
-        header->setFont(font);
-
-        m_stateSpaceLayout->addWidget(header);
-
-        for (const QString& line : lines) {
-
-            auto* label = new QLabel(line, m_stateSpaceScrollContent);
-
-            label->setWordWrap(true);
-
-            label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
-            m_stateSpaceLayout->addWidget(label);
-
-        }
-
-    };
-
-
+    lg::populateStateSpaceLayout(m_stateSpaceLayout, m_stateSpaceScrollContent, stateSpace);
 
     if (stateSpace.status == lg::StateSpaceResult::Status::Ok) {
-
-        if (!stateSpace.inputs.isEmpty()) {
-
-            const QString inputSummary =
-
-                stateSpace.inputLabels.isEmpty()
-
-                    ? stateSpace.inputs.join(QStringLiteral(", "))
-
-                    : stateSpace.inputLabels.join(QStringLiteral(", "));
-
-            addSection(tr("Inputs"), {inputSummary});
-
-        }
-
-        addSection(tr("Elemental equations"), stateSpace.elementalEquations);
-
-        addSection(tr("Continuity equations"), stateSpace.continuityEquations);
-
-        addSection(tr("Compatibility equations"), stateSpace.compatibilityEquations);
-
-        addSection(tr("State equations"), stateSpace.stateEquations);
-
-
-
-        if (!stateSpace.matrixForm.isEmpty()) {
-
-            auto* header = new QLabel(tr("Matrix form"), m_stateSpaceScrollContent);
-
-            QFont font = header->font();
-
-            font.setBold(true);
-
-            header->setFont(font);
-
-            m_stateSpaceLayout->addWidget(header);
-
-            m_stateSpaceLayout->addWidget(
-                lg::createLatexDisplayWidget(stateSpace.matrixForm, m_stateSpaceScrollContent));
-
-        }
-
-
-
-        m_stateSpaceLayout->addStretch();
 
         if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
 
@@ -2603,6 +2572,18 @@ void MainWindow::refreshChromeTheme() {
     }
     if (m_settingsWindow) {
         polishWidget(m_settingsWindow);
+    }
+}
+
+void MainWindow::showAnalyzeWindow() {
+    if (!m_analyzeDock) {
+        return;
+    }
+    m_analyzeDock->show();
+    m_analyzeDock->raise();
+    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.analyzePanel"))) {
+        QSignalBlocker blocker(panelAction);
+        panelAction->setChecked(true);
     }
 }
 
