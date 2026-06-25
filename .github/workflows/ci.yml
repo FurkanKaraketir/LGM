@@ -16,14 +16,14 @@ jobs:
       # ponytail: manifest install runs in cmake; skip GHA binary cache (needs token in same step)
       VCPKG_BINARY_SOURCES: clear
       QT_ROOT: ${{ github.workspace }}/Qt
-      QT_VERSION: "6.7.3"
+      QT_VERSION: "6.11.0"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.7.3"
+          version: "6.11.0"
           host: windows
           target: desktop
           arch: win64_mingw

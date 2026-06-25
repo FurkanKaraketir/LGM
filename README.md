@@ -24,7 +24,7 @@ This program is free software under the [GNU General Public License v3.0](https:
 ## Requirements
 
 - CMake 3.16+
-- Qt 6 (Widgets)
+- Qt 6.11 (Widgets, Network) — same version as CI and `CMakePresets.json` `windows-mingw`
 - C++17 compiler (MinGW or MSVC on Windows)
 - [vcpkg](https://vcpkg.io/) (Boost.Multiprecision)
 - Network access on first configure (SymEngine and JKQtPlotter are fetched via CMake `FetchContent`)
