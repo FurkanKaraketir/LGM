@@ -12,6 +12,9 @@ concurrency:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      # ponytail: manifest install runs in cmake; skip GHA binary cache (needs token in same step)
+      VCPKG_BINARY_SOURCES: clear
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +30,9 @@ jobs:
           cache: true
           aqtversion: ">=3.2.0"
 
+      - name: Install Ninja
+        run: choco install ninja -y
+
       - name: Install Inno Setup
         run: choco install innosetup -y
 
@@ -34,10 +40,16 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
-          runVcpkgInstall: true
+          runVcpkgInstall: false
 
       - name: Configure
-        run: cmake --preset ci-windows
+        shell: pwsh
+        run: |
+          $qtRoot = Split-Path (Split-Path $env:CMAKE_PREFIX_PATH -Parent) -Parent
+          cmake --preset ci-windows `
+            -DCMAKE_MAKE_PROGRAM="$qtRoot/Tools/Ninja/ninja.exe" `
+            -DCMAKE_C_COMPILER="$qtRoot/Tools/mingw1310_64/bin/gcc.exe" `
+            -DCMAKE_CXX_COMPILER="$qtRoot/Tools/mingw1310_64/bin/g++.exe"
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 

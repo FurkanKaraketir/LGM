@@ -12,6 +12,8 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    env:
+      VCPKG_BINARY_SOURCES: clear
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +53,10 @@ jobs:
           cache: true
           aqtversion: ">=3.2.0"
 
+      - name: Install Ninja
+        if: matrix.name == 'windows'
+        run: choco install ninja -y
+
       - name: Install Inno Setup
         if: matrix.name == 'windows'
         run: choco install innosetup -y
@@ -71,10 +77,25 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
-          runVcpkgInstall: true
+          runVcpkgInstall: false
 
       - name: Configure
+        shell: bash
+        if: matrix.name != 'windows'
         run: cmake --preset ${{ matrix.preset }} ${{ matrix.extra_cmake || '' }}
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+
+      - name: Configure
+        shell: pwsh
+        if: matrix.name == 'windows'
+        run: |
+          $qtRoot = Split-Path (Split-Path $env:CMAKE_PREFIX_PATH -Parent) -Parent
+          cmake --preset ${{ matrix.preset }} `
+            -DCMAKE_MAKE_PROGRAM="$qtRoot/Tools/Ninja/ninja.exe" `
+            -DCMAKE_C_COMPILER="$qtRoot/Tools/mingw1310_64/bin/gcc.exe" `
+            -DCMAKE_CXX_COMPILER="$qtRoot/Tools/mingw1310_64/bin/g++.exe" `
+            ${{ matrix.extra_cmake || '' }}
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
