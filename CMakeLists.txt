@@ -1,23 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(VCPKG_TARGET_TRIPLET  "x64-mingw-dynamic"                        CACHE STRING "")
-set(VCPKG_HOST_TRIPLET    "x64-mingw-dynamic"                        CACHE STRING "")
-set(CMAKE_C_COMPILER      "C:/Qt/Tools/mingw1310_64/bin/gcc.exe"     CACHE FILEPATH "")
-set(CMAKE_CXX_COMPILER    "C:/Qt/Tools/mingw1310_64/bin/g++.exe"     CACHE FILEPATH "")
-set(CMAKE_MAKE_PROGRAM    "C:/Qt/Tools/Ninja/ninja.exe"              CACHE FILEPATH "")
-list(APPEND CMAKE_PREFIX_PATH "C:/Qt/6.11.0/mingw_64")
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
-endif()
-
-project(LGM VERSION 0.1 LANGUAGES CXX)
+project(LGM VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 # Boost.Multiprecision via vcpkg
 find_package(Boost REQUIRED COMPONENTS multiprecision)
@@ -52,6 +42,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(jkqtplotter)
 
+option(LGM_MACOS_BUNDLE "Build LGM as a macOS .app bundle (for release packaging)" OFF)
+
 add_executable(LGM
     src/ui/main.cpp
     src/canvas/canvas.h
@@ -78,6 +70,8 @@ add_executable(LGM
     src/ui/app_settings.h
     src/ui/app_shortcuts.cpp
     src/ui/app_shortcuts.h
+    src/ui/app_update.cpp
+    src/ui/app_update.h
     src/ui/settings_window.cpp
     src/ui/settings_window.h
     src/ui/analyze_window.cpp
@@ -92,6 +86,7 @@ add_executable(LGM
 
 target_link_libraries(LGM PRIVATE
     Qt6::Widgets
+    Qt6::Network
     symengine
     Boost::multiprecision
     JKQTPlotter6::JKQTMathText6
@@ -105,22 +100,43 @@ target_include_directories(LGM PRIVATE
 )
 
 target_compile_definitions(LGM PRIVATE
-    "EXAMPLES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Examples\"")
+    "EXAMPLES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Examples\""
+    "LGM_VERSION=\"${PROJECT_VERSION}\""
+    "LGM_GITHUB_REPO=\"FurkanKaraketir/LGM\"")
 
 if(WIN32)
     target_sources(LGM PRIVATE src/assets/app.rc)
-    get_target_property(_qmake Qt6::qmake IMPORTED_LOCATION)
-    get_filename_component(_qt_bin_dir "${_qmake}" DIRECTORY)
-    find_program(WINDEPLOYQT windeployqt HINTS "${_qt_bin_dir}")
-    if(WINDEPLOYQT)
-        add_custom_command(TARGET LGM POST_BUILD
-            COMMAND "${WINDEPLOYQT}" --no-translations "$<TARGET_FILE:LGM>"
-            COMMENT "Deploying Qt runtime DLLs")
-    endif()
 endif()
+
+if(APPLE AND LGM_MACOS_BUNDLE)
+    set_target_properties(LGM PROPERTIES MACOSX_BUNDLE TRUE)
+endif()
+
+function(lgm_deploy_qt target)
+    get_target_property(_qmake Qt6::qmake IMPORTED_LOCATION)
+    if(NOT _qmake)
+        return()
+    endif()
+    get_filename_component(_qt_bin_dir "${_qmake}" DIRECTORY)
+    if(APPLE AND LGM_MACOS_BUNDLE)
+        find_program(MACDEPLOYQT macdeployqt HINTS "${_qt_bin_dir}")
+        if(MACDEPLOYQT)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND "${MACDEPLOYQT}" "$<TARGET_BUNDLE_DIR:${target}>" -always-overwrite
+                COMMENT "Deploying Qt frameworks into .app bundle")
+        endif()
+    elseif(WIN32)
+        find_program(WINDEPLOYQT windeployqt HINTS "${_qt_bin_dir}")
+        if(WINDEPLOYQT)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND "${WINDEPLOYQT}" --no-translations "$<TARGET_FILE:${target}>"
+                COMMENT "Deploying Qt runtime DLLs")
+        endif()
+    endif()
+endfunction()
+lgm_deploy_qt(LGM)
 
 add_custom_command(TARGET LGM POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/Examples" "$<TARGET_FILE_DIR:LGM>/Examples"
     COMMENT "Copying example graphs")
-

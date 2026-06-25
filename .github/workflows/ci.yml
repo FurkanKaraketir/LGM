@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.2"
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: qtnetwork
+          cache: true
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 2024.12.16
+          runVcpkgInstall: true
+
+      - name: Configure
+        run: cmake --preset ci-windows
+        env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -Version 0.0.0-ci -BuildDir build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lgm-windows-ci
+          path: dist/LGM-0.0.0-ci-win64.zip

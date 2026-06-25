@@ -31,22 +31,29 @@ This program is free software under the [GNU General Public License v3.0](https:
 
 ## Build (Windows, Qt MinGW)
 
-`CMakeLists.txt` defaults to Qt 6.11.0, MinGW, Ninja, and `C:/vcpkg`. Adjust paths if your install differs.
+Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePresets.json`. Edit that preset if your install paths differ (or copy `CMakeUserPresets.json.example` to `CMakeUserPresets.json` and add overrides).
 
-**Configure once** (from the repo root, if `build/` does not exist yet):
+**Configure once**:
 
-```powershell
-cmake -S D:\Projects\LGM -B D:\Projects\LGM\build -G Ninja
-```
+   ```powershell
+   cmake --preset windows-mingw
+   ```
 
-**Build and run** (what you use day to day):
+**Build and run** (day to day):
 
-```powershell
-cmake --build D:\Projects\LGM\build
-D:\Projects\LGM\build\LGM.exe
-```
+   ```powershell
+   cmake --build build
+   .\build\LGM.exe
+   ```
 
 `windeployqt` runs automatically after the build when available, copying Qt runtime DLLs next to the executable.
+
+## Releases and updates
+
+Tagged releases (`v0.2.0`, …) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+
+- Maintainer guide: [docs/releases.md](docs/releases.md)
+- In-app: **Help → Check for Updates**
 
 ## Quick workflow
 

@@ -1,10 +1,5 @@
-build/
-.build/
-cmake-build-*/
+# Local machine-specific CMake presets (copy from CMakeUserPresets.json.example).
+CMakeUserPresets.json
 
-.cursor/
-.idea/
-.vscode/
-
-*.user
-*.autosave
+# Release artifacts
+dist/
