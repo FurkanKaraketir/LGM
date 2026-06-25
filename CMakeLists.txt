@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.1.8 LANGUAGES CXX)
+project(LGM VERSION 0.1.9 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,7 +44,7 @@ FetchContent_MakeAvailable(jkqtplotter)
 
 option(LGM_MACOS_BUNDLE "Build LGM as a macOS .app bundle (for release packaging)" OFF)
 
-add_executable(LGM
+add_executable(LGM WIN32
     src/ui/main.cpp
     src/canvas/canvas.h
     src/canvas/canvas_items.cpp

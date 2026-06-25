@@ -5,12 +5,18 @@ VERSION="${1:-0.1.0}"
 BUILD_DIR="${2:-build}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BINARY="$ROOT/$BUILD_DIR/LGM"
+ICON="$ROOT/src/assets/app_logo.png"
 DIST="$ROOT/dist"
 APPDIR="$DIST/AppDir"
 OUT="$DIST/LGM-${VERSION}-linux-x86_64.AppImage"
 
 if [[ ! -x "$BINARY" ]]; then
   echo "LGM binary not found in $BUILD_DIR — build first." >&2
+  exit 1
+fi
+
+if [[ ! -f "$ICON" ]]; then
+  echo "App icon not found at $ICON" >&2
   exit 1
 fi
 
@@ -28,7 +34,7 @@ Type=Application
 Name=LGM
 Comment=Linear Graph Modeling
 Exec=LGM
-Icon=LGM
+Icon=app_logo
 Terminal=false
 Categories=Education;Science;
 StartupWMClass=LGM
@@ -59,6 +65,7 @@ pushd "$DIST" >/dev/null
 "$LINUXDEPLOY" \
   --appdir "$APPDIR" \
   --desktop-file "$APPDIR/lgm.desktop" \
+  --icon-file "$ICON" \
   --plugin qt \
   -e "$APPDIR/usr/bin/LGM" \
   --output appimage
