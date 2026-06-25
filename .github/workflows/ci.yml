@@ -15,6 +15,8 @@ jobs:
     env:
       # ponytail: manifest install runs in cmake; skip GHA binary cache (needs token in same step)
       VCPKG_BINARY_SOURCES: clear
+      QT_ROOT: ${{ github.workspace }}/Qt
+      QT_VERSION: "6.7.3"
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +28,7 @@ jobs:
           target: desktop
           arch: win64_mingw
           tools: tools_mingw1310
+          dir: ${{ github.workspace }}/Qt
           install-deps: true
           cache: true
           aqtversion: ">=3.2.0"
@@ -45,11 +48,11 @@ jobs:
       - name: Configure
         shell: pwsh
         run: |
-          $qtRoot = Split-Path (Split-Path $env:CMAKE_PREFIX_PATH -Parent) -Parent
           cmake --preset ci-windows `
-            -DCMAKE_MAKE_PROGRAM="$qtRoot/Tools/Ninja/ninja.exe" `
-            -DCMAKE_C_COMPILER="$qtRoot/Tools/mingw1310_64/bin/gcc.exe" `
-            -DCMAKE_CXX_COMPILER="$qtRoot/Tools/mingw1310_64/bin/g++.exe"
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT/$env:QT_VERSION/mingw_64" `
+            -DCMAKE_MAKE_PROGRAM="$env:QT_ROOT/Tools/Ninja/ninja.exe" `
+            -DCMAKE_C_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/gcc.exe" `
+            -DCMAKE_CXX_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/g++.exe"
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
