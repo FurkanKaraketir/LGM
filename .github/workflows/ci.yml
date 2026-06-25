@@ -18,12 +18,14 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.2"
+          version: "6.7.3"
           host: windows
           target: desktop
           arch: win64_mingw
-          modules: qtnetwork
+          tools: tools_mingw1310
+          install-deps: true
           cache: true
+          aqtversion: ">=3.2.0"
 
       - name: Install Inno Setup
         run: choco install innosetup -y

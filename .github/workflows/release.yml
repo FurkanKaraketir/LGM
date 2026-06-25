@@ -18,16 +18,22 @@ jobs:
         include:
           - name: windows
             os: windows-latest
+            qt_host: windows
             qt_arch: win64_mingw
+            qt_tools: tools_mingw1310
             preset: ci-windows
           - name: macos
             os: macos-latest
+            qt_host: mac
             qt_arch: osx_arm64
+            qt_tools: ""
             preset: ci-macos
             extra_cmake: -DLGM_MACOS_BUNDLE=ON
           - name: linux
             os: ubuntu-latest
+            qt_host: linux
             qt_arch: linux_gcc_64
+            qt_tools: ""
             preset: ci-linux
 
     steps:
@@ -36,11 +42,14 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.2"
+          version: "6.7.3"
+          host: ${{ matrix.qt_host }}
           target: desktop
           arch: ${{ matrix.qt_arch }}
-          modules: qtnetwork
+          tools: ${{ matrix.qt_tools }}
+          install-deps: true
           cache: true
+          aqtversion: ">=3.2.0"
 
       - name: Install Inno Setup
         if: matrix.name == 'windows'
