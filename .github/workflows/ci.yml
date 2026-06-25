@@ -28,10 +28,11 @@ jobs:
           target: desktop
           arch: win64_mingw
           tools: tools_mingw1310
-          dir: ${{ github.workspace }}/Qt
+          dir: ${{ github.workspace }}
           install-deps: true
           cache: true
-          aqtversion: ">=3.2.0"
+          # ponytail: aqt 3.3.0 lacks Qt 6.11 repo layout; master has the fix (miurahr/aqtinstall#959)
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@master
 
       - name: Install Ninja
         run: choco install ninja -y

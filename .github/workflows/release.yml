@@ -53,10 +53,10 @@ jobs:
           target: desktop
           arch: ${{ matrix.qt_arch }}
           tools: ${{ matrix.qt_tools }}
-          dir: ${{ github.workspace }}/Qt
+          dir: ${{ github.workspace }}
           install-deps: true
           cache: true
-          aqtversion: ">=3.2.0"
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@master
 
       - name: Install Ninja
         if: matrix.name == 'windows'

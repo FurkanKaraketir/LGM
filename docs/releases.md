@@ -33,7 +33,7 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
    git push origin v0.2.0
    ```
 
-4. The [Release workflow](.github/workflows/release.yml) builds all platforms (Qt **6.11.0**, matching local dev) and attaches installers to the GitHub Release.
+4. The [Release workflow](.github/workflows/release.yml) builds all platforms with Qt **6.11.0** (same as local dev). CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
 
 ## Local packaging
 
