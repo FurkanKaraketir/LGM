@@ -1,5 +1,5 @@
 {
-  "name": "lineargraphmodeling",
+  "name": "lgm",
   "version": "0.1.0",
   "dependencies": [
     "boost-multiprecision",

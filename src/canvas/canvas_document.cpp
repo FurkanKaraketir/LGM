@@ -433,7 +433,7 @@ QByteArray GraphScene::documentToJson() const {
     }
 
     QJsonObject root{
-        {QStringLiteral("format"), QStringLiteral("LinearGraphModeling")},
+        {QStringLiteral("format"), QStringLiteral("LGM")},
         {QStringLiteral("version"), kDocumentVersion},
         {QStringLiteral("settings"),
          QJsonObject{{QStringLiteral("defaultSystemType"), static_cast<int>(m_defaultSystemType)},
@@ -473,9 +473,10 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
     }
 
     const QJsonObject root = doc.object();
-    if (root.value(QStringLiteral("format")).toString() != QStringLiteral("LinearGraphModeling")) {
+    const QString format = root.value(QStringLiteral("format")).toString();
+    if (format != QStringLiteral("LGM") && format != QStringLiteral("LinearGraphModeling")) {
         if (error) {
-            *error = tr("Not a Linear Graph Modeling document.");
+            *error = tr("Not an LGM document.");
         }
         return false;
     }

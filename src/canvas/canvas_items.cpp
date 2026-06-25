@@ -42,6 +42,7 @@ QPainterPath strokedPickShape(const QPainterPath& source, qreal width = kBranchP
     return stroker.createStroke(source);
 }
 constexpr qreal kTwoPortEgressKick = 48.0;
+constexpr qreal kInterTwoPortClearance = 20.0;
 
 constexpr QColor kSelectionColor(0, 100, 200);
 constexpr QColor kNormalTreeColor(27, 94, 32);
@@ -142,7 +143,11 @@ QPainterPath stadiumPath(const QRectF& rect) {
     return path;
 }
 
-constexpr qreal kTfHalfHeight = 14.0;
+constexpr qreal kTwoPortPortBow = 28.0;
+constexpr qreal kTwoPortPortBowPerBranch = 16.0;
+constexpr qreal kTwoPortPortBowNeighbor = 22.0;
+constexpr qreal kTfHalfHeight = 6.0;
+constexpr qreal kTfPadX = 2.0;
 
 QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count,
                             const QPointF& kickA = {}, const QPointF& kickB = {}, bool active = false,
@@ -288,16 +293,15 @@ void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius) {
 void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
                             const QString& modulus, const QColor& fill) {
     Q_UNUSED(modulus);
+    Q_UNUSED(fill);
     const qreal midY = (left.y() + right.y()) / 2.0;
-    const qreal padX = 8.0;
-    const QRectF box(left.x() - padX, midY - kTfHalfHeight, right.x() - left.x() + padX * 2.0,
+    const QRectF box(left.x() - kTfPadX, midY - kTfHalfHeight, right.x() - left.x() + kTfPadX * 2.0,
                      kTfHalfHeight * 2.0);
-    painter->setBrush(fill);
+    painter->setBrush(Qt::NoBrush);
     painter->drawPath(stadiumPath(box));
 
-    const qreal span = right.x() - left.x();
-    drawDownArrow(painter, QPointF(left.x(), midY - 6.0));
-    drawDownArrow(painter, QPointF(right.x(), midY - 6.0));
+    drawDownArrow(painter, QPointF(left.x(), midY - 4.0));
+    drawDownArrow(painter, QPointF(right.x(), midY - 4.0));
 }
 
 void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
@@ -358,13 +362,152 @@ bool isTwoPortPortBranch(const BranchItem* branch) {
     return branch && branch->isTwoPortPort();
 }
 
+bool isInterTwoPortLink(const BranchItem* branch, TwoPortItem** outA = nullptr,
+                        TwoPortItem** outB = nullptr) {
+    if (!branch || isTwoPortPortBranch(branch) || !branch->from() || !branch->to()) {
+        return false;
+    }
+    TwoPortItem* tpA = branch->from()->twoPort();
+    TwoPortItem* tpB = branch->to()->twoPort();
+    if (!tpA || !tpB || tpA == tpB) {
+        return false;
+    }
+    if (outA) {
+        *outA = tpA;
+    }
+    if (outB) {
+        *outB = tpB;
+    }
+    return true;
+}
+
+bool isFacingNeighborLink(const TwoPortItem* tp, const NodeItem* port, const BranchItem* branch) {
+    if (!tp || !port || !branch) {
+        return false;
+    }
+    TwoPortItem* tpA = nullptr;
+    TwoPortItem* tpB = nullptr;
+    if (!isInterTwoPortLink(branch, &tpA, &tpB)) {
+        return false;
+    }
+    TwoPortItem* otherTp = tpA == tp ? tpB : (tpB == tp ? tpA : nullptr);
+    if (!otherTp) {
+        return false;
+    }
+    const qreal dx = otherTp->center().x() - tp->center().x();
+    const bool portOnLeft = port == tp->v1() || port == tp->g1();
+    const bool portOnRight = port == tp->v2() || port == tp->g2();
+    return (portOnRight && dx > 0.0) || (portOnLeft && dx < 0.0);
+}
+
+bool hasFacingNeighborLinkOnSide(const TwoPortItem* tp, bool leftSide) {
+    for (NodeItem* port : {leftSide ? tp->v1() : tp->v2(), leftSide ? tp->g1() : tp->g2()}) {
+        if (!port) {
+            continue;
+        }
+        for (BranchItem* branch : port->branches()) {
+            if (isFacingNeighborLink(tp, port, branch)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int externalOutwardBranchCountAt(const TwoPortItem* tp, bool leftSide) {
+    int count = 0;
+    for (NodeItem* port : {leftSide ? tp->v1() : tp->v2(), leftSide ? tp->g1() : tp->g2()}) {
+        if (!port) {
+            continue;
+        }
+        for (BranchItem* branch : port->branches()) {
+            if (isTwoPortPortBranch(branch) || isFacingNeighborLink(tp, port, branch)) {
+                continue;
+            }
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool hasNeighborTwoPortOn(const TwoPortItem* tp, bool right) {
+    if (!tp || !tp->scene()) {
+        return false;
+    }
+    const qreal cx = tp->center().x();
+    const qreal cy = tp->center().y();
+    const qreal minDx = GraphScene::kTwoPortHalfWidth * 1.25;
+    const qreal maxDx = GraphScene::kTwoPortHalfWidth * 3.5;
+    for (QGraphicsItem* item : tp->scene()->items()) {
+        auto* other = dynamic_cast<TwoPortItem*>(item);
+        if (!other || other == tp) {
+            continue;
+        }
+        const QPointF oc = other->center();
+        if (std::abs(oc.y() - cy) > GraphScene::kTwoPortHalfHeight) {
+            continue;
+        }
+        const qreal dx = oc.x() - cx;
+        if (right && dx > minDx && dx < maxDx) {
+            return true;
+        }
+        if (!right && dx < -minDx && dx > -maxDx) {
+            return true;
+        }
+    }
+    return false;
+}
+
+qreal twoPortSideBowMag(const TwoPortItem* tp, bool leftSide) {
+    qreal mag = kTwoPortPortBow;
+    mag += kTwoPortPortBowPerBranch * externalOutwardBranchCountAt(tp, leftSide);
+    if (leftSide && hasNeighborTwoPortOn(tp, false) && !hasFacingNeighborLinkOnSide(tp, true)) {
+        mag += kTwoPortPortBowNeighbor;
+    }
+    if (!leftSide && hasNeighborTwoPortOn(tp, true) && !hasFacingNeighborLinkOnSide(tp, false)) {
+        mag += kTwoPortPortBowNeighbor;
+    }
+    return mag;
+}
+
+void refreshNeighborTwoPortBows(TwoPortItem* tp) {
+    if (!tp || !tp->scene()) {
+        return;
+    }
+    const qreal cx = tp->center().x();
+    const qreal cy = tp->center().y();
+    const qreal maxDx = GraphScene::kTwoPortHalfWidth * 3.5;
+    for (QGraphicsItem* item : tp->scene()->items()) {
+        auto* other = dynamic_cast<TwoPortItem*>(item);
+        if (!other || other == tp) {
+            continue;
+        }
+        const QPointF oc = other->center();
+        if (std::abs(oc.y() - cy) > GraphScene::kTwoPortHalfHeight) {
+            continue;
+        }
+        if (std::abs(oc.x() - cx) < maxDx) {
+            other->applyInternalBranchBows();
+        }
+    }
+}
+
 qreal externalBranchLane(int index, int count) {
     return (count <= 1) ? 0.0 : kLaneSpread * 0.55 * (index - (count - 1) / 2.0);
 }
 
-QPointF twoPortKick(const TwoPortItem* tp, const NodeItem* port, qreal lane, qreal chordLen) {
+QPointF interTwoPortKick(const TwoPortItem* tp, const NodeItem* port) {
+    const bool topPort = port == tp->v1() || port == tp->v2();
+    return QPointF(0.0, topPort ? -kInterTwoPortClearance : kInterTwoPortClearance);
+}
+
+QPointF twoPortKick(const TwoPortItem* tp, const NodeItem* port, const BranchItem* branch, qreal lane,
+                    qreal chordLen) {
     if (!tp || !port) {
         return {};
+    }
+    if (branch && isFacingNeighborLink(tp, port, branch)) {
+        return interTwoPortKick(tp, port) + QPointF(0.0, lane);
     }
 
     qreal mag = kTwoPortEgressKick;
@@ -447,13 +590,15 @@ BranchEgress computeBranchEgress(const BranchItem* branch) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(from, branch, index, count);
-        egress.kickA = twoPortKick(from->twoPort(), from, externalBranchLane(index, count), chordLen);
+        egress.kickA =
+            twoPortKick(from->twoPort(), from, branch, externalBranchLane(index, count), chordLen);
     }
     if (NodeItem* to = branch->to(); to && to->twoPort()) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(to, branch, index, count);
-        egress.kickB = twoPortKick(to->twoPort(), to, externalBranchLane(index, count), chordLen);
+        egress.kickB =
+            twoPortKick(to->twoPort(), to, branch, externalBranchLane(index, count), chordLen);
     }
     return egress;
 }
@@ -631,12 +776,6 @@ void BranchItem::setElementConstant(const QString& constant) {
     }
     prepareGeometryChange();
     m_elementConstant = constant;
-    if (!m_active) {
-        if (const std::optional<BranchType> inferred =
-                lg::inferPassiveBranchType(constant, lg::branchSystemType(*this))) {
-            m_type = *inferred;
-        }
-    }
     lg::applyConstantThroughNaming(this);
     update();
 }
@@ -958,7 +1097,7 @@ void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         }
         if (graph->mode() == GraphScene::Mode::Select) {
             if (!(event->modifiers() & Qt::ShiftModifier)) {
-                graph->selectTwoPortNode(this);
+                graph->selectTwoPortNode(this, graph->twoPortForNode(this, nullptr, event->scenePos()));
             } else {
                 setSelected(true);
             }
@@ -976,8 +1115,9 @@ void NodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
     }
     auto* graph = static_cast<GraphScene*>(scene());
     if (graph->mode() == GraphScene::Mode::Select && m_dragStart != pos()) {
-        graph->pushMove(this, m_dragStart, pos());
-        graph->tryMergeOverlappingNodes(this);
+        if (!graph->tryMergeOverlappingNodes(this, m_dragStart)) {
+            graph->pushMove(this, m_dragStart, pos());
+        }
     }
 }
 
@@ -1055,13 +1195,8 @@ void TwoPortItem::applyInternalBranchBows() {
     if (!m_left || !m_right) {
         return;
     }
-    if (m_kind == TwoPortKind::Gyrator) {
-        m_left->setBow(14.0);
-        m_right->setBow(-14.0);
-    } else {
-        m_left->setBow(-14.0);
-        m_right->setBow(14.0);
-    }
+    m_left->setBow(twoPortSideBowMag(this, true));
+    m_right->setBow(-twoPortSideBowMag(this, false));
 }
 
 void TwoPortItem::setKind(TwoPortKind kind) {
@@ -1085,7 +1220,7 @@ void TwoPortItem::setModulus(const QString& modulus) {
 }
 
 QString TwoPortItem::elementalEquationText() const {
-    return lg::twoPortElementalEquationText(m_kind, m_modulus);
+    return lg::twoPortElementalEquationText(m_kind, m_modulus, m_left, m_right);
 }
 
 void TwoPortItem::applyPortDefaults() {
@@ -1107,6 +1242,8 @@ void TwoPortItem::refresh() {
         m_center = static_cast<GraphScene*>(scene())->snap(
             (m_v1->scenePos() + m_v2->scenePos() + m_g1->scenePos() + m_g2->scenePos()) / 4.0);
     }
+    applyInternalBranchBows();
+    refreshNeighborTwoPortBows(this);
     prepareGeometryChange();
     update();
 }
@@ -1179,7 +1316,8 @@ QPainterPath TwoPortItem::shape() const {
     }
     const qreal midY = (left.y() + right.y()) / 2.0;
     const qreal span = right.x() - left.x();
-    return stadiumPath(QRectF(left.x() - 8.0, midY - kTfHalfHeight, span + 16.0, kTfHalfHeight * 2.0));
+    return stadiumPath(
+        QRectF(left.x() - kTfPadX, midY - kTfHalfHeight, span + kTfPadX * 2.0, kTfHalfHeight * 2.0));
 }
 
 void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {

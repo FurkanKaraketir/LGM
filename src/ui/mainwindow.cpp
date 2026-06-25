@@ -5,7 +5,9 @@
 #include "analyze_window.h"
 #include "app_shortcuts.h"
 #include "canvas.h"
+#include "guide_window.h"
 #include "settings_window.h"
+#include "tool_icons.h"
 
 #include "elemental_equation.h"
 #include "state_space.h"
@@ -16,9 +18,15 @@
 
 #include <QApplication>
 
+#include <QCoreApplication>
+
 #include <QCloseEvent>
 
 #include <QComboBox>
+
+#include <QDate>
+
+#include <QDir>
 
 #include <QDockWidget>
 
@@ -84,6 +92,8 @@
 
 #include <QVector>
 
+#include <algorithm>
+
 
 
 namespace {
@@ -96,6 +106,12 @@ constexpr int kObjectPtrRole = Qt::UserRole;
 
 constexpr int kObjectKindRole = Qt::UserRole + 1;
 
+constexpr int kCategoryRole = Qt::UserRole + 2;
+
+constexpr int kKindLabelRole = Qt::UserRole + 3;
+
+constexpr int kParentTwoPortRole = Qt::UserRole + 4;
+
 
 
 void setItemObject(QTreeWidgetItem* item, GraphObjectKind kind, void* ptr) {
@@ -103,6 +119,18 @@ void setItemObject(QTreeWidgetItem* item, GraphObjectKind kind, void* ptr) {
     item->setData(0, kObjectPtrRole, reinterpret_cast<quintptr>(ptr));
 
     item->setData(0, kObjectKindRole, static_cast<int>(kind));
+
+}
+
+void setItemParentTwoPort(QTreeWidgetItem* item, TwoPortItem* twoPort) {
+
+    item->setData(0, kParentTwoPortRole, reinterpret_cast<quintptr>(twoPort));
+
+}
+
+TwoPortItem* itemParentTwoPort(const QTreeWidgetItem* item) {
+
+    return reinterpret_cast<TwoPortItem*>(item->data(0, kParentTwoPortRole).value<quintptr>());
 
 }
 
@@ -120,6 +148,60 @@ GraphObjectKind objectKind(const QTreeWidgetItem* item) {
 
     return static_cast<GraphObjectKind>(item->data(0, kObjectKindRole).toInt());
 
+}
+
+QString objectExpansionKey(GraphObjectKind kind, void* ptr) {
+    return QStringLiteral("obj:%1:%2")
+        .arg(static_cast<int>(kind))
+        .arg(reinterpret_cast<quintptr>(ptr));
+}
+
+QString categoryExpansionKey(const QString& id) {
+    return QStringLiteral("cat:%1").arg(id);
+}
+
+QIcon objectListIcon(GraphObjectKind kind) {
+    switch (kind) {
+    case GraphObjectKind::Node:
+        return ToolIcons::node();
+    case GraphObjectKind::Branch:
+        return ToolIcons::branch();
+    case GraphObjectKind::TwoPort:
+        return ToolIcons::twoPort();
+    }
+    return {};
+}
+
+QString twoPortKindLabel(TwoPortKind kind) {
+    return kind == TwoPortKind::Transformer ? QObject::tr("Transformer")
+                                            : QObject::tr("Gyrator");
+}
+
+QString objectKindLabel(GraphObjectKind kind) {
+    switch (kind) {
+    case GraphObjectKind::Node:
+        return QObject::tr("Node");
+    case GraphObjectKind::Branch:
+        return QObject::tr("Branch");
+    case GraphObjectKind::TwoPort:
+        return QObject::tr("Two-port");
+    }
+    return {};
+}
+
+QString examplesDir() {
+    const QString besideExe =
+        QCoreApplication::applicationDirPath() + QStringLiteral("/Examples");
+    if (QDir(besideExe).exists()) {
+        return besideExe;
+    }
+#ifdef EXAMPLES_SOURCE_DIR
+    const QString fromSource = QStringLiteral(EXAMPLES_SOURCE_DIR);
+    if (QDir(fromSource).exists()) {
+        return fromSource;
+    }
+#endif
+    return {};
 }
 
 void populateSystemTypeCombo(QComboBox* combo) {
@@ -178,10 +260,18 @@ QVector<GraphSelectionEntry> primarySceneSelection(const GraphScene* scene) {
             }
             add(branch, GraphObjectKind::Branch);
         } else if (auto* node = dynamic_cast<NodeItem*>(item)) {
-            if (node->twoPort() && seen.contains(node->twoPort())) {
-                continue;
+            bool coveredBySelectedTwoPort = false;
+            for (QGraphicsItem* other : scene->selectedItems()) {
+                if (auto* twoPort = dynamic_cast<TwoPortItem*>(other)) {
+                    if (GraphScene::isTwoPortPortNode(twoPort, node)) {
+                        coveredBySelectedTwoPort = true;
+                        break;
+                    }
+                }
             }
-            add(node, GraphObjectKind::Node);
+            if (!coveredBySelectedTwoPort) {
+                add(node, GraphObjectKind::Node);
+            }
         }
     }
 
@@ -194,6 +284,46 @@ BranchItem* singleSelectedBranch(const GraphScene* scene) {
         return nullptr;
     }
     return static_cast<BranchItem*>(entries.front().ptr);
+}
+
+QTreeWidgetItem* pickObjectTreeItem(const QVector<GraphSelectionEntry>& entries,
+                                    const GraphSelectionEntry& entry, QTreeWidget* tree,
+                                    const GraphScene* scene) {
+    QVector<QTreeWidgetItem*> candidates;
+    QTreeWidgetItemIterator it(tree);
+    while (*it) {
+        if (objectPtr(*it) == entry.ptr && objectKind(*it) == entry.kind) {
+            candidates.push_back(*it);
+        }
+        ++it;
+    }
+    if (candidates.isEmpty()) {
+        return nullptr;
+    }
+    if (candidates.size() == 1 || entry.kind != GraphObjectKind::Node) {
+        return candidates.front();
+    }
+
+    TwoPortItem* context = nullptr;
+    for (const GraphSelectionEntry& other : entries) {
+        if (other.kind != GraphObjectKind::TwoPort) {
+            continue;
+        }
+        auto* twoPort = static_cast<TwoPortItem*>(other.ptr);
+        if (GraphScene::isTwoPortPortNode(twoPort, static_cast<NodeItem*>(entry.ptr))) {
+            context = twoPort;
+            break;
+        }
+    }
+    if (!context) {
+        context = scene->twoPortForNode(static_cast<NodeItem*>(entry.ptr));
+    }
+    for (QTreeWidgetItem* item : candidates) {
+        if (itemParentTwoPort(item) == context) {
+            return item;
+        }
+    }
+    return candidates.front();
 }
 
 
@@ -236,7 +366,12 @@ QAction* addTool(QActionGroup* group, QToolBar* toolbar, const QIcon& icon, cons
 
 }
 
-
+QString shortcutToolTip(const QString& label, const QKeySequence& shortcut) {
+    if (shortcut.isEmpty()) {
+        return label;
+    }
+    return QObject::tr("%1 (%2)").arg(label, shortcut.toString(QKeySequence::NativeText));
+}
 
 }  // namespace
 
@@ -364,13 +499,21 @@ void MainWindow::buildMenuBar() {
 
     connect(openAction, &QAction::triggered, this, &MainWindow::fileOpen);
 
-    
+    auto* examplesMenu = fileMenu->addMenu(tr("E&xamples"));
+    const QDir exampleDir(examplesDir());
+    for (const QString& fileName :
+         exampleDir.entryList({QStringLiteral("*.lgm")}, QDir::Files, QDir::Name)) {
+        const QString path = exampleDir.absoluteFilePath(fileName);
+        auto* exampleAction = examplesMenu->addAction(fileName);
+        connect(exampleAction, &QAction::triggered, this,
+                [this, path]() { fileOpenExample(path); });
+    }
 
     auto* saveAction = fileMenu->addAction(themedIcon("document-save", QStyle::SP_DialogSaveButton), tr("&Save"));
 
     saveAction->setObjectName(QStringLiteral("file.save"));
 
-    connect(saveAction, &QAction::triggered, this, &MainWindow::fileSave);
+    connect(saveAction, &QAction::triggered, this, [this](bool) { fileSave(); });
 
     
 
@@ -583,7 +726,7 @@ void MainWindow::buildMenuBar() {
 
     
 
-    auto* objectListAction = viewMenu->addAction(tr("&Object List"));
+    auto* objectListAction = viewMenu->addAction(tr("&Objects"));
 
     objectListAction->setCheckable(true);
 
@@ -792,14 +935,41 @@ void MainWindow::buildMenuBar() {
 
     auto* helpMenu = menuBar()->addMenu(tr("&Help"));
 
-    
+    auto* guidesMenu = helpMenu->addMenu(tr("&Guides"));
+
+    auto* quickStartGuide = guidesMenu->addAction(tr("&Quick Start"));
+    connect(quickStartGuide, &QAction::triggered, this, [this]() {
+        GuideWindow::showGuide(tr("Quick Start"), QStringLiteral(":/guides/quick_start.md"), this);
+    });
+
+    auto* stateSpaceGuide = guidesMenu->addAction(tr("&State-Space Derivation"));
+    connect(stateSpaceGuide, &QAction::triggered, this, [this]() {
+        GuideWindow::showGuide(tr("State-Space Derivation"),
+                               QStringLiteral(":/guides/state_space_from_normal_tree.md"),
+                               this);
+    });
+
+    helpMenu->addSeparator();
 
     auto* aboutAction = helpMenu->addAction(themedIcon("help-about", QStyle::SP_MessageBoxInformation), tr("&About"));
 
     connect(aboutAction, &QAction::triggered, this, [this]() {
-
-        statusBar()->showMessage(tr("Linear Graph Modeling — A CAD-style graph editor"), 3000);
-
+        QMessageBox::about(
+            this, tr("About LGM"),
+            tr("<h3>LGM</h3>"
+               "<p>%1</p>"
+               "<p>%2</p>"
+               "<p>%3</p>"
+               "<p>Copyright &copy; %4 Furkan Karaketir</p>"
+               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%5</a></p>")
+                .arg(tr("Linear graph modeling and state-space analysis."),
+                     tr("Version %1").arg(QApplication::applicationVersion()),
+                     tr("This program is free software; you can redistribute it and/or modify "
+                        "it under the terms of the GNU General Public License as published by "
+                        "the Free Software Foundation, either version 3 of the License, or "
+                        "(at your option) any later version."),
+                     QString::number(QDate::currentDate().year()),
+                     tr("GNU General Public License v3.0")));
     });
 
 }
@@ -833,23 +1003,21 @@ void MainWindow::buildToolbar() {
 
     m_selectAction =
 
-        addTool(m_modeGroup, toolbar, themedIcon("cursor-arrow", QStyle::SP_FileDialogContentsView),
+        addTool(m_modeGroup, toolbar, ToolIcons::select(),
 
                 tr("Select"), "tool.select", GraphScene::Mode::Select, m_view);
 
-    m_addNodeAction = addTool(m_modeGroup, toolbar, themedIcon("list-add", QStyle::SP_FileDialogNewFolder),
+    m_addNodeAction = addTool(m_modeGroup, toolbar, ToolIcons::node(),
 
                                tr("Node"), "tool.addNode", GraphScene::Mode::AddNode, m_view);
 
     m_addBranchAction =
 
-        addTool(m_modeGroup, toolbar, themedIcon("draw-line", QStyle::SP_ArrowRight), tr("Branch"),
+        addTool(m_modeGroup, toolbar, ToolIcons::branch(), tr("Branch"),
 
                 "tool.addBranch", GraphScene::Mode::AddBranch, m_view);
 
-    m_addTwoPortAction = addTool(m_modeGroup, toolbar,
-
-                                 themedIcon("insert-object", QStyle::SP_FileDialogDetailedView),
+    m_addTwoPortAction = addTool(m_modeGroup, toolbar, ToolIcons::twoPort(),
 
                                  tr("Two-Port"), "tool.addTwoPort", GraphScene::Mode::AddTwoPort,
 
@@ -955,12 +1123,11 @@ void MainWindow::buildToolbar() {
 
     toolbar->addSeparator();
 
-    auto* analyzeAction =
-        toolbar->addAction(themedIcon("system-run", QStyle::SP_MediaPlay), tr("Analyze"));
-    analyzeAction->setObjectName(QStringLiteral("tool.analyze"));
-    analyzeAction->setShortcutContext(Qt::ApplicationShortcut);
-    analyzeAction->setToolTip(tr("Open analyze panel"));
-    connect(analyzeAction, &QAction::triggered, this, &MainWindow::showAnalyzeWindow);
+    m_analyzeAction = toolbar->addAction(ToolIcons::analyze(), tr("Analyze"));
+    m_analyzeAction->setObjectName(QStringLiteral("tool.analyze"));
+    m_analyzeAction->setShortcutContext(Qt::ApplicationShortcut);
+    m_analyzeAction->setToolTip(tr("Open analyze panel"));
+    connect(m_analyzeAction, &QAction::triggered, this, &MainWindow::showAnalyzeWindow);
 
     connect(m_scene->undoStack(), &QUndoStack::canUndoChanged, m_undoAction, &QAction::setEnabled);
 
@@ -1046,13 +1213,23 @@ void MainWindow::buildDockPanels() {
 
     m_objectListDock = new QDockWidget(tr("Objects"), this);
 
+    m_objectListDock->setObjectName(QStringLiteral("objectListDock"));
+
     m_objectListDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
     
 
     m_objectTree = new QTreeWidget(m_objectListDock);
 
-    m_objectTree->setHeaderHidden(true);
+    m_objectTree->setColumnCount(2);
+
+    m_objectTree->setHeaderLabels({tr("Name"), tr("Kind")});
+
+    m_objectTree->header()->setStretchLastSection(false);
+
+    m_objectTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+
+    m_objectTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
     m_objectTree->setAlternatingRowColors(true);
 
@@ -1061,6 +1238,10 @@ void MainWindow::buildDockPanels() {
     m_objectTree->setSelectionBehavior(QAbstractItemView::SelectRows);
 
     m_objectTree->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
+
+    m_objectTree->setUniformRowHeights(true);
+
+    m_objectTree->setRootIsDecorated(true);
 
     
 
@@ -1233,6 +1414,28 @@ void MainWindow::buildDockPanels() {
 
     connect(m_objectTree, &QTreeWidget::itemChanged, this, &MainWindow::onObjectTreeItemChanged);
 
+    connect(m_objectTree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
+        void* ptr = objectPtr(item);
+        if (!ptr) {
+            return;
+        }
+        QGraphicsItem* gfx = nullptr;
+        switch (objectKind(item)) {
+        case GraphObjectKind::Node:
+            gfx = static_cast<NodeItem*>(ptr);
+            break;
+        case GraphObjectKind::Branch:
+            gfx = static_cast<BranchItem*>(ptr);
+            break;
+        case GraphObjectKind::TwoPort:
+            gfx = static_cast<TwoPortItem*>(ptr);
+            break;
+        }
+        if (gfx) {
+            m_view->centerOn(gfx);
+        }
+    });
+
     connect(m_propertyTable, &QTableWidget::itemChanged, this, &MainWindow::onPropertyTableItemChanged);
 
 
@@ -1254,6 +1457,35 @@ void MainWindow::updateObjectList() {
         return;
 
     }
+
+    QSet<QString> expanded;
+
+  {
+        QTreeWidgetItemIterator it(m_objectTree);
+
+        while (*it) {
+
+            if ((*it)->isExpanded()) {
+
+                if (void* ptr = objectPtr(*it)) {
+
+                    expanded.insert(objectExpansionKey(objectKind(*it), ptr));
+
+                } else if (const QString catId = (*it)->data(0, kCategoryRole).toString(); !catId.isEmpty()) {
+
+                    expanded.insert(categoryExpansionKey(catId));
+
+                }
+
+            }
+
+            ++it;
+
+        }
+
+    }
+
+
 
     m_syncingObjectTree = true;
 
@@ -1311,13 +1543,65 @@ void MainWindow::updateObjectList() {
 
 
 
-    auto addEditableItem = [&](QTreeWidgetItem* parent, const QString& label, GraphObjectKind kind,
+    const auto byName = [](auto* a, auto* b) {
+        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+    };
 
-                               void* ptr) {
+    std::sort(twoPorts.begin(), twoPorts.end(), byName);
 
-        auto* treeItem = parent ? new QTreeWidgetItem(parent, {label}) : new QTreeWidgetItem(m_objectTree, {label});
+    std::sort(standaloneNodes.begin(), standaloneNodes.end(), byName);
 
-        setItemObject(treeItem, kind, ptr);
+    std::sort(standaloneBranches.begin(), standaloneBranches.end(), byName);
+
+
+
+    auto addCategory = [&](const QString& id, const QString& title, int count) -> QTreeWidgetItem* {
+
+        const QString label =
+
+            count > 0 ? tr("%1 (%2)").arg(title).arg(count) : title;
+
+        auto* cat = new QTreeWidgetItem(m_objectTree, {label, QString()});
+
+        cat->setData(0, kCategoryRole, id);
+
+        cat->setFlags(Qt::ItemIsEnabled);
+
+        QFont font = cat->font(0);
+
+        font.setBold(true);
+
+        cat->setFont(0, font);
+
+        cat->setExpanded(expanded.contains(categoryExpansionKey(id)) || count > 0);
+
+        return cat;
+
+    };
+
+
+
+    auto addEditableItem = [&](QTreeWidgetItem* parent, const QString& name, const QString& kind,
+
+                               GraphObjectKind kindEnum, void* ptr,
+
+                               TwoPortItem* ownerTwoPort = nullptr) -> QTreeWidgetItem* {
+
+        auto* treeItem =
+
+            parent ? new QTreeWidgetItem(parent, {name, kind}) : new QTreeWidgetItem(m_objectTree, {name, kind});
+
+        setItemObject(treeItem, kindEnum, ptr);
+
+        treeItem->setIcon(0, objectListIcon(kindEnum));
+
+        treeItem->setData(1, kKindLabelRole, kind);
+
+        if (ownerTwoPort) {
+
+            setItemParentTwoPort(treeItem, ownerTwoPort);
+
+        }
 
         treeItem->setFlags(treeItem->flags() | Qt::ItemIsEditable);
 
@@ -1327,41 +1611,79 @@ void MainWindow::updateObjectList() {
 
 
 
-    for (TwoPortItem* twoPort : twoPorts) {
+    if (!twoPorts.isEmpty()) {
 
-        QTreeWidgetItem* root = addEditableItem(nullptr, twoPort->name(), GraphObjectKind::TwoPort, twoPort);
+        QTreeWidgetItem* category = addCategory(QStringLiteral("twoport"), tr("Two-Ports"), twoPorts.size());
 
-        addEditableItem(root, twoPort->v1()->name(), GraphObjectKind::Node, twoPort->v1());
+        for (TwoPortItem* twoPort : twoPorts) {
 
-        addEditableItem(root, twoPort->v2()->name(), GraphObjectKind::Node, twoPort->v2());
+            QTreeWidgetItem* root = addEditableItem(category, twoPort->name(), twoPortKindLabel(twoPort->kind()),
 
-        addEditableItem(root, twoPort->g1()->name(), GraphObjectKind::Node, twoPort->g1());
+                                                    GraphObjectKind::TwoPort, twoPort);
 
-        if (twoPort->g1() != twoPort->g2()) {
-            addEditableItem(root, twoPort->g2()->name(), GraphObjectKind::Node, twoPort->g2());
+            root->setExpanded(expanded.contains(objectExpansionKey(GraphObjectKind::TwoPort, twoPort)));
+
+            addEditableItem(root, twoPort->v1()->name(), QStringLiteral("v1"), GraphObjectKind::Node, twoPort->v1(),
+
+                            twoPort);
+
+            addEditableItem(root, twoPort->v2()->name(), QStringLiteral("v2"), GraphObjectKind::Node, twoPort->v2(),
+
+                            twoPort);
+
+            addEditableItem(root, twoPort->g1()->name(), QStringLiteral("g1"), GraphObjectKind::Node, twoPort->g1(),
+
+                            twoPort);
+
+            if (twoPort->g1() != twoPort->g2()) {
+
+                addEditableItem(root, twoPort->g2()->name(), QStringLiteral("g2"), GraphObjectKind::Node,
+
+                                twoPort->g2(), twoPort);
+
+            }
+
+            addEditableItem(root, twoPort->leftBranch()->name(), tr("left"), GraphObjectKind::Branch,
+
+                            twoPort->leftBranch(), twoPort);
+
+            addEditableItem(root, twoPort->rightBranch()->name(), tr("right"), GraphObjectKind::Branch,
+
+                            twoPort->rightBranch(), twoPort);
+
         }
 
-        addEditableItem(root, twoPort->leftBranch()->name(), GraphObjectKind::Branch, twoPort->leftBranch());
+    }
 
-        addEditableItem(root, twoPort->rightBranch()->name(), GraphObjectKind::Branch, twoPort->rightBranch());
 
-        root->setExpanded(true);
+
+    if (!standaloneNodes.isEmpty()) {
+
+        QTreeWidgetItem* category = addCategory(QStringLiteral("node"), tr("Nodes"), standaloneNodes.size());
+
+        for (NodeItem* node : standaloneNodes) {
+
+            addEditableItem(category, node->name(), objectKindLabel(GraphObjectKind::Node), GraphObjectKind::Node,
+
+                            node);
+
+        }
 
     }
 
 
 
-    for (NodeItem* node : standaloneNodes) {
+    if (!standaloneBranches.isEmpty()) {
 
-        addEditableItem(nullptr, node->name(), GraphObjectKind::Node, node);
+        QTreeWidgetItem* category = addCategory(QStringLiteral("branch"), tr("Branches"), standaloneBranches.size());
 
-    }
+        for (BranchItem* branch : standaloneBranches) {
 
+            addEditableItem(category, branch->name(), objectKindLabel(GraphObjectKind::Branch),
 
+                            GraphObjectKind::Branch, branch);
 
-    for (BranchItem* branch : standaloneBranches) {
-
-        addEditableItem(nullptr, branch->name(), GraphObjectKind::Branch, branch);
+        }
 
     }
 
@@ -1421,11 +1743,11 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
             auto* node = static_cast<NodeItem*>(objectPtr(item));
 
-            if (node->twoPort()) {
+            if (TwoPortItem* owner = itemParentTwoPort(item)) {
 
                 if (singleSelect) {
 
-                    m_scene->selectTwoPortNode(node);
+                    m_scene->selectTwoPortNode(node, owner);
 
                 } else {
 
@@ -1447,23 +1769,7 @@ void MainWindow::onObjectTreeSelectionChanged() {
 
             auto* branch = static_cast<BranchItem*>(objectPtr(item));
 
-            if (TwoPortItem* twoPort = m_scene->twoPortFor(branch)) {
-
-                if (singleSelect) {
-
-                    m_scene->selectTwoPort(twoPort);
-
-                } else {
-
-                    branch->setSelected(true);
-
-                }
-
-            } else {
-
-                branch->setSelected(true);
-
-            }
+            branch->setSelected(true);
 
             break;
 
@@ -1548,7 +1854,15 @@ void MainWindow::onPropertyTableItemChanged(QTableWidgetItem* item) {
 
 void MainWindow::onObjectTreeItemChanged(QTreeWidgetItem* item, int column) {
 
-    if (m_syncingObjectTree || column != 0) {
+    if (m_syncingObjectTree) {
+
+        return;
+
+    }
+
+    if (column != 0) {
+
+        item->setText(1, item->data(1, kKindLabelRole).toString());
 
         return;
 
@@ -1612,29 +1926,19 @@ void MainWindow::syncObjectTreeSelection() {
 
         QTreeWidgetItem* firstMatch = nullptr;
 
-        QTreeWidgetItemIterator it(m_objectTree);
+        for (const GraphSelectionEntry& entry : entries) {
 
-        while (*it) {
+            if (QTreeWidgetItem* treeItem = pickObjectTreeItem(entries, entry, m_objectTree, m_scene)) {
 
-            for (const GraphSelectionEntry& entry : entries) {
+                treeItem->setSelected(true);
 
-                if (objectPtr(*it) == entry.ptr && objectKind(*it) == entry.kind) {
+                if (!firstMatch) {
 
-                    (*it)->setSelected(true);
-
-                    if (!firstMatch) {
-
-                        firstMatch = *it;
-
-                    }
-
-                    break;
+                    firstMatch = treeItem;
 
                 }
 
             }
-
-            ++it;
 
         }
 
@@ -1980,7 +2284,7 @@ void MainWindow::updatePropertyPanel() {
 
             const int typeRow = addLabelRow(tr("Node Type"));
 
-            if (node->twoPort()) {
+            if (m_scene->twoPortForNode(node)) {
 
                 auto* valueItem = new QTableWidgetItem(
 
@@ -2024,9 +2328,9 @@ void MainWindow::updatePropertyPanel() {
 
             addRow(tr("Branches"), QString::number(node->branches().size()));
 
-            if (node->twoPort()) {
+            if (TwoPortItem* parentTwoPort = m_scene->twoPortForNode(node)) {
 
-                addRow(tr("Parent"), node->twoPort()->name());
+                addRow(tr("Parent"), parentTwoPort->name());
 
             }
 
@@ -2532,6 +2836,9 @@ void MainWindow::applyShortcuts(const AppSettings& settings) {
         }
         action->setShortcut(settings.shortcut(id));
         action->setShortcutContext(Qt::ApplicationShortcut);
+        if (id == QLatin1String("tool.addNode") || id == QLatin1String("tool.addBranch")) {
+            action->setToolTip(shortcutToolTip(action->text(), action->shortcut()));
+        }
     }
 }
 
@@ -2547,6 +2854,24 @@ void MainWindow::applySettings(const AppSettings& settings) {
     applyShortcuts(settings);
     m_scene->refreshAppearance();
     refreshChromeTheme();
+}
+
+void MainWindow::refreshToolIcons() {
+    if (m_selectAction) {
+        m_selectAction->setIcon(ToolIcons::select());
+    }
+    if (m_addNodeAction) {
+        m_addNodeAction->setIcon(ToolIcons::node());
+    }
+    if (m_addBranchAction) {
+        m_addBranchAction->setIcon(ToolIcons::branch());
+    }
+    if (m_addTwoPortAction) {
+        m_addTwoPortAction->setIcon(ToolIcons::twoPort());
+    }
+    if (m_analyzeAction) {
+        m_analyzeAction->setIcon(ToolIcons::analyze());
+    }
 }
 
 void MainWindow::refreshChromeTheme() {
@@ -2573,6 +2898,7 @@ void MainWindow::refreshChromeTheme() {
     if (m_settingsWindow) {
         polishWidget(m_settingsWindow);
     }
+    refreshToolIcons();
 }
 
 void MainWindow::showAnalyzeWindow() {
@@ -2609,7 +2935,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 void MainWindow::updateWindowTitle() {
     const QString name =
         m_currentFilePath.isEmpty() ? tr("Untitled") : QFileInfo(m_currentFilePath).fileName();
-    setWindowTitle(tr("%1 [*] - Linear Graph Modeling").arg(name));
+    const QString exampleTag = m_isExampleDocument ? tr(" (Example)") : QString();
+    setWindowTitle(tr("%1%2 [*] - LGM").arg(name, exampleTag));
     setWindowModified(!m_scene->undoStack()->isClean());
 }
 
@@ -2638,6 +2965,7 @@ void MainWindow::fileNew() {
     m_scene->clearDocument();
     m_clearingDocument = false;
     m_currentFilePath.clear();
+    m_isExampleDocument = false;
     m_scene->undoStack()->setClean();
     updateWindowTitle();
     m_objectTree->clearSelection();
@@ -2655,17 +2983,27 @@ void MainWindow::fileOpen() {
     if (path.isEmpty()) {
         return;
     }
+    loadDocumentFromPath(path);
+}
 
+void MainWindow::fileOpenExample(const QString& path) {
+    if (!confirmDiscardChanges()) {
+        return;
+    }
+    loadDocumentFromPath(path, true);
+}
+
+bool MainWindow::loadDocumentFromPath(const QString& path, bool fromExamplesMenu) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         QMessageBox::warning(this, tr("Open Failed"), tr("Could not read %1.").arg(path));
-        return;
+        return false;
     }
 
     QString error;
     if (!m_scene->documentFromJson(file.readAll(), &error)) {
         QMessageBox::warning(this, tr("Open Failed"), error);
-        return;
+        return false;
     }
 
     const QString loadWarning = m_scene->takeLoadWarning();
@@ -2674,24 +3012,49 @@ void MainWindow::fileOpen() {
     }
 
     m_currentFilePath = path;
+    m_isExampleDocument = fromExamplesMenu || isExampleFilePath(path);
     m_scene->undoStack()->setClean();
     syncDefaultSystemTypeCombo(m_scene->defaultSystemType());
     updateWindowTitle();
     updateObjectList();
     updatePropertyPanel();
     updateStateSpacePanel();
+    return true;
+}
+
+bool MainWindow::isExampleFilePath(const QString& path) const {
+    if (path.isEmpty()) {
+        return false;
+    }
+    const QString root = examplesDir();
+    if (root.isEmpty()) {
+        return false;
+    }
+    QString dir = QFileInfo(root).absoluteFilePath();
+    if (dir.isEmpty()) {
+        return false;
+    }
+    if (!dir.endsWith(QLatin1Char('/')) && !dir.endsWith(QLatin1Char('\\'))) {
+        dir += QDir::separator();
+    }
+    const QString file = QFileInfo(path).absoluteFilePath();
+    if (file.isEmpty()) {
+        return false;
+    }
+    return file.startsWith(dir, Qt::CaseInsensitive);
 }
 
 bool MainWindow::fileSave() {
-    if (m_currentFilePath.isEmpty()) {
+    if (m_currentFilePath.isEmpty() || m_isExampleDocument) {
         return fileSaveAs();
     }
     return writeDocument(m_currentFilePath);
 }
 
 bool MainWindow::fileSaveAs() {
+    const QString initialPath = m_isExampleDocument ? QString() : m_currentFilePath;
     QString path = QFileDialog::getSaveFileName(
-        this, tr("Save As"), m_currentFilePath.isEmpty() ? QString() : m_currentFilePath,
+        this, tr("Save As"), initialPath,
         tr("Linear Graph Model (*.lgm);;All Files (*)"));
     if (path.isEmpty()) {
         return false;
@@ -2703,6 +3066,7 @@ bool MainWindow::fileSaveAs() {
         return false;
     }
     m_currentFilePath = path;
+    m_isExampleDocument = false;
     updateWindowTitle();
     return true;
 }

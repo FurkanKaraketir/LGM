@@ -2,7 +2,7 @@
 #include "elemental_equation.h"
 
 #include <algorithm>
-#include <cmath>
+#include <limits>
 #include <unordered_set>
 #include <vector>
 
@@ -17,6 +17,7 @@ void refreshTwoPortEgressAt(NodeItem* port) {
         return;
     }
     TwoPortItem* twoPort = port->twoPort();
+    twoPort->refresh();
     for (BranchItem* branch : port->branches()) {
         if (!GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
             branch->updatePath();
@@ -125,8 +126,8 @@ TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind, 
     g1->setGround(true);
     g2->setGround(true);
 
-    auto* left = createBranch(v1, g1, kind == TwoPortKind::Gyrator ? 14.0 : -14.0);
-    auto* right = createBranch(v2, g2, kind == TwoPortKind::Gyrator ? -14.0 : 14.0);
+    auto* left = createBranch(v1, g1, 28.0);
+    auto* right = createBranch(v2, g2, -28.0);
     left->setTwoPortPort(true);
     right->setTwoPortPort(true);
 
@@ -171,8 +172,8 @@ TwoPortItem* GraphScene::createTwoPortFromPorts(NodeItem* v1, NodeItem* v2, Node
         branch->setElementConstant(QStringLiteral("1"));
         return branch;
     };
-    auto* left = createPortBranch(v1, g1, kind == TwoPortKind::Gyrator ? 14.0 : -14.0);
-    auto* right = createPortBranch(v2, g2, kind == TwoPortKind::Gyrator ? -14.0 : 14.0);
+    auto* left = createPortBranch(v1, g1, 28.0);
+    auto* right = createPortBranch(v2, g2, -28.0);
     if (!left || !right) {
         m_suppressGraphChange = false;
         return nullptr;
@@ -350,15 +351,67 @@ TwoPortItem* GraphScene::twoPortFor(const QGraphicsItem* item) const {
     if (const auto* twoPort = dynamic_cast<const TwoPortItem*>(item)) {
         return const_cast<TwoPortItem*>(twoPort);
     }
-    if (const auto* node = dynamic_cast<const NodeItem*>(item)) {
-        return node->twoPort();
-    }
     if (const auto* branch = dynamic_cast<const BranchItem*>(item)) {
-        if (NodeItem* from = branch->from()) {
-            return from->twoPort();
+        for (QGraphicsItem* sceneItem : items()) {
+            if (auto* twoPort = dynamic_cast<TwoPortItem*>(sceneItem)) {
+                if (isInternalTwoPortBranch(twoPort, const_cast<BranchItem*>(branch))) {
+                    return twoPort;
+                }
+            }
         }
+        return nullptr;
+    }
+    if (const auto* node = dynamic_cast<const NodeItem*>(item)) {
+        return twoPortForNode(node);
     }
     return nullptr;
+}
+
+TwoPortItem* GraphScene::twoPortForNode(const NodeItem* node, TwoPortItem* prefer,
+                                        const QPointF& sceneHint) const {
+    if (!node) {
+        return nullptr;
+    }
+
+    QVector<TwoPortItem*> matches;
+    for (QGraphicsItem* sceneItem : items()) {
+        if (auto* twoPort = dynamic_cast<TwoPortItem*>(sceneItem)) {
+            if (isTwoPortPortNode(twoPort, node)) {
+                matches.push_back(twoPort);
+            }
+        }
+    }
+
+    if (matches.isEmpty()) {
+        return node->twoPort();
+    }
+    if (matches.size() == 1) {
+        return matches.front();
+    }
+    if (prefer && matches.contains(prefer)) {
+        return prefer;
+    }
+    if (!sceneHint.isNull()) {
+        if (TwoPortItem* at = twoPortAt(sceneHint); at && matches.contains(at)) {
+            return at;
+        }
+        TwoPortItem* best = nullptr;
+        qreal bestDist = std::numeric_limits<qreal>::max();
+        for (TwoPortItem* twoPort : matches) {
+            const qreal dist = QLineF(sceneHint, twoPort->center()).length();
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = twoPort;
+            }
+        }
+        if (best) {
+            return best;
+        }
+    }
+    if (TwoPortItem* owned = node->twoPort(); owned && matches.contains(owned)) {
+        return owned;
+    }
+    return matches.front();
 }
 
 TwoPortItem* GraphScene::twoPortAt(const QPointF& scenePos) const {
@@ -377,13 +430,19 @@ void GraphScene::selectTwoPort(TwoPortItem* item) {
     }
 }
 
-void GraphScene::selectTwoPortNode(NodeItem* node) {
-    if (!node || !node->twoPort()) {
+void GraphScene::selectTwoPortNode(NodeItem* node, TwoPortItem* twoPort) {
+    if (!node) {
+        return;
+    }
+    if (!twoPort) {
+        twoPort = twoPortForNode(node);
+    }
+    if (!twoPort || !isTwoPortPortNode(twoPort, node)) {
         return;
     }
     clearSelection();
     node->setSelected(true);
-    node->twoPort()->setSelected(true);
+    twoPort->setSelected(true);
 }
 
 QRectF GraphScene::contentBounds() const {
@@ -1306,13 +1365,13 @@ void GraphScene::unmergeNodes(NodeItem* keep, const MergeUndoData& undo) {
     notifyGraphChanged();
 }
 
-void GraphScene::tryMergeOverlappingNodes(NodeItem* moved) {
+bool GraphScene::tryMergeOverlappingNodes(NodeItem* moved, const QPointF& dragStart) {
     if (!moved || m_mode != Mode::Select) {
-        return;
+        return false;
     }
     NodeItem* other = nodeAt(moved->scenePos(), moved);
     if (!other) {
-        return;
+        return false;
     }
-    pushMergeNodes(moved, other);
+    return pushMergeNodes(moved, other, moved, dragStart);
 }

@@ -269,7 +269,10 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
         } else {
             elementalEquations.push_back({nullptr, sub(leftAcross, mul(k, rightThrough))});
             elementalEquations.push_back({nullptr, sub(leftThrough, div(neg(rightAcross), k))});
-            result.elementalEquations.push_back(twoPort->elementalEquationText());
+            result.elementalEquations.push_back(
+                QStringLiteral("%1 = %2; %3 = %4")
+                    .arg(leftAcrossName, ss::exprText(mul(k, rightThrough)), leftThroughName,
+                         ss::exprText(div(neg(rightAcross), k))));
         }
     }
 
@@ -619,11 +622,11 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
             break;
         }
         if (massBranch) {
-            const NodeItem* massEffort = nullptr;
+            const NodeItem* massAcrossNode = nullptr;
             if (massBranch->from() && !massBranch->from()->isGround()) {
-                massEffort = massBranch->from();
+                massAcrossNode = massBranch->from();
             } else if (massBranch->to() && !massBranch->to()->isGround()) {
-                massEffort = massBranch->to();
+                massAcrossNode = massBranch->to();
             }
             const ComputedState* complianceState = nullptr;
             for (const ComputedState& state : computedStates) {
@@ -636,19 +639,22 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                 complianceState = &state;
                 break;
             }
-            const NodeItem* springEffort = nullptr;
+            const NodeItem* complianceAcrossNode = nullptr;
             if (complianceState && complianceState->branch) {
                 if (complianceState->branch->from() &&
                     !complianceState->branch->from()->isGround()) {
-                    springEffort = complianceState->branch->from();
+                    complianceAcrossNode = complianceState->branch->from();
                 } else if (complianceState->branch->to() &&
                            !complianceState->branch->to()->isGround()) {
-                    springEffort = complianceState->branch->to();
+                    complianceAcrossNode = complianceState->branch->to();
                 }
             }
-            if (massEffort && springEffort && complianceState) {
+            // ponytail: same across node (B/K/M parallel) — port_span_junction already sums through variables; skip reflect.
+            if (massAcrossNode && complianceAcrossNode && complianceState &&
+                massAcrossNode != complianceAcrossNode) {
                 const std::optional<ss::RCP<const SymEngine::Basic>> tfProduct =
-                    ss::transformerModulusProductBetween(massEffort, springEffort, twoPorts);
+                    ss::transformerModulusProductBetween(massAcrossNode, complianceAcrossNode,
+                                                         twoPorts);
                 if (tfProduct) {
                     ss::RCP<const SymEngine::Basic> inputSum = integer(0);
                     for (BranchItem* branch : branches) {
@@ -656,7 +662,7 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                             branch->branchType() != BranchType::T) {
                             continue;
                         }
-                        if (branch->from() != massEffort && branch->to() != massEffort) {
+                        if (branch->from() != massAcrossNode && branch->to() != massAcrossNode) {
                             continue;
                         }
                         inputSum = add(inputSum, ss::symOf(branchSourceInputSymbol(*branch)));

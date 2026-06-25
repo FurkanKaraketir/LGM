@@ -145,7 +145,7 @@
             "type": 0
         }
     ],
-    "format": "LinearGraphModeling",
+    "format": "LGM",
     "nodes": [
         {
             "across": "0",
@@ -198,6 +198,8 @@
             "systemType": 1
         }
     ],
+    "normalTrees": [
+    ],
     "settings": {
         "defaultSystemType": 1,
         "gridSpacing": 20,
@@ -210,5 +212,5 @@
     },
     "twoPorts": [
     ],
-    "version": 2
+    "version": 3
 }

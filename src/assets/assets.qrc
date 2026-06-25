@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>app_logo.ico</file>
+        <file>select_icon.png</file>
+        <file>guides/quick_start.md</file>
+        <file>guides/state_space_from_normal_tree.md</file>
+    </qresource>
+</RCC>

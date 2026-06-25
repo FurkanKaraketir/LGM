@@ -485,6 +485,10 @@ public:
 
         qreal bow = 0.0;
 
+        int serialId = 0;
+
+        int sourceInputId = 0;
+
     };
 
 
@@ -556,9 +560,10 @@ public:
 
     bool canMergeNodes(const NodeItem* a, const NodeItem* b, QString* reason = nullptr) const;
 
-    void pushMergeNodes(NodeItem* a, NodeItem* b);
+    bool pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged = nullptr,
+                        const QPointF& draggedOldPos = QPointF());
 
-    void tryMergeOverlappingNodes(NodeItem* moved);
+    bool tryMergeOverlappingNodes(NodeItem* moved, const QPointF& dragStart);
 
     QString takeLoadWarning();
 
@@ -570,12 +575,21 @@ public:
 
     TwoPortItem* twoPortFor(const QGraphicsItem* item) const;
 
+    TwoPortItem* twoPortForNode(const NodeItem* node, TwoPortItem* prefer = nullptr,
+                                const QPointF& sceneHint = QPointF()) const;
+
     void selectTwoPort(TwoPortItem* item);
 
-    void selectTwoPortNode(NodeItem* node);
+    void selectTwoPortNode(NodeItem* node, TwoPortItem* twoPort = nullptr);
 
     static bool isInternalTwoPortBranch(TwoPortItem* twoPort, BranchItem* branch) {
         return twoPort && (branch == twoPort->leftBranch() || branch == twoPort->rightBranch());
+    }
+
+    static bool isTwoPortPortNode(const TwoPortItem* twoPort, const NodeItem* node) {
+        return twoPort && node &&
+               (node == twoPort->v1() || node == twoPort->v2() || node == twoPort->g1() ||
+                node == twoPort->g2());
     }
 
     void captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,

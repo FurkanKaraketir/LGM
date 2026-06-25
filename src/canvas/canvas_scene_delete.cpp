@@ -75,6 +75,8 @@ void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vecto
         snap.type = branch->branchType();
         snap.constant = branch->elementConstant();
         snap.bow = branch->bow();
+        snap.serialId = branch->serialId();
+        snap.sourceInputId = branch->sourceInputId();
         branches.push_back(snap);
     }
 }
@@ -145,17 +147,33 @@ void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
         }
     }
 
-    for (const BranchSnapshot& snap : branches) {
+    std::vector<BranchSnapshot> sortedBranches = branches;
+    std::sort(sortedBranches.begin(), sortedBranches.end(),
+              [](const BranchSnapshot& a, const BranchSnapshot& b) { return a.index < b.index; });
+
+    for (const BranchSnapshot& snap : sortedBranches) {
         NodeItem* a = nodeAtPos(snap.from);
         NodeItem* b = nodeAtPos(snap.to);
         if (!a || !b) {
             continue;
         }
         if (BranchItem* branch = createBranch(a, b, snap.bow)) {
-            branch->setActive(snap.active);
-            branch->setElementConstant(snap.constant);
-            branch->setBranchType(snap.type);
+            if (snap.serialId > 0) {
+                branch->setSerialId(snap.serialId);
+                if (snap.serialId >= m_nextBranchId) {
+                    m_nextBranchId = snap.serialId + 1;
+                }
+            }
             branch->setName(snap.name);
+            branch->setBranchType(snap.type);
+            if (snap.sourceInputId > 0) {
+                branch->setSourceInputId(snap.sourceInputId);
+                registerSourceInputId(snap.sourceInputId);
+            }
+            branch->setActive(snap.active);
+            if (!snap.active) {
+                branch->setElementConstant(snap.constant);
+            }
         }
     }
 }

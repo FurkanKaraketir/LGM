@@ -3,90 +3,90 @@
         {
             "active": false,
             "bow": 0,
-            "constant": "J",
+            "constant": "M",
             "from": {
-                "x": 140,
-                "y": -100
+                "x": 80,
+                "y": -80
             },
             "index": 0,
-            "name": "T_J",
-            "serialId": 8,
+            "name": "f_M",
+            "serialId": 7,
             "sourceInputId": 0,
             "to": {
-                "x": 140,
-                "y": 20
+                "x": 80,
+                "y": 40
             },
             "type": 0
+        },
+        {
+            "active": false,
+            "bow": 0,
+            "constant": "K",
+            "from": {
+                "x": 80,
+                "y": -80
+            },
+            "index": 1,
+            "name": "f_K",
+            "serialId": 6,
+            "sourceInputId": 0,
+            "to": {
+                "x": 80,
+                "y": 40
+            },
+            "type": 1
         },
         {
             "active": false,
             "bow": 0,
             "constant": "B",
             "from": {
-                "x": 140,
-                "y": -100
+                "x": 80,
+                "y": -80
             },
-            "index": 1,
-            "name": "T_B",
-            "serialId": 7,
+            "index": 2,
+            "name": "f_B",
+            "serialId": 5,
             "sourceInputId": 0,
             "to": {
-                "x": 140,
-                "y": 20
+                "x": 80,
+                "y": 40
             },
             "type": 2
         },
         {
-            "active": false,
-            "bow": 0,
-            "constant": "L",
-            "from": {
-                "x": -80,
-                "y": -140
-            },
-            "index": 0,
-            "name": "i_L",
-            "serialId": 6,
-            "sourceInputId": 0,
-            "to": {
-                "x": 60,
-                "y": -100
-            },
-            "type": 1
-        },
-        {
             "active": true,
             "bow": 0,
-            "constant": "1",
+            "constant": "C4",
             "from": {
-                "x": -240,
-                "y": -100
+                "x": -140,
+                "y": -80
             },
             "index": 0,
-            "name": "Vs1",
-            "serialId": 9,
+            "name": "Q_C4",
+            "serialId": 4,
             "sourceInputId": 1,
             "to": {
-                "x": 60,
-                "y": 20
+                "x": 0,
+                "y": 40
             },
             "type": 0
         },
         {
             "active": false,
             "bow": 0,
-            "constant": "R",
+            "constant": "Rf",
             "from": {
-                "x": -240,
-                "y": -100
+                "x": -140,
+                "y": -80
             },
             "index": 0,
-            "name": "i_R",
-            "serialId": 5,
+            "name": "Q_Rf",
+            "serialId": 3,
             "sourceInputId": 0,
             "to": {
-                "x": -80,
-                "y": -140
+                "x": 0,
+                "y": -80
             },
             "type": 2
         }
@@ -94,122 +94,112 @@
     "format": "LGM",
     "nodes": [
         {
-            "across": "V2",
+            "across": "P1",
             "ground": false,
-            "name": "Node 2",
+            "name": "Node 5",
             "pos": {
-                "x": -80,
-                "y": -140
+                "x": -140,
+                "y": -80
             },
-            "systemType": 1
-        },
-        {
-            "across": "V1",
-            "ground": false,
-            "name": "Node 1",
-            "pos": {
-                "x": -240,
-                "y": -100
-            },
-            "systemType": 1
+            "systemType": 2
         }
     ],
     "normalTrees": [
     ],
     "settings": {
-        "defaultSystemType": 4,
+        "defaultSystemType": 2,
         "gridSpacing": 20,
-        "nextBranchId": 13,
-        "nextNodeId": 11,
+        "nextBranchId": 8,
+        "nextNodeId": 6,
         "nextSourceInputId": 2,
-        "nextTwoPortId": 3,
+        "nextTwoPortId": 2,
         "showGrid": true,
         "snapToGrid": true
     },
     "twoPorts": [
         {
             "center": {
-                "x": 100,
-                "y": -40
+                "x": 40,
+                "y": -20
             },
             "g1": {
                 "across": "0",
                 "ground": true,
                 "name": "ref₁",
                 "pos": {
-                    "x": 60,
-                    "y": 20
+                    "x": 0,
+                    "y": 40
                 },
-                "systemType": 4
+                "systemType": 0
             },
             "g2": {
                 "across": "0",
                 "ground": true,
                 "name": "ref₂",
                 "pos": {
-                    "x": 140,
-                    "y": 20
+                    "x": 80,
+                    "y": 40
                 },
-                "systemType": 4
+                "systemType": 0
             },
-            "kind": 0,
+            "kind": 1,
             "leftBranch": {
                 "active": false,
-                "bow": -14,
+                "bow": 60,
                 "constant": "1",
                 "from": {
-                    "x": 60,
-                    "y": -100
+                    "x": 0,
+                    "y": -80
                 },
                 "index": 0,
-                "name": "i1",
+                "name": "Q_M1",
                 "serialId": 1,
                 "sourceInputId": 0,
                 "to": {
-                    "x": 60,
-                    "y": 20
+                    "x": 0,
+                    "y": 40
                 },
                 "type": 1
             },
-            "modulus": "TF",
+            "modulus": "1/A",
             "name": "Transformer 1",
             "rightBranch": {
                 "active": false,
-                "bow": 14,
+                "bow": -124,
                 "constant": "1",
                 "from": {
-                    "x": 140,
-                    "y": -100
+                    "x": 80,
+                    "y": -80
                 },
-                "index": 2,
-                "name": "T2",
+                "index": 3,
+                "name": "f_M2",
                 "serialId": 2,
                 "sourceInputId": 0,
                 "to": {
-                    "x": 140,
-                    "y": 20
+                    "x": 80,
+                    "y": 40
                 },
                 "type": 1
             },
             "v1": {
-                "across": "V3",
+                "across": "P2",
                 "ground": false,
                 "name": "v₁",
                 "pos": {
-                    "x": 60,
-                    "y": -100
+                    "x": 0,
+                    "y": -80
                 },
-                "systemType": 1
+                "systemType": 2
             },
             "v2": {
-                "across": "OmegaJ",
+                "across": "v1",
                 "ground": false,
                 "name": "v₂",
                 "pos": {
-                    "x": 140,
-                    "y": -100
+                    "x": 80,
+                    "y": -80
                 },
-                "systemType": 4
+                "systemType": 0
             }
         }
     ],

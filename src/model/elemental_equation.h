@@ -26,7 +26,7 @@ SymEngine::RCP<const SymEngine::Basic> elementalConstantCoeff(SystemType systemT
 
 QString elementalEquationText(BranchType type, SystemType systemType, bool passive, const QString& constantText);
 
-// R/L/C (and domain analogs) imply D/T/A when the branch is still at default A-type.
+// Prefix heuristic for storage-branch detection (does not set branch type).
 std::optional<BranchType> inferPassiveBranchType(const QString& constant, SystemType systemType);
 
 BranchType effectivePassiveBranchType(const BranchItem& branch);
@@ -137,6 +137,8 @@ void applyNodeDomainNaming(NodeItem* node);
 
 QString defaultTwoPortModulus(TwoPortKind kind);
 
-QString twoPortElementalEquationText(TwoPortKind kind, const QString& modulus);
+QString twoPortElementalEquationText(TwoPortKind kind, const QString& modulus,
+                                     const BranchItem* left = nullptr,
+                                     const BranchItem* right = nullptr);
 
 }  // namespace lg

@@ -3,11 +3,14 @@
 #include "app_settings.h"
 
 #include <QApplication>
+#include <QIcon>
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
-    app.setApplicationName("Linear Graph Modeling");
-    app.setOrganizationName("LinearGraphModeling");
+    app.setApplicationName(QStringLiteral("LGM"));
+    app.setApplicationVersion(QStringLiteral("0.1"));
+    app.setOrganizationName("LGM");
+    app.setWindowIcon(QIcon(":/app_logo.ico"));
 
     applyAppTheme(AppSettings::load().theme);
 

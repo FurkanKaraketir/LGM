@@ -244,18 +244,26 @@ private:
 
 class NodePropertiesCommand : public QUndoCommand {
 public:
-    NodePropertiesCommand(NodeItem* node, bool oldGround, bool newGround, SystemType oldType,
-                          SystemType newType)
-        : m_node(node), m_oldGround(oldGround), m_newGround(newGround), m_oldType(oldType), m_newType(newType) {
+    NodePropertiesCommand(GraphScene* scene, NodeItem* node, bool oldGround, bool newGround,
+                          SystemType oldType, SystemType newType, SystemType oldDefault,
+                          SystemType newDefault)
+        : m_scene(scene),
+          m_node(node),
+          m_oldGround(oldGround),
+          m_newGround(newGround),
+          m_oldType(oldType),
+          m_newType(newType),
+          m_oldDefault(oldDefault),
+          m_newDefault(newDefault) {
         setText("Change node properties");
     }
 
-    void undo() override { apply(m_oldGround, m_oldType); }
+    void undo() override { apply(m_oldGround, m_oldType, m_oldDefault); }
 
-    void redo() override { apply(m_newGround, m_newType); }
+    void redo() override { apply(m_newGround, m_newType, m_newDefault); }
 
 private:
-    void apply(bool ground, SystemType type) {
+    void apply(bool ground, SystemType type, SystemType defaultType) {
         if (!itemAlive(m_node)) {
             return;
         }
@@ -263,13 +271,17 @@ private:
         if (!ground) {
             m_node->setSystemType(type);
         }
+        m_scene->setDefaultSystemType(defaultType);
     }
 
+    GraphScene* m_scene;
     NodeItem* m_node;
     bool m_oldGround;
     bool m_newGround;
     SystemType m_oldType;
     SystemType m_newType;
+    SystemType m_oldDefault;
+    SystemType m_newDefault;
 };
 
 class SetBranchNameCommand : public QUndoCommand {
@@ -355,26 +367,35 @@ private:
 
 class SetNodeSystemTypeCommand : public QUndoCommand {
 public:
-    SetNodeSystemTypeCommand(GraphScene* scene, NodeItem* node, SystemType oldType, SystemType newType)
-        : m_scene(scene), m_node(node), m_old(oldType), m_new(newType) {
+    SetNodeSystemTypeCommand(GraphScene* scene, NodeItem* node, SystemType oldType, SystemType newType,
+                             SystemType oldDefault, SystemType newDefault)
+        : m_scene(scene),
+          m_node(node),
+          m_old(oldType),
+          m_new(newType),
+          m_oldDefault(oldDefault),
+          m_newDefault(newDefault) {
         setText("Change node system type");
     }
 
-    void undo() override { apply(m_old); }
+    void undo() override { apply(m_old, m_oldDefault); }
 
-    void redo() override { apply(m_new); }
+    void redo() override { apply(m_new, m_newDefault); }
 
 private:
-    void apply(SystemType type) {
+    void apply(SystemType type, SystemType defaultType) {
         if (itemAlive(m_node)) {
             m_node->setSystemType(type);
         }
+        m_scene->setDefaultSystemType(defaultType);
     }
 
     GraphScene* m_scene;
     NodeItem* m_node;
     SystemType m_old;
     SystemType m_new;
+    SystemType m_oldDefault;
+    SystemType m_newDefault;
 };
 
 class SetBranchConstantCommand : public QUndoCommand {
@@ -641,10 +662,62 @@ private:
     QPointF m_newCenter;
 };
 
+void applyNodePos(NodeItem* node, const QPointF& pos) {
+    if (!itemAlive(node)) {
+        return;
+    }
+    node->setPos(pos);
+    for (BranchItem* branch : node->branches()) {
+        branch->updatePath();
+    }
+    if (TwoPortItem* twoPort = node->twoPort()) {
+        twoPort->refresh();
+    }
+}
+
+struct MergeEndpoints {
+    NodeItem* keep = nullptr;
+    NodeItem* remove = nullptr;
+};
+
+MergeEndpoints resolveMergeKeepRemove(NodeItem* a, NodeItem* b) {
+    MergeEndpoints out{a, b};
+    TwoPortItem* tpA = a->twoPort();
+    TwoPortItem* tpB = b->twoPort();
+    if (tpA && tpA == tpB) {
+        out.keep = tpA->g1();
+        out.remove = a == out.keep ? b : a;
+    } else if (tpA && tpB && tpA != tpB) {
+        const int roleA = a == tpA->v1() ? 1 : a == tpA->v2() ? 2 : a == tpA->g1() ? 3 : a == tpA->g2() ? 4 : 0;
+        const int roleB = b == tpB->v1() ? 1 : b == tpB->v2() ? 2 : b == tpB->g1() ? 3 : b == tpB->g2() ? 4 : 0;
+        const bool acrossA = roleA >= 1 && roleA <= 2;
+        const bool acrossB = roleB >= 1 && roleB <= 2;
+        if (acrossA && !acrossB) {
+            out.keep = a;
+            out.remove = b;
+        } else if (acrossB && !acrossA) {
+            out.keep = b;
+            out.remove = a;
+        }
+    } else if (tpA && !tpB) {
+        out.keep = a;
+        out.remove = b;
+    } else if (tpB && !tpA) {
+        out.keep = b;
+        out.remove = a;
+    }
+    return out;
+}
+
 class MergeNodesCommand : public QUndoCommand {
 public:
-    MergeNodesCommand(GraphScene* scene, NodeItem* keep, NodeItem* remove)
-        : m_scene(scene), m_keep(keep), m_remove(remove) {
+    MergeNodesCommand(GraphScene* scene, NodeItem* keep, NodeItem* remove, bool keepWasDragged,
+                      const QPointF& keepOldPos)
+        : m_scene(scene),
+          m_keep(keep),
+          m_remove(remove),
+          m_keepWasDragged(keepWasDragged),
+          m_keepOldPos(keepOldPos) {
         setText("Combine nodes");
     }
 
@@ -653,6 +726,9 @@ public:
             return;
         }
         m_scene->unmergeNodes(m_keep, m_undo);
+        if (m_keepWasDragged) {
+            applyNodePos(m_keep, m_keepOldPos);
+        }
         m_done = false;
     }
 
@@ -660,6 +736,9 @@ public:
         NodeItem* remove = m_done ? m_scene->nodeAtPos(m_undo.removePos) : m_remove;
         if (!remove || remove == m_keep) {
             return;
+        }
+        if (m_done && m_keepWasDragged) {
+            applyNodePos(m_keep, m_undo.removePos);
         }
         if (m_done) {
             m_scene->mergeNodes(m_keep, remove, nullptr);
@@ -674,6 +753,8 @@ private:
     NodeItem* m_keep;
     NodeItem* m_remove;
     GraphScene::MergeUndoData m_undo;
+    bool m_keepWasDragged = false;
+    QPointF m_keepOldPos;
     bool m_done = false;
 };
 
@@ -737,10 +818,13 @@ void GraphScene::pushNodeProperties(NodeItem* node, bool oldGround, bool newGrou
     if (oldGround == newGround && (oldGround || oldType == newType)) {
         return;
     }
+    const SystemType oldDefault = m_defaultSystemType;
+    const SystemType newDefault = !newGround ? newType : oldDefault;
     if (!newGround) {
         m_defaultSystemType = newType;
     }
-    m_undoStack.push(new NodePropertiesCommand(node, oldGround, newGround, oldType, newType));
+    m_undoStack.push(
+        new NodePropertiesCommand(this, node, oldGround, newGround, oldType, newType, oldDefault, newDefault));
 }
 
 void GraphScene::pushSetBranchName(BranchItem* branch, const QString& name) {
@@ -768,8 +852,10 @@ void GraphScene::pushSetNodeSystemType(NodeItem* node, SystemType type) {
     if (!node || node->isGround() || node->systemType() == type) {
         return;
     }
+    const SystemType oldDefault = m_defaultSystemType;
     m_defaultSystemType = type;
-    m_undoStack.push(new SetNodeSystemTypeCommand(this, node, node->systemType(), type));
+    m_undoStack.push(
+        new SetNodeSystemTypeCommand(this, node, node->systemType(), type, oldDefault, type));
 }
 
 void GraphScene::pushSetBranchConstant(BranchItem* branch, const QString& constant) {
@@ -834,41 +920,21 @@ void GraphScene::pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, co
     m_undoStack.push(new MoveTwoPortCommand(item, oldCenter, newCenter));
 }
 
-void GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b) {
+bool GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged,
+                                const QPointF& draggedOldPos) {
     QString reason;
     if (!canMergeNodes(a, b, &reason)) {
         if (!views().isEmpty()) {
             QMessageBox::warning(views().first(), tr("Cannot combine nodes"), reason);
         }
-        return;
+        return false;
     }
 
-    NodeItem* keep = a;
-    NodeItem* remove = b;
+    const MergeEndpoints endpoints = resolveMergeKeepRemove(a, b);
+    NodeItem* keep = endpoints.keep;
+    NodeItem* remove = endpoints.remove;
     TwoPortItem* tpA = a->twoPort();
     TwoPortItem* tpB = b->twoPort();
-    if (tpA && tpA == tpB) {
-        keep = tpA->g1();
-        remove = a == keep ? b : a;
-    } else if (tpA && tpB && tpA != tpB) {
-        const int roleA = a == tpA->v1() ? 1 : a == tpA->v2() ? 2 : a == tpA->g1() ? 3 : a == tpA->g2() ? 4 : 0;
-        const int roleB = b == tpB->v1() ? 1 : b == tpB->v2() ? 2 : b == tpB->g1() ? 3 : b == tpB->g2() ? 4 : 0;
-        const bool acrossA = roleA >= 1 && roleA <= 2;
-        const bool acrossB = roleB >= 1 && roleB <= 2;
-        if (acrossA && !acrossB) {
-            keep = a;
-            remove = b;
-        } else if (acrossB && !acrossA) {
-            keep = b;
-            remove = a;
-        }
-    } else if (tpA && !tpB) {
-        keep = a;
-        remove = b;
-    } else if (tpB && !tpA) {
-        keep = b;
-        remove = a;
-    }
 
     QString warning;
     TwoPortItem* tp = keep->twoPort() ? keep->twoPort() : remove->twoPort();
@@ -896,14 +962,17 @@ void GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b) {
     }
 
     if (views().isEmpty()) {
-        return;
+        return false;
     }
     if (QMessageBox::warning(views().first(), tr("Combine nodes?"), warning, QMessageBox::Yes | QMessageBox::No,
                              QMessageBox::No) != QMessageBox::Yes) {
-        return;
+        return false;
     }
 
-    m_undoStack.push(new MergeNodesCommand(this, keep, remove));
+    const bool keepWasDragged = dragged && keep == dragged;
+    m_undoStack.push(new MergeNodesCommand(this, keep, remove, keepWasDragged,
+                                            keepWasDragged ? draggedOldPos : QPointF()));
+    return true;
 }
 
 void GraphScene::pushDeleteSelection() {

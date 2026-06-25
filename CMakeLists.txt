@@ -10,11 +10,12 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-project(LinearGraphModeling VERSION 0.1 LANGUAGES CXX)
+project(LGM VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
@@ -51,7 +52,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(jkqtplotter)
 
-add_executable(LinearGraphModeling
+add_executable(LGM
     src/ui/main.cpp
     src/canvas/canvas.h
     src/canvas/canvas_items.cpp
@@ -81,16 +82,21 @@ add_executable(LinearGraphModeling
     src/ui/settings_window.h
     src/ui/analyze_window.cpp
     src/ui/analyze_window.h
+    src/ui/guide_window.cpp
+    src/ui/guide_window.h
     src/ui/mainwindow.cpp
+    src/ui/tool_icons.cpp
+    src/ui/tool_icons.h
+    src/assets/assets.qrc
 )
 
-target_link_libraries(LinearGraphModeling PRIVATE
+target_link_libraries(LGM PRIVATE
     Qt6::Widgets
     symengine
     Boost::multiprecision
     JKQTPlotter6::JKQTMathText6
 )
-target_include_directories(LinearGraphModeling PRIVATE
+target_include_directories(LGM PRIVATE
     src/canvas
     src/model
     src/ui
@@ -98,14 +104,23 @@ target_include_directories(LinearGraphModeling PRIVATE
     ${CMAKE_BINARY_DIR}/_deps/symengine-build
 )
 
+target_compile_definitions(LGM PRIVATE
+    "EXAMPLES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Examples\"")
+
 if(WIN32)
+    target_sources(LGM PRIVATE src/assets/app.rc)
     get_target_property(_qmake Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(_qt_bin_dir "${_qmake}" DIRECTORY)
     find_program(WINDEPLOYQT windeployqt HINTS "${_qt_bin_dir}")
     if(WINDEPLOYQT)
-        add_custom_command(TARGET LinearGraphModeling POST_BUILD
-            COMMAND "${WINDEPLOYQT}" --no-translations "$<TARGET_FILE:LinearGraphModeling>"
+        add_custom_command(TARGET LGM POST_BUILD
+            COMMAND "${WINDEPLOYQT}" --no-translations "$<TARGET_FILE:LGM>"
             COMMENT "Deploying Qt runtime DLLs")
     endif()
 endif()
+
+add_custom_command(TARGET LGM POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Examples" "$<TARGET_FILE_DIR:LGM>/Examples"
+    COMMENT "Copying example graphs")
 

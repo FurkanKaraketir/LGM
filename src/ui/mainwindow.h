@@ -52,13 +52,17 @@ private:
     void showSettingsWindow();
     void showAnalyzeWindow();
     void refreshChromeTheme();
+    void refreshToolIcons();
     void updateWindowTitle();
     bool confirmDiscardChanges();
     void fileNew();
     void fileOpen();
+    void fileOpenExample(const QString& path);
+    bool loadDocumentFromPath(const QString& path, bool fromExamplesMenu = false);
     bool fileSave();
     bool fileSaveAs();
     bool writeDocument(const QString& path);
+    bool isExampleFilePath(const QString& path) const;
 
     GraphScene* m_scene = nullptr;
     GraphView* m_view = nullptr;
@@ -67,6 +71,7 @@ private:
     QAction* m_addNodeAction = nullptr;
     QAction* m_addBranchAction = nullptr;
     QAction* m_addTwoPortAction = nullptr;
+    QAction* m_analyzeAction = nullptr;
     QAction* m_deleteAction = nullptr;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
@@ -79,6 +84,7 @@ private:
     SettingsWindow* m_settingsWindow = nullptr;
     AnalyzeWindow* m_analyzePanel = nullptr;
     QString m_currentFilePath;
+    bool m_isExampleDocument = false;
     
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;

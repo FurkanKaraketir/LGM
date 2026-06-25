@@ -174,13 +174,6 @@ std::optional<BranchType> inferPassiveBranchType(const QString& constant, System
 }
 
 BranchType effectivePassiveBranchType(const BranchItem& branch) {
-    if (branch.isActive()) {
-        return branch.branchType();
-    }
-    if (const std::optional<BranchType> inferred =
-            inferPassiveBranchType(branch.elementConstant(), branchSystemType(branch))) {
-        return *inferred;
-    }
     return branch.branchType();
 }
 
@@ -859,8 +852,21 @@ QString defaultTwoPortModulus(TwoPortKind kind) {
     return kind == TwoPortKind::Transformer ? QStringLiteral("TF") : QStringLiteral("GY");
 }
 
-QString twoPortElementalEquationText(TwoPortKind kind, const QString& modulus) {
+QString twoPortElementalEquationText(TwoPortKind kind, const QString& modulus,
+                                     const BranchItem* left, const BranchItem* right) {
     const QString k = modulus.trimmed().isEmpty() ? QStringLiteral("1") : modulus.trimmed();
+    if (left && right) {
+        const QString leftAcross = branchAcrossVariableText(*left);
+        const QString rightAcross = branchAcrossVariableText(*right);
+        const QString leftThrough = branchThroughSymbol(*left);
+        const QString rightThrough = branchThroughSymbol(*right);
+        if (kind == TwoPortKind::Transformer) {
+            return QStringLiteral("%1 = %2 * %3; %4 = -%5 / %2")
+                .arg(leftAcross, k, rightAcross, leftThrough, rightThrough);
+        }
+        return QStringLiteral("%1 = %2 * %5; %4 = -%3 / %2")
+            .arg(leftAcross, k, rightAcross, leftThrough, rightThrough);
+    }
     if (kind == TwoPortKind::Transformer) {
         return QStringLiteral("v\u2081 = %1\u00b7v\u2082; f\u2081 = \u2212f\u2082/%1").arg(k);
     }
@@ -983,6 +989,24 @@ const bool kParseSelfCheck = [] {
         assert(eq(*junctionSum, *SymEngine::add(SymEngine::symbol("f_parallel"),
                                                  SymEngine::symbol("f_p2"),
                                                  SymEngine::symbol("f_p3"))));
+    }
+    {
+        NodeItem v1(3.0);
+        NodeItem g1(3.0);
+        NodeItem v2(3.0);
+        NodeItem g2(3.0);
+        g1.setGround(true);
+        g2.setGround(true);
+        v1.setAcrossVariable(QStringLiteral("V1"));
+        v2.setAcrossVariable(QStringLiteral("V2"));
+        BranchItem left(&v1, &g1, 0, 1);
+        BranchItem right(&v2, &g2, 1, 2);
+        left.setName(QStringLiteral("i3"));
+        right.setName(QStringLiteral("i4"));
+        assert(twoPortElementalEquationText(TwoPortKind::Transformer, QStringLiteral("TF"), &left,
+                                            &right) == QStringLiteral("V1 = TF * V2; i3 = -i4 / TF"));
+        assert(twoPortElementalEquationText(TwoPortKind::Gyrator, QStringLiteral("GY"), &left,
+                                            &right) == QStringLiteral("V1 = GY * i4; i3 = -V2 / GY"));
     }
     return true;
 }();
