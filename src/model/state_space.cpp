@@ -16,8 +16,6 @@
 
 namespace lg {
 
-namespace ss = lg::ss;
-
 StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                                        const std::vector<NodeItem*>& nodes,
                                        const std::vector<BranchItem*>& branches,
