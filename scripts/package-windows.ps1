@@ -57,3 +57,5 @@ if ($iscc) {
 } else {
     Write-Warning "Inno Setup 6 not found - portable zip only. Install from https://jrsoftware.org/isinfo.php"
 }
+
+Remove-Item -Recurse -Force $stage

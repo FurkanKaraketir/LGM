@@ -131,7 +131,26 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lgm-${{ matrix.name }}
-          path: dist/*
+          path: |
+            dist/LGM-*-win64-portable.zip
+            dist/LGM-*-win64-setup.exe
+        if: matrix.name == 'windows'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lgm-${{ matrix.name }}
+          path: |
+            dist/LGM-*-macos.dmg
+            dist/LGM-*-macos-portable.zip
+        if: matrix.name == 'macos'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lgm-${{ matrix.name }}
+          path: dist/LGM-*-linux-x86_64.AppImage
+        if: matrix.name == 'linux'
 
   release:
     needs: build
@@ -142,14 +161,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Flatten release files
-        run: |
-          find dist -mindepth 2 -type f -exec mv -t dist {} +
-          find dist -type d -empty -delete 2>/dev/null || true
-          ls -la dist/
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: dist/*
+          files: |
+            dist/**/LGM-*-win64-setup.exe
+            dist/**/LGM-*-win64-portable.zip
+            dist/**/LGM-*-macos.dmg
+            dist/**/LGM-*-macos-portable.zip
+            dist/**/LGM-*-linux-x86_64.AppImage

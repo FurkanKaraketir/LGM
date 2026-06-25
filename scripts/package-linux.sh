@@ -80,4 +80,5 @@ mv "${built[0]}" "$(basename "$OUT")"
 popd >/dev/null
 
 rm -rf "$APPDIR"
+rm -f "$LINUXDEPLOY" "$QT_PLUGIN"
 echo "Created $OUT"
