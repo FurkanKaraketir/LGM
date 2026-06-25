@@ -4,6 +4,7 @@
 
 #include "analyze_window.h"
 #include "app_shortcuts.h"
+#include "app_update.h"
 #include "canvas.h"
 #include "guide_window.h"
 #include "settings_window.h"
@@ -950,6 +951,12 @@ void MainWindow::buildMenuBar() {
     });
 
     helpMenu->addSeparator();
+
+    auto* checkUpdatesAction =
+        helpMenu->addAction(tr("Check for &Updates..."));
+    connect(checkUpdatesAction, &QAction::triggered, this, [this]() {
+        checkForUpdates(this, false);
+    });
 
     auto* aboutAction = helpMenu->addAction(themedIcon("help-about", QStyle::SP_MessageBoxInformation), tr("&About"));
 

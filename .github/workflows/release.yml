@@ -20,18 +20,15 @@ jobs:
             os: windows-latest
             qt_arch: win64_mingw
             preset: ci-windows
-            artifact_glob: dist/LGM-*-win64.zip
           - name: macos
             os: macos-latest
             qt_arch: osx_arm64
             preset: ci-macos
             extra_cmake: -DLGM_MACOS_BUNDLE=ON
-            artifact_glob: dist/LGM-*-macos.zip
           - name: linux
             os: ubuntu-latest
             qt_arch: linux_gcc_64
             preset: ci-linux
-            artifact_glob: dist/LGM-*-linux-x86_64.AppImage
 
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +41,10 @@ jobs:
           arch: ${{ matrix.qt_arch }}
           modules: qtnetwork
           cache: true
+
+      - name: Install Inno Setup
+        if: matrix.name == 'windows'
+        run: choco install innosetup -y
 
       - name: Install Linux packages
         if: runner.os == 'Linux'
@@ -94,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lgm-${{ matrix.name }}
-          path: ${{ matrix.artifact_glob }}
+          path: dist/*
 
   release:
     needs: build
@@ -104,6 +105,12 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      - name: Flatten release files
+        run: |
+          find dist -mindepth 2 -type f -exec mv -t dist {} +
+          find dist -type d -empty -delete 2>/dev/null || true
+          ls -la dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

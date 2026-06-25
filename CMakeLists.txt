@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.1.0 LANGUAGES CXX)
+project(LGM VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -109,7 +109,13 @@ if(WIN32)
 endif()
 
 if(APPLE AND LGM_MACOS_BUNDLE)
-    set_target_properties(LGM PROPERTIES MACOSX_BUNDLE TRUE)
+    set_target_properties(LGM PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "LGM"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.furkankaraketir.lgm"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    )
 endif()
 
 function(lgm_deploy_qt target)

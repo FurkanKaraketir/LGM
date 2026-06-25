@@ -14,6 +14,14 @@ Keep these in sync when bumping a release:
 
 The app reads its version from CMake via the `LGM_VERSION` compile definition (shown in **Help → About**).
 
+## Release artifacts (per platform)
+
+| Platform | Installer (recommended) | Portable |
+|----------|-------------------------|----------|
+| Windows | `LGM-x.y.z-win64-setup.exe` (Inno Setup) | `LGM-x.y.z-win64-portable.zip` |
+| macOS | `LGM-x.y.z-macos.dmg` (drag to Applications) | `LGM-x.y.z-macos-portable.zip` |
+| Linux | `LGM-x.y.z-linux-x86_64.AppImage` (chmod +x, run) | — |
+
 ## Cut a release
 
 1. Update version in `CMakeLists.txt` and `vcpkg.json`.
@@ -25,14 +33,13 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
    git push origin v0.2.0
    ```
 
-4. The [Release workflow](.github/workflows/release.yml) builds Windows, macOS, and Linux artifacts and attaches them to the GitHub Release.
+4. The [Release workflow](.github/workflows/release.yml) builds all platforms and attaches installers to the GitHub Release.
 
 ## Local packaging
 
-After a Release build:
+**Windows** requires [Inno Setup 6](https://jrsoftware.org/isinfo.php) for `setup.exe`. The portable zip is always produced.
 
 ```powershell
-# Windows
 cmake --preset windows-mingw
 cmake --build build
 ./scripts/package-windows.ps1 -Version 0.2.0
@@ -50,9 +57,15 @@ cmake --build build
 ./scripts/package-linux.sh 0.2.0 build
 ```
 
+Installer sources:
+
+- Windows: `scripts/installer/LGM.iss`
+- macOS: `scripts/package-macos.sh` (`hdiutil` DMG)
+- Linux: `scripts/package-linux.sh` (linuxdeploy AppImage)
+
 ## Updates in the app
 
-**Help → Check for Updates** queries the GitHub API for the latest release and opens the release page if a newer version exists. Users download and install manually.
+**Help → Check for Updates** queries the GitHub API for the latest release and opens the release page if a newer version exists. Users download the platform installer and install manually.
 
 To upgrade later: [WinSparkle](https://winsparkle.org/) (Windows), [Sparkle](https://sparkle-project.org/) (macOS), or AppImage zsync (Linux).
 
@@ -60,8 +73,8 @@ To upgrade later: [WinSparkle](https://winsparkle.org/) (Windows), [Sparkle](htt
 
 | Platform | Tool |
 |----------|------|
-| Windows | `signtool` with an Authenticode certificate |
-| macOS | `codesign` + Apple notarization |
+| Windows | `signtool` on `setup.exe` and `LGM.exe` |
+| macOS | `codesign` + Apple notarization on `.app` / `.dmg` |
 | Linux | Optional for AppImage |
 
 Unsigned builds work but trigger SmartScreen / Gatekeeper warnings.

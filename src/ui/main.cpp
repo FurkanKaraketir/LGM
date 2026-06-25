@@ -8,7 +8,7 @@
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("LGM"));
-    app.setApplicationVersion(QStringLiteral("0.1"));
+    app.setApplicationVersion(QStringLiteral(LGM_VERSION));
     app.setOrganizationName("LGM");
     app.setWindowIcon(QIcon(":/app_logo.ico"));
 

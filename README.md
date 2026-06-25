@@ -52,6 +52,12 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 Tagged releases (`v0.2.0`, …) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
+| Platform | Download |
+|----------|----------|
+| Windows | `LGM-x.y.z-win64-setup.exe` or portable zip |
+| macOS | `LGM-x.y.z-macos.dmg` |
+| Linux | `LGM-x.y.z-linux-x86_64.AppImage` |
+
 - Maintainer guide: [docs/releases.md](docs/releases.md)
 - In-app: **Help → Check for Updates**
 
