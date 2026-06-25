@@ -50,7 +50,6 @@ jobs:
         run: |
           cmake --preset ci-windows `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT/$env:QT_VERSION/mingw_64" `
-            -DCMAKE_MAKE_PROGRAM="$env:QT_ROOT/Tools/Ninja/ninja.exe" `
             -DCMAKE_C_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/gcc.exe" `
             -DCMAKE_CXX_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/g++.exe"
         env:
