@@ -8,9 +8,9 @@ Keep these in sync when bumping a release:
 
 | Location | Example |
 |----------|---------|
-| `CMakeLists.txt` → `project(LGM VERSION …)` | `0.2.0` |
-| `vcpkg.json` → `"version"` | `0.2.0` |
-| Git tag | `v0.2.0` |
+| `CMakeLists.txt` → `project(LGM VERSION …)` | `0.1.15` |
+| `vcpkg.json` → `"version"` | `0.1.15` |
+| Git tag | `v0.1.15` |
 
 The app reads its version from CMake via the `LGM_VERSION` compile definition (shown in **Help → About**).
 
@@ -29,8 +29,8 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
 3. Tag and push:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.1.15
+   git push origin v0.1.15
    ```
 
 4. The [Release workflow](.github/workflows/release.yml) builds all platforms with Qt **6.11.0** (same as local dev). CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
@@ -42,19 +42,19 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
 ```powershell
 cmake --preset windows-mingw
 cmake --build build
-./scripts/package-windows.ps1 -Version 0.2.0
+./scripts/package-windows.ps1 -Version 0.1.15
 ```
 
 ```bash
 # macOS (.app bundle required)
 cmake --preset ci-macos -DLGM_MACOS_BUNDLE=ON
 cmake --build build
-./scripts/package-macos.sh 0.2.0 build
+./scripts/package-macos.sh 0.1.15 build
 
 # Linux (downloads linuxdeploy on first run)
 cmake --preset ci-linux
 cmake --build build
-./scripts/package-linux.sh 0.2.0 build
+./scripts/package-linux.sh 0.1.15 build
 ```
 
 Installer sources:
@@ -81,4 +81,4 @@ Unsigned builds work but trigger SmartScreen / Gatekeeper warnings. Release CI a
 
 ## GPL source offer
 
-Each release notes body should link to the matching source tag, e.g. `https://github.com/FurkanKaraketir/LGM/tree/v0.2.0`.
+Each release notes body should link to the matching source tag, e.g. `https://github.com/FurkanKaraketir/LGM/tree/v0.1.15`.

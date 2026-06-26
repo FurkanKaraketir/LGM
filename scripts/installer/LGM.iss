@@ -1,11 +1,11 @@
 ; LGM Windows installer (Inno Setup 6)
-; Build: ISCC.exe /DAppVersion=0.2.0 /DStageDir=C:\path\to\staged\files LGM.iss
+; Build: ISCC.exe /DAppVersion=0.1.15 /DStageDir=C:\path\to\staged\files LGM.iss
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.1.15"
 #endif
 #ifndef StageDir
-  #define StageDir "..\..\dist\LGM-0.1.0-win64"
+  #define StageDir "..\..\dist\LGM-0.1.15-win64"
 #endif
 #ifndef RepoRoot
   #define RepoRoot "..\.."
