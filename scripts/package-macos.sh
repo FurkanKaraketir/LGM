@@ -17,6 +17,11 @@ fi
 QT_BIN="$(dirname "$(command -v macdeployqt)")"
 "$QT_BIN/macdeployqt" "$APP" -always-overwrite
 
+# ponytail: ad-hoc sign only (no Apple notarization). Without this, Gatekeeper often
+# reports the downloaded .app as "damaged" when quarantine + unsigned bundle fail verification.
+codesign --force --deep --sign - "$APP"
+xattr -cr "$APP"
+
 mkdir -p "$DIST"
 rm -rf "$STAGING" "$DMG"
 mkdir -p "$STAGING"

@@ -77,7 +77,7 @@ To upgrade later: [WinSparkle](https://winsparkle.org/) (Windows), [Sparkle](htt
 | macOS | `codesign` + Apple notarization on `.app` / `.dmg` |
 | Linux | Optional for AppImage |
 
-Unsigned builds work but trigger SmartScreen / Gatekeeper warnings.
+Unsigned builds work but trigger SmartScreen / Gatekeeper warnings. Release CI ad-hoc-signs the macOS `.app` after `macdeployqt`; if macOS still blocks a download, remove quarantine: `xattr -cr /Applications/LGM.app`.
 
 ## GPL source offer
 
