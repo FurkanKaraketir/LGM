@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     applyAppTheme(AppSettings::load().theme);
 
     MainWindow window;
-    window.show();
+    window.showMaximized();
 
     return app.exec();
 }

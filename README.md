@@ -4,6 +4,8 @@ A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branc
 
 The app targets coursework-style system dynamics (mechanical, electrical, fluid, thermal, and rotational domains) following the linear graph formulation used in MIT 2.151.
 
+![LGM electrical example](src/assets/screenshot_electrical_example.png)
+
 **Download:** [v0.1.11](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.11) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 ## Features
