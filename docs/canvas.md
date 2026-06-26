@@ -57,19 +57,21 @@ Use **File → Open / Save** (`Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`). Example graph
 
 ## Curve tuning
 
-In `src/canvas/canvas_items.cpp`:
+In `src/canvas/items/geometry.cpp`:
 
 - `kBowFactor` — arch height as a fraction of chord length (default `0.24`)
 - `kLaneSpread` — gap between parallel branches (default `36`)
 
 ## Source files
 
-| File | Role |
+| Path | Role |
 |------|------|
 | `canvas.h` | Scene, items, modes, analysis hooks |
-| `canvas_items.cpp` | Node, branch, two-port geometry and paint |
+| `items/` | Node, branch, two-port geometry and paint |
+| `scene/scene_lifecycle.cpp` | Create/destroy nodes, branches, two-ports |
+| `scene/scene_merge.cpp` | Combine nodes, merge undo |
+| `scene/scene_normal_tree.cpp` | Normal tree UI, state-space trigger |
+| `document/` | `.lgm` load/save |
+| `undo/commands.cpp` | Undo stack commands |
 | `canvas_scene_input.cpp` | Mouse/keyboard interaction |
-| `canvas_scene_graph.cpp` | Graph topology, normal tree UI, state-space trigger |
-| `canvas_document.cpp` | `.lgm` load/save |
-| `canvas_undo.cpp` | Undo stack commands |
 | `canvas_view.cpp` | Zoom, pan, grid |

@@ -2,7 +2,7 @@
 
 After a graph is drawn and parameterized, LGM can select a **normal tree**, identify **state variables**, and derive **state equations** in MIT linear-graph form.
 
-UI: **Analyze** dock and **State Space** dock (`src/ui/analyze_window.cpp`, `mainwindow.cpp`).
+UI: **Analyze** dock and **State Space** dock (`src/ui/analyze_window.cpp`, `src/ui/mainwindow/`).
 
 ## Normal tree
 
@@ -33,7 +33,7 @@ Saved trees can be named and recalled from the Analyze panel for comparison acro
 
 **Compute State Space** (`Ctrl+Shift+S`) requires a committed normal tree (`NormalTreeResult::status == Ok`).
 
-Pipeline (`lg::computeStateSpace` in `state_space.cpp`):
+Pipeline (`lg::computeStateSpace` in `src/model/state_space/state_space.cpp`):
 
 1. Map state symbols to storage branches
 2. Build **elemental** constitutive equations (node-across form)

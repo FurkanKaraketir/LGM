@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.1.14 LANGUAGES CXX)
+project(LGM VERSION 0.1.15 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,23 +47,42 @@ option(LGM_MACOS_BUNDLE "Build LGM as a macOS .app bundle (for release packaging
 add_executable(LGM WIN32
     src/ui/main.cpp
     src/canvas/canvas.h
-    src/canvas/canvas_items.cpp
-    src/canvas/canvas_undo.cpp
-    src/canvas/canvas_scene_graph.cpp
+    src/canvas/items/geometry.cpp
+    src/canvas/items/branch_item.cpp
+    src/canvas/items/node_item.cpp
+    src/canvas/items/two_port_item.cpp
+    src/canvas/undo/commands.cpp
+    src/canvas/scene/scene_detail.cpp
+    src/canvas/scene/scene_lifecycle.cpp
+    src/canvas/scene/scene_normal_tree.cpp
+    src/canvas/scene/scene_merge.cpp
     src/canvas/canvas_scene_delete.cpp
-    src/canvas/canvas_document.cpp
+    src/canvas/document/load_helpers.cpp
+    src/canvas/document/document_io.cpp
     src/canvas/canvas_scene_input.cpp
     src/canvas/canvas_view.cpp
-    src/model/elemental_equation.cpp
     src/model/elemental_equation.h
-    src/model/normal_tree.cpp
+    src/model/elemental_equation/constants.cpp
+    src/model/elemental_equation/naming.cpp
+    src/model/elemental_equation/symbols.cpp
+    src/model/elemental_equation/topology.cpp
     src/model/normal_tree.h
-    src/model/state_space.cpp
+    src/model/normal_tree/normal_tree_detail.h
+    src/model/normal_tree/build.cpp
+    src/model/normal_tree/enumerate.cpp
+    src/model/normal_tree/normal_tree.cpp
+    src/model/state_space.h
+    src/model/state_space/state_space_context.h
+    src/model/state_space/state_space.cpp
+    src/model/state_space/state_space_context.cpp
+    src/model/state_space/state_space_constraints.cpp
+    src/model/state_space/state_space_reflect.cpp
+    src/model/state_space/state_space_states.cpp
+    src/model/state_space/state_space_matrix.cpp
     src/model/state_space_eliminate.cpp
     src/model/state_space_graph.cpp
     src/model/state_space_latex.cpp
     src/model/state_space_sym.cpp
-    src/model/state_space.h
     src/ui/latex_widget.cpp
     src/ui/latex_widget.h
     src/ui/app_log.cpp
@@ -80,7 +99,17 @@ add_executable(LGM WIN32
     src/ui/analyze_window.h
     src/ui/guide_window.cpp
     src/ui/guide_window.h
-    src/ui/mainwindow.cpp
+    src/ui/mainwindow.h
+    src/ui/mainwindow/mainwindow.cpp
+    src/ui/mainwindow/detail.cpp
+    src/ui/mainwindow/file.cpp
+    src/ui/mainwindow/chrome/menu.cpp
+    src/ui/mainwindow/chrome/toolbar.cpp
+    src/ui/mainwindow/chrome/docks.cpp
+    src/ui/mainwindow/chrome/theme.cpp
+    src/ui/mainwindow/panels/object_tree.cpp
+    src/ui/mainwindow/panels/property_panel.cpp
+    src/ui/mainwindow/panels/state_space_panel.cpp
     src/ui/tool_icons.cpp
     src/ui/tool_icons.h
     src/assets/assets.qrc
@@ -97,6 +126,7 @@ target_include_directories(LGM PRIVATE
     src/canvas
     src/model
     src/ui
+    src/ui/mainwindow
     ${symengine_SOURCE_DIR}
     ${CMAKE_BINARY_DIR}/_deps/symengine-build
 )

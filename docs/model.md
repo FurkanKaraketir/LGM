@@ -33,7 +33,7 @@ Passive elements are **A**, **T**, or **D** (`BranchType`):
 
 Element constants (`R`, `L`, `J`, …) can **infer** type when the branch is still default A-type (e.g. `R` → D, `L` → T).
 
-Elemental equations are built in `elemental_equation.cpp` (`branchEffortExpr`, `elementalEquationText`).
+Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr`, `elementalEquationText` in `naming.cpp` and `constants.cpp`).
 
 ## Two-port elements
 
@@ -52,12 +52,14 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 
 ## Key source files
 
-| File | Role |
+| Path | Role |
 |------|------|
-| `elemental_equation.h/.cpp` | Symbols, types, elemental laws, port-span helpers |
-| `normal_tree.h/.cpp` | Normal-tree search, validation, state-variable extraction |
+| `elemental_equation.h` | Public API; symbols, types, elemental laws, port-span helpers |
+| `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` |
+| `normal_tree.h` | Normal-tree result types and public API |
+| `normal_tree/` | `build` (search), `enumerate`, `normal_tree` (API glue) |
 | `state_space.h` | Result types and `computeStateSpace` entry |
-| `state_space.cpp` | Main derivation orchestration |
+| `state_space/` | `state_space` (orchestrator), `constraints`, `reflect`, `states`, `matrix` |
 | `state_space_graph.cpp` | Graph walks (cut-sets, storage branches) |
 | `state_space_sym.cpp` | SymEngine linear solve, replacement chaining |
 | `state_space_eliminate.cpp` | Symbol elimination and coupling resolve |

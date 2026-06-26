@@ -2,7 +2,7 @@
 
 This document is the **GitHub / developer reference** (with links into the source tree). The in-app guide under **Help → Guides** uses a link-free copy: `src/assets/guides/state_space_from_normal_tree.md`.
 
-This describes **what the current implementation does** when it derives a state-space representation, starting from a committed normal tree. It follows [`src/model/state_space.cpp`](../src/model/state_space.cpp) (`computeStateSpaceImpl`) and uses [`Examples/Motor.lgm`](../Examples/Motor.lgm) as a worked example.
+This describes **what the current implementation does** when it derives a state-space representation, starting from a committed normal tree. It follows [`src/model/state_space/state_space.cpp`](../src/model/state_space/state_space.cpp) (`computeStateSpaceImpl`) and uses [`Examples/Motor.lgm`](../Examples/Motor.lgm) as a worked example.
 
 The goal is algorithmic transparency, not error diagnosis.
 
@@ -15,11 +15,11 @@ State-space derivation assumes a valid `NormalTreeResult` (`status == Ok`) produ
 | Field | Meaning |
 |-------|---------|
 | `treeBranches` | Branches chosen as **tree twigs** (spanning tree) |
-| `stateVariables` | Storage symbols assigned by [`populateNormalTreeStateVariables`](../src/model/normal_tree.cpp) (via internal `extractStateVariables`) |
+| `stateVariables` | Storage symbols assigned by [`populateNormalTreeStateVariables`](../src/model/normal_tree/normal_tree.cpp) (via internal `extractStateVariables`) |
 
-**Out of scope here:** how the normal tree is searched, scored, or validated ([`computeNormalTree`](../src/model/normal_tree.cpp), two-port port assignments, manual selection). Those steps must complete successfully first.
+**Out of scope here:** how the normal tree is searched, scored, or validated ([`computeNormalTree`](../src/model/normal_tree/normal_tree.cpp), two-port port assignments, manual selection). Those steps must complete successfully first.
 
-**Entry point in the UI/scene:** [`GraphScene::computeStateSpaceRep`](../src/canvas/canvas_scene_graph.cpp) → [`lg::computeStateSpace`](../src/model/state_space.cpp).
+**Entry point in the UI/scene:** [`GraphScene::computeStateSpaceRep`](../src/canvas/scene/scene_normal_tree.cpp) → [`lg::computeStateSpace`](../src/model/state_space/state_space.cpp).
 
 ---
 
@@ -58,7 +58,7 @@ The pipeline in `computeStateSpaceImpl`:
 
 ## Branch types (MIT linear graph)
 
-Passive branch behavior is classified as **A**, **T**, or **D** ([`elemental_equation.cpp`](../src/model/elemental_equation.cpp)). Constants infer type when the branch is still at default A-type (e.g. `R`→D, `L`→T, `J`→A).
+Passive branch behavior is classified as **A**, **T**, or **D** ([`elemental_equation/`](../src/model/elemental_equation/)). Constants infer type when the branch is still at default A-type (e.g. `R`→D, `L`→T, `J`→A).
 
 | Type | Physical role | Elemental equation (generic) | State when… |
 |------|---------------|------------------------------|-------------|
@@ -116,7 +116,7 @@ Maps each `tree.stateVariables` entry to its storage branch via [`ss::isStateBra
 
 ### Phase B — Elemental equations
 
-**What:** Constitutive laws using [`branchEffortExpr`](../src/model/elemental_equation.cpp) — node-across differences from [`branchAcrossVariableText`](../src/model/elemental_equation.cpp), not synthetic `*_a` symbols.
+**What:** Constitutive laws using [`branchNodeAcrossExpr`](../src/model/elemental_equation/symbols.cpp) — node-across differences from [`branchAcrossVariableText`](../src/model/elemental_equation/naming.cpp), not synthetic `*_a` symbols.
 
 **Where:** passive branch loop (`build_elementals`), then two-port elementals (`two_port_elementals`).
 
@@ -158,7 +158,7 @@ A-type active branch **in tree** → effort input. T-type active branch **in co-
 **Tree twig cuts** (unless skipped):
 
 - Skip active A-type sources (`Vs1`).
-- Skip port-span user branches via [`skipTwigFlowContinuity`](../src/model/elemental_equation.cpp) — e.g. `T_J` on the transformer mechanical span uses the port-span junction instead of a cut-set on the twig.
+- Skip port-span user branches via [`skipTwigFlowContinuity`](../src/model/elemental_equation/topology.cpp) — e.g. `T_J` on the transformer mechanical span uses the port-span junction instead of a cut-set on the twig.
 
 For each remaining twig: partition graph at a cut, sum signed through-flows, solve for the twig flow → `recordReplacement` into `continuityEquations`.
 
@@ -317,13 +317,15 @@ Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) with Qt debug output
 
 | File | Role |
 |------|------|
-| [`src/model/state_space.cpp`](../src/model/state_space.cpp) | Main orchestration (`computeStateSpaceImpl`) |
+| [`src/model/state_space/state_space.cpp`](../src/model/state_space/state_space.cpp) | Main orchestration (`computeStateSpaceImpl`) |
+| [`src/model/state_space/state_space_constraints.cpp`](../src/model/state_space/state_space_constraints.cpp) | Elementals, continuity, compatibility |
+| [`src/model/state_space/state_space_states.cpp`](../src/model/state_space/state_space_states.cpp) | State-dot derivation and elimination passes |
 | [`src/model/state_space_graph.cpp`](../src/model/state_space_graph.cpp) | Cut-sets, state-branch helpers |
-| [`src/model/elemental_equation.cpp`](../src/model/elemental_equation.cpp) | `branchEffortExpr`, symbols, port-span helpers |
+| [`src/model/elemental_equation/`](../src/model/elemental_equation/) | `branchNodeAcrossExpr`, symbols, port-span helpers |
 | [`src/model/state_space_eliminate.cpp`](../src/model/state_space_eliminate.cpp) | Elimination and coupling resolve |
 | [`src/model/state_space_sym.cpp`](../src/model/state_space_sym.cpp) | `resolveReplacements`, linear solve, `ssLog` |
 | [`src/model/state_space_latex.cpp`](../src/model/state_space_latex.cpp) | LaTeX matrix formatting |
-| [`src/model/normal_tree.cpp`](../src/model/normal_tree.cpp) | Normal tree and state-variable selection |
+| [`src/model/normal_tree/`](../src/model/normal_tree/) | Normal tree search and state-variable selection |
 
 ---
 

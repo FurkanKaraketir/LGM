@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.1.14](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.14) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.1.15](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.15) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 ## Features
 
@@ -54,7 +54,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.1.14` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.1.15` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
@@ -82,10 +82,27 @@ CMakeLists.txt          # build + vcpkg / FetchContent deps
 Examples/               # sample .lgm graphs
 docs/                   # feature docs + algorithm reference
 src/
-  canvas/               # GraphScene, items, view, document I/O
-  model/                # normal tree, elemental equations, state space
-  ui/                   # MainWindow, Analyze panel, settings, guides
-  assets/               # icons, guides, app icon
+  canvas/
+    canvas.h              # GraphScene, items, modes, analysis hooks
+    items/                # geometry, node, branch, two-port items
+    scene/                # lifecycle, merge, normal-tree UI, state-space trigger
+    document/             # .lgm load/save
+    undo/                 # undo stack commands
+    canvas_view.cpp       # zoom, pan, grid
+    canvas_scene_input.cpp
+    canvas_scene_delete.cpp
+  model/
+    elemental_equation/   # constants, naming, symbols, topology
+    normal_tree/          # search, enumeration, public API
+    state_space/          # constraints, reflect, state dots, matrix assembly
+    state_space_*.cpp     # SymEngine helpers, eliminate, LaTeX
+  ui/
+    mainwindow.h
+    mainwindow/           # chrome (menu, toolbar, docks), panels, file I/O
+    analyze_window.cpp    # Analyze dock
+    settings_window.cpp
+    guide_window.cpp
+  assets/               # icons, in-app guides, app icon
 ```
 
 ## Background reading

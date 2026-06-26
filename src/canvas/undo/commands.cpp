@@ -28,7 +28,8 @@ bool itemAlive(Item* item) {
 
 class AddNodeCommand : public QUndoCommand {
 public:
-    AddNodeCommand(GraphScene* scene, const QPointF& pos) : m_scene(scene), m_pos(pos) {
+    AddNodeCommand(GraphScene* scene, const QPointF& pos)
+        : m_scene(scene), m_pos(scene->snap(pos)) {
         setText("Add node");
     }
 
@@ -758,6 +759,31 @@ private:
     bool m_done = false;
 };
 
+class SavedNormalTreesCommand : public QUndoCommand {
+public:
+    SavedNormalTreesCommand(GraphScene* scene, std::vector<GraphScene::SavedNormalTree> before,
+                            int beforeActive, std::vector<GraphScene::SavedNormalTree> after,
+                            int afterActive)
+        : m_scene(scene),
+          m_before(std::move(before)),
+          m_after(std::move(after)),
+          m_beforeActive(beforeActive),
+          m_afterActive(afterActive) {
+        setText("Edit saved normal trees");
+    }
+
+    void undo() override { m_scene->setSavedNormalTreesState(m_before, m_beforeActive); }
+
+    void redo() override { m_scene->setSavedNormalTreesState(m_after, m_afterActive); }
+
+private:
+    GraphScene* m_scene = nullptr;
+    std::vector<GraphScene::SavedNormalTree> m_before;
+    std::vector<GraphScene::SavedNormalTree> m_after;
+    int m_beforeActive = -1;
+    int m_afterActive = -1;
+};
+
 }  // namespace
 
 void GraphScene::pushAddNode(const QPointF& center) {
@@ -907,10 +933,12 @@ void GraphScene::pushSetTwoPortModulus(TwoPortItem* item, const QString& modulus
 }
 
 void GraphScene::pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& newPos) {
-    if (!node || oldPos == newPos) {
+    const QPointF from = snap(oldPos);
+    const QPointF to = snap(newPos);
+    if (!node || from == to) {
         return;
     }
-    m_undoStack.push(new MoveNodeCommand(node, oldPos, newPos));
+    m_undoStack.push(new MoveNodeCommand(node, from, to));
 }
 
 void GraphScene::pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter) {
@@ -986,31 +1014,6 @@ void GraphScene::pushDeleteSelection() {
 void GraphScene::undo() {
     m_undoStack.undo();
 }
-
-class SavedNormalTreesCommand : public QUndoCommand {
-public:
-    SavedNormalTreesCommand(GraphScene* scene, std::vector<GraphScene::SavedNormalTree> before,
-                            int beforeActive, std::vector<GraphScene::SavedNormalTree> after,
-                            int afterActive)
-        : m_scene(scene),
-          m_before(std::move(before)),
-          m_after(std::move(after)),
-          m_beforeActive(beforeActive),
-          m_afterActive(afterActive) {
-        setText("Edit saved normal trees");
-    }
-
-    void undo() override { m_scene->setSavedNormalTreesState(m_before, m_beforeActive); }
-
-    void redo() override { m_scene->setSavedNormalTreesState(m_after, m_afterActive); }
-
-private:
-    GraphScene* m_scene = nullptr;
-    std::vector<GraphScene::SavedNormalTree> m_before;
-    std::vector<GraphScene::SavedNormalTree> m_after;
-    int m_beforeActive = -1;
-    int m_afterActive = -1;
-};
 
 void GraphScene::pushSavedNormalTreesUndo(const std::vector<SavedNormalTree>& before, int beforeActive,
                                           const std::vector<SavedNormalTree>& after, int afterActive) {
