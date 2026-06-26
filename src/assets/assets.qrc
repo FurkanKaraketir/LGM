@@ -4,5 +4,6 @@
         <file>select_icon.png</file>
         <file>guides/quick_start.md</file>
         <file>guides/state_space_from_normal_tree.md</file>
+        <file>guides/multiple_normal_tree_finding.md</file>
     </qresource>
 </RCC>

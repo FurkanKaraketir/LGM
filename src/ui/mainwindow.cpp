@@ -966,6 +966,13 @@ void MainWindow::buildMenuBar() {
                                this);
     });
 
+    auto* normalTreeGuide = guidesMenu->addAction(tr("Multiple &Normal Tree Finding"));
+    connect(normalTreeGuide, &QAction::triggered, this, [this]() {
+        GuideWindow::showGuide(tr("Multiple Normal Tree Finding"),
+                               QStringLiteral(":/guides/multiple_normal_tree_finding.md"),
+                               this);
+    });
+
     helpMenu->addSeparator();
 
     auto* checkUpdatesAction =
@@ -983,14 +990,22 @@ void MainWindow::buildMenuBar() {
                "<p>%1</p>"
                "<p>%2</p>"
                "<p>%3</p>"
-               "<p>Copyright &copy; %4 Furkan Karaketir</p>"
-               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%5</a></p>")
+               "<p>%4</p>"
+               "<p>Copyright &copy; %5 Furkan Karaketir</p>"
+               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%6</a></p>")
                 .arg(tr("Linear graph modeling and state-space analysis."),
                      tr("Version %1").arg(QApplication::applicationVersion()),
                      tr("This program is free software; you can redistribute it and/or modify "
                         "it under the terms of the GNU General Public License as published by "
                         "the Free Software Foundation, either version 3 of the License, or "
                         "(at your option) any later version."),
+                     tr("Based on Altun, Kerem; Balkan, R. Tuna; &amp; Platin, Bülent (2002). "
+                        "<i>Extraction of state variable representations of dynamic systems "
+                        "employing linear graph theory.</i> "
+                        "The Sixth International Conference on Mechatronic Design and Modeling, "
+                        "112&ndash;121. "
+                        "<a href=\"https://doi.org/10.13140/RG.2.2.29940.96647\">"
+                        "doi:10.13140/RG.2.2.29940.96647</a>."),
                      QString::number(QDate::currentDate().year()),
                      tr("GNU General Public License v3.0")));
     });

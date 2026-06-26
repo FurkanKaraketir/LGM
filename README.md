@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.1.12](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.12) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.1.13](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.13) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 ## Features
 
@@ -17,7 +17,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 | [Analysis](docs/analysis.md) | Normal-tree search, manual tree selection, state-space derivation |
 | [Examples](Examples/README.md) | Sample `.lgm` graphs (motor, RLC, transformer cascade) |
 
-In-app guides: **Help → Guides** (Quick Start, State-Space Derivation).
+In-app guides: **Help → Guides** (Quick Start, Multiple Normal Tree Finding, State-Space Derivation).
 
 ## License
 
@@ -54,7 +54,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.1.12` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.1.13` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
@@ -90,9 +90,11 @@ src/
 
 ## Background reading
 
+Theory and algorithms follow Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)).
+
 Course handouts in the repo root (not part of the build):
 
 - `LinearGrpahModelingBasics.txt` — state equations from linear graphs
 - `TwoPortsBasics.txt` — transformers, gyrators, multi-domain graphs
 
-Algorithm detail (developer reference with source links): [docs/state_space_from_normal_tree.md](docs/state_space_from_normal_tree.md). In-app guide: **Help → Guides → State-Space Derivation** (logic only, no file links).
+Algorithm detail (developer reference with source links): [docs/state_space_from_normal_tree.md](docs/state_space_from_normal_tree.md). In-app guides: **Help → Guides → Multiple Normal Tree Finding** (enumeration) and **State-Space Derivation** (logic only, no file links).
