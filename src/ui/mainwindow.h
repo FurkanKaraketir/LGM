@@ -10,6 +10,7 @@ class QActionGroup;
 class QShortcut;
 class QComboBox;
 class QDockWidget;
+class QTabWidget;
 class QListWidget;
 class QListWidgetItem;
 class QTreeWidget;
@@ -53,6 +54,8 @@ private:
     void showSettingsWindow();
     void showAnalyzeWindow();
     void showConsoleWindow();
+    void showOutputTab(int index);
+    void syncStateSpacePanelAction();
     void refreshChromeTheme();
     void refreshToolIcons();
     void updateWindowTitle();
@@ -92,8 +95,8 @@ private:
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
     QDockWidget* m_analyzeDock = nullptr;
-    QDockWidget* m_consoleDock = nullptr;
-    QDockWidget* m_stateSpaceDock = nullptr;
+    QDockWidget* m_outputDock = nullptr;
+    QTabWidget* m_outputTabs = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;
     QTextEdit* m_consoleText = nullptr;

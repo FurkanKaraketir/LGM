@@ -1,6 +1,6 @@
 {
   "name": "lgm",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "dependencies": [
     "boost-multiprecision",
     "boost-mpl"

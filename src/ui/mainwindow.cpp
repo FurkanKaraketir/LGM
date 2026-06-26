@@ -14,7 +14,10 @@
 #include "elemental_equation.h"
 #include "state_space.h"
 
-
+namespace {
+constexpr int kConsoleTab = 0;
+constexpr int kStateSpaceTab = 1;
+} // namespace
 
 #include <QActionGroup>
 
@@ -69,6 +72,8 @@
 #include <QMessageBox>
 
 #include <QSignalBlocker>
+
+#include <QTabWidget>
 
 #include <QHBoxLayout>
 
@@ -778,13 +783,14 @@ void MainWindow::buildMenuBar() {
     stateSpacePanelAction->setChecked(false);
 
     connect(stateSpacePanelAction, &QAction::toggled, this, [this](bool checked) {
-
-        if (m_stateSpaceDock) {
-
-            m_stateSpaceDock->setVisible(checked);
-
+        if (!m_outputDock || !m_outputTabs) {
+            return;
         }
-
+        if (checked) {
+            showOutputTab(kStateSpaceTab);
+        } else if (m_outputTabs->currentIndex() == kStateSpaceTab) {
+            m_outputDock->hide();
+        }
     });
 
     
@@ -803,10 +809,6 @@ void MainWindow::buildMenuBar() {
 
         removeDockWidget(m_analyzeDock);
 
-        removeDockWidget(m_stateSpaceDock);
-
-        removeDockWidget(m_consoleDock);
-
         addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
 
         addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
@@ -815,11 +817,8 @@ void MainWindow::buildMenuBar() {
 
         tabifyDockWidget(m_propertyDock, m_analyzeDock);
 
-        addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
-
-        addDockWidget(Qt::BottomDockWidgetArea, m_consoleDock);
-
-        tabifyDockWidget(m_stateSpaceDock, m_consoleDock);
+        removeDockWidget(m_outputDock);
+        addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
 
         m_objectListDock->show();
 
@@ -1318,13 +1317,16 @@ void MainWindow::buildDockPanels() {
         connect(m_analyzeDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
     }
 
-    m_consoleDock = new QDockWidget(tr("Console"), this);
-    m_consoleDock->setObjectName(QStringLiteral("consoleDock"));
-    m_consoleDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
-    m_consoleDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
-    m_consoleDock->setMinimumHeight(120);
+    m_outputDock = new QDockWidget(tr("Output"), this);
+    m_outputDock->setObjectName(QStringLiteral("outputDock"));
+    m_outputDock->setAllowedAreas(Qt::BottomDockWidgetArea);
+    m_outputDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    m_outputDock->setMinimumHeight(120);
 
-    auto* consolePanel = new QWidget(m_consoleDock);
+    m_outputTabs = new QTabWidget(m_outputDock);
+    m_outputTabs->setDocumentMode(true);
+
+    auto* consolePanel = new QWidget(m_outputTabs);
     auto* consoleLayout = new QVBoxLayout(consolePanel);
     consoleLayout->setContentsMargins(4, 4, 4, 4);
     consoleLayout->setSpacing(4);
@@ -1356,21 +1358,9 @@ void MainWindow::buildDockPanels() {
     consoleButtons->addWidget(clearBtn);
     consoleLayout->addLayout(consoleButtons);
 
-    m_consoleDock->setWidget(consolePanel);
+    m_outputTabs->addTab(consolePanel, tr("Console"));
 
-    m_stateSpaceDock = new QDockWidget(tr("State Space"), this);
-
-    m_stateSpaceDock->setObjectName(QStringLiteral("stateSpaceDock"));
-
-    m_stateSpaceDock->setAllowedAreas(Qt::BottomDockWidgetArea);
-
-    m_stateSpaceDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
-
-    m_stateSpaceDock->setMinimumHeight(120);
-
-
-
-    auto* stateSpaceScroll = new QScrollArea(m_stateSpaceDock);
+    auto* stateSpaceScroll = new QScrollArea(m_outputTabs);
 
     stateSpaceScroll->setWidgetResizable(true);
 
@@ -1390,25 +1380,13 @@ void MainWindow::buildDockPanels() {
 
     stateSpaceScroll->setWidget(m_stateSpaceScrollContent);
 
-    m_stateSpaceDock->setWidget(stateSpaceScroll);
+    m_outputTabs->addTab(stateSpaceScroll, tr("State Space"));
+    m_outputDock->setWidget(m_outputTabs);
+    addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
+    m_outputDock->hide();
 
-    addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
-
-    addDockWidget(Qt::BottomDockWidgetArea, m_consoleDock);
-
-    tabifyDockWidget(m_stateSpaceDock, m_consoleDock);
-
-    m_stateSpaceDock->hide();
-
-    m_consoleDock->hide();
-
-
-
-    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
-
-        connect(m_stateSpaceDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
-
-    }
+    connect(m_outputDock, &QDockWidget::visibilityChanged, this, &MainWindow::syncStateSpacePanelAction);
+    connect(m_outputTabs, &QTabWidget::currentChanged, this, &MainWindow::syncStateSpacePanelAction);
 
 
 
@@ -2104,15 +2082,7 @@ void MainWindow::updateStateSpacePanel() {
 
     if (stateSpace.status == lg::StateSpaceResult::Status::Ok) {
 
-        if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
-
-            QSignalBlocker blocker(panelAction);
-
-            panelAction->setChecked(true);
-
-        }
-
-        m_stateSpaceDock->show();
+        showOutputTab(kStateSpaceTab);
 
     } else {
 
@@ -2124,7 +2094,10 @@ void MainWindow::updateStateSpacePanel() {
 
         }
 
-        m_stateSpaceDock->hide();
+        if (m_outputDock && m_outputTabs
+            && m_outputTabs->currentIndex() == kStateSpaceTab) {
+            m_outputDock->hide();
+        }
 
     }
 
@@ -2380,43 +2353,29 @@ void MainWindow::updatePropertyPanel() {
 
             const int typeRow = addLabelRow(tr("Node Type"));
 
-            if (m_scene->twoPortForNode(node)) {
+            auto* combo = new QComboBox(m_propertyTable);
 
-                auto* valueItem = new QTableWidgetItem(
+            combo->addItem(tr("Normal Node"));
 
-                    node->isGround() ? tr("Reference (Ground) Node") : tr("Normal Node"));
+            combo->addItem(tr("Reference (Ground) Node"));
 
-                valueItem->setFlags(valueItem->flags() & ~Qt::ItemIsEditable);
+            combo->setCurrentIndex(node->isGround() ? 1 : 0);
 
-                m_propertyTable->setItem(typeRow, 1, valueItem);
+            connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
 
-            } else {
+                    [this, node](int index) {
 
-                auto* combo = new QComboBox(m_propertyTable);
+                        if (m_updatingPropertyPanel) {
 
-                combo->addItem(tr("Normal Node"));
+                            return;
 
-                combo->addItem(tr("Reference (Ground) Node"));
+                        }
 
-                combo->setCurrentIndex(node->isGround() ? 1 : 0);
+                        m_scene->pushSetNodeGround(node, index == 1);
 
-                connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                    });
 
-                        [this, node](int index) {
-
-                            if (m_updatingPropertyPanel) {
-
-                                return;
-
-                            }
-
-                            m_scene->pushSetNodeGround(node, index == 1);
-
-                        });
-
-                m_propertyTable->setCellWidget(typeRow, 1, combo);
-
-            }
+            m_propertyTable->setCellWidget(typeRow, 1, combo);
 
             const QPointF pos = node->scenePos();
 
@@ -3009,12 +2968,27 @@ void MainWindow::showAnalyzeWindow() {
     }
 }
 
-void MainWindow::showConsoleWindow() {
-    if (!m_consoleDock) {
+void MainWindow::showOutputTab(int index) {
+    if (!m_outputDock || !m_outputTabs) {
         return;
     }
-    m_consoleDock->show();
-    m_consoleDock->raise();
+    m_outputTabs->setCurrentIndex(index);
+    m_outputDock->show();
+    m_outputDock->raise();
+    syncStateSpacePanelAction();
+}
+
+void MainWindow::syncStateSpacePanelAction() {
+    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.stateSpacePanel"))) {
+        QSignalBlocker blocker(panelAction);
+        const bool checked = m_outputDock && m_outputDock->isVisible() && m_outputTabs
+                             && m_outputTabs->currentIndex() == kStateSpaceTab;
+        panelAction->setChecked(checked);
+    }
+}
+
+void MainWindow::showConsoleWindow() {
+    showOutputTab(kConsoleTab);
 }
 
 void MainWindow::showSettingsWindow() {
