@@ -25,6 +25,12 @@ struct NormalTreeResult {
     std::vector<StateVariable> stateVariables;
 };
 
+struct NormalTreeEnumerationResult {
+    NormalTreeResult::Status status = NormalTreeResult::Status::Incomplete;
+    QString message;
+    std::vector<NormalTreeResult> trees;
+};
+
 void populateNormalTreeStateVariables(NormalTreeResult& result,
                                       const std::vector<BranchItem*>& branches,
                                       const std::vector<TwoPortItem*>& twoPorts = {});
@@ -32,6 +38,10 @@ void populateNormalTreeStateVariables(NormalTreeResult& result,
 NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
                                    const std::vector<BranchItem*>& branches,
                                    const std::vector<TwoPortItem*>& twoPorts = {});
+
+NormalTreeEnumerationResult enumerateNormalTrees(
+    const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches,
+    const std::vector<TwoPortItem*>& twoPorts = {});
 
 NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
                                           const std::vector<BranchItem*>& branches,

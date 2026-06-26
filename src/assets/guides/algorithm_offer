@@ -1,0 +1,67 @@
+PROCEDURE FindAllNormalTrees(Graph G)
+
+    // STEP 1: Assign weights to branches based on element type [cite: 182, 204]
+    FOR EACH branch b IN G:
+        IF type(b) == "A-type active" THEN 
+            weight(b) = 1
+        ELSE IF type(b) == "A-type passive" THEN 
+            weight(b) = 2
+        ELSE IF type(b) == "D-type" THEN 
+            weight(b) = 3
+        ELSE IF type(b) == "T-type passive" THEN 
+            weight(b) = 4
+        ELSE IF type(b) == "T-type active" THEN 
+            weight(b) = 5
+        END IF
+    END FOR
+
+    // STEP 2: Find the initial Minimum Spanning Tree (MST) [cite: 204]
+    // Kruskal's algorithm is recommended to select the first normal tree [cite: 205]
+    InitialTree = KruskalsAlgorithm(G)
+    ListOfNormalTrees = { InitialTree }
+    TreesToProcessQueue = { InitialTree }
+
+    // STEP 3: Find all other MSTs via Equivalent Branch Replacement [cite: 222, 223]
+    WHILE TreesToProcessQueue is NOT empty:
+        CurrentTree = DEQUEUE(TreesToProcessQueue)
+        
+        // Partition incidence matrix A into [A11 | A12] where A12 represents the twigs of CurrentTree [cite: 91, 122]
+        A11, A12 = PartitionIncidenceMatrix(G, CurrentTree)
+        
+        // Form the fundamental loop matrix (Bf) [cite: 92]
+        // I is the identity matrix
+        Bf = [ I | -Transpose(A11) * Transpose(Inverse(A12)) ] 
+        
+        // Look at rows of Bf independently to find replacement candidates [cite: 271, 273]
+        FOR EACH link IN GetLinks(G, CurrentTree): // Links correspond to rows in Bf [cite: 93]
+            
+            // The row in Bf defines the unique simple path in the tree for this link [cite: 221, 228]
+            PathInTree = GetTwigsInFundamentalLoop(Bf, link) 
+            
+            FOR EACH twig IN PathInTree:
+                // If a twig in the path has the exact same weight as the link, they can be swapped [cite: 222]
+                IF weight(twig) == weight(link) THEN
+                    
+                    // Create a new minimum spanning tree (Normal Tree)
+                    NewTree = (CurrentTree - { twig }) UNION { link }
+                    
+                    IF NewTree is NOT IN ListOfNormalTrees THEN
+                        ADD NewTree TO ListOfNormalTrees
+                        // New trees must also be processed for further branch replacements [cite: 273]
+                        ENQUEUE NewTree TO TreesToProcessQueue 
+                    END IF
+                    
+                END IF
+            END FOR
+        END FOR
+    END WHILE
+
+    // STEP 4: Derive State Equations for chosen tree [cite: 176, 275]
+    // (Implementation details depend on extracting continuity/compatibility equations)
+    FOR EACH Tree IN ListOfNormalTrees:
+        GenerateStructuralEquations(Tree, G) 
+    END FOR
+
+    RETURN ListOfNormalTrees
+
+END PROCEDURE

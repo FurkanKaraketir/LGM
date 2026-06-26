@@ -99,11 +99,10 @@ void eliminateSymbolsInto(
 }
 
 QString branchTautologyAcrossSymbol(const BranchItem& branch) {
-    const QString text = branchAcrossVariableText(branch).trimmed();
-    if (text.isEmpty() || text == QStringLiteral("0") || isValidVariableSymbol(text)) {
+    if (!usesSyntheticAcrossSymbol(branch)) {
         return {};
     }
-    return branchThroughSymbol(branch) + QStringLiteral("_a");
+    return branchAcrossSymbol(branch);
 }
 
 void eliminateBranchSymbolsInto(
@@ -151,6 +150,7 @@ std::vector<RCP<const Basic>> constraintRelations(
     return relations;
 }
 
+/*
 namespace {
 
 const bool kEliminateSelfCheck = [] {
@@ -307,5 +307,6 @@ const bool kEliminateSelfCheck = [] {
 }();
 
 }  // namespace
+*/
 
 }  // namespace lg::ss

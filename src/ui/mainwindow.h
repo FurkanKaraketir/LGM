@@ -16,6 +16,7 @@ class QTreeWidget;
 class QTreeWidgetItem;
 class QTableWidget;
 class QTableWidgetItem;
+class QTextEdit;
 class QVBoxLayout;
 class SettingsWindow;
 class AnalyzeWindow;
@@ -51,6 +52,7 @@ private:
     void applyShortcuts(const AppSettings& settings);
     void showSettingsWindow();
     void showAnalyzeWindow();
+    void showConsoleWindow();
     void refreshChromeTheme();
     void refreshToolIcons();
     void updateWindowTitle();
@@ -72,6 +74,7 @@ private:
     QAction* m_addBranchAction = nullptr;
     QAction* m_addTwoPortAction = nullptr;
     QAction* m_analyzeAction = nullptr;
+    QAction* m_consoleAction = nullptr;
     QAction* m_deleteAction = nullptr;
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
@@ -89,9 +92,11 @@ private:
     QDockWidget* m_propertyDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
     QDockWidget* m_analyzeDock = nullptr;
+    QDockWidget* m_consoleDock = nullptr;
     QDockWidget* m_stateSpaceDock = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;
+    QTextEdit* m_consoleText = nullptr;
     QWidget* m_stateSpaceScrollContent = nullptr;
     QVBoxLayout* m_stateSpaceLayout = nullptr;
     bool m_syncingObjectTree = false;

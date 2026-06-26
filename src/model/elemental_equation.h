@@ -67,6 +67,9 @@ QString branchThroughSymbol(const BranchItem& branch);
 
 QString branchAcrossSymbol(const BranchItem& branch);
 
+// Synthetic name when across is a node difference (e.g. C5_across for V1−V2 on C5).
+QString syntheticAcrossSymbolName(const BranchItem& branch);
+
 bool usesSyntheticAcrossSymbol(const BranchItem& branch);
 
 std::optional<SymEngine::RCP<const SymEngine::Basic>> branchAcrossExpression(

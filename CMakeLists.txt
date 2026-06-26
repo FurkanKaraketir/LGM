@@ -66,6 +66,8 @@ add_executable(LGM WIN32
     src/model/state_space.h
     src/ui/latex_widget.cpp
     src/ui/latex_widget.h
+    src/ui/app_log.cpp
+    src/ui/app_log.h
     src/ui/app_settings.cpp
     src/ui/app_settings.h
     src/ui/app_shortcuts.cpp

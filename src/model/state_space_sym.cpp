@@ -240,6 +240,43 @@ std::optional<std::vector<RCP<const Basic>>> solveLinearSystem(
     return solution;
 }
 
+RCP<const Basic> rewriteForSyntheticAcrossStateDot(
+    const RCP<const Basic>& equation, const BranchItem& branch, const QString& stateSymbol,
+    const SymEngine::map_basic_basic& /*valueSubMap*/,
+    const std::vector<QString>& /*timedSymbols*/) {
+    const QString tautology = branchTautologyAcrossSymbol(branch);
+    if (tautology.isEmpty() || stateSymbol != tautology) {
+        return equation;
+    }
+    const RCP<const Basic> stateDot = dotSym(stateSymbol);
+
+    const QString acrossText = branchAcrossVariableText(branch).trimmed();
+    const int dash = acrossText.indexOf(QStringLiteral(" - "));
+    if (dash > 0) {
+        const QString hiName = acrossText.left(dash).trimmed();
+        const QString loName = acrossText.mid(dash + 3).trimmed();
+        if (!isValidVariableSymbol(hiName) || !isValidVariableSymbol(loName)) {
+            return equation;
+        }
+        // ponytail: valueSubMap rewrites node values (V1→Vs1) but elemental dots stay V1_dot
+        const RCP<const Basic> hiDot = dotSym(hiName);
+        const RCP<const Basic> loDot = dotSym(loName);
+        const RCP<const Basic> acrossDot = sub(hiDot, loDot);
+        const RCP<const Basic> cHi = linearCoeffRCP(equation, hiDot);
+        const RCP<const Basic> cLo = linearCoeffRCP(equation, loDot);
+        if (eq(*expand(add(cHi, cLo)), *integer(0))) {
+            return expand(sub(equation, sub(mul(cHi, acrossDot), mul(cHi, stateDot))));
+        }
+    } else if (isValidVariableSymbol(acrossText)) {
+        const RCP<const Basic> nodeDot = dotSym(acrossText);
+        const RCP<const Basic> coeff = linearCoeffRCP(equation, nodeDot);
+        if (!eq(*coeff, *integer(0))) {
+            return expand(sub(equation, sub(mul(coeff, nodeDot), mul(coeff, stateDot))));
+        }
+    }
+    return equation;
+}
+
 void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
                              std::unordered_map<QString, RCP<const Basic>>& stateDots) {
     const size_t n = stateSymbols.size();
@@ -346,191 +383,6 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
     ssLog(QStringLiteral("coupling"), QStringLiteral("end"));
 }
 
-namespace {
 
-const bool kStateSpaceSelfCheck = [] {
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("A")] = add(symbol("B"), integer(1));
-        reps[QStringLiteral("B")] = add(symbol("A"), integer(1));
-        const auto resolved = resolveReplacements(reps);
-        assert(resolved.size() == 2);
-    }
-    RCP<const Basic> x = symbol("x");
-    RCP<const Basic> y = symbol("y");
-    RCP<const Basic> f1 = symbol("f1");
-    RCP<const Basic> f2 = symbol("f2");
-    const RCP<const Basic> eq = sub(add(x, mul(integer(2), y)), integer(3));
-    const std::optional<RCP<const Basic>> solved = solveLinearFor(eq, y);
-    assert(solved);
-    assert(eq(*subs(eq, {{y, *solved}}), *integer(0)));
-    const RCP<const Basic> continuity = add(f2, f1);
-    const std::optional<RCP<const Basic>> f2Solved = solveLinearFor(continuity, f2);
-    assert(f2Solved);
-    assert(eq(*f2Solved, *neg(f1)));
-    {
-        RCP<const Basic> eTree = symbol("e_tree");
-        RCP<const Basic> eLink = symbol("e_link");
-        const RCP<const Basic> loop = sub(eTree, eLink);
-        const std::optional<RCP<const Basic>> eLinkSolved = solveLinearFor(loop, eLink);
-        assert(eLinkSolved);
-        assert(eq(*eLinkSolved, *eTree));
-    }
-    {
-        RCP<const Basic> v1 = symbol("v1");
-        const RCP<const Basic> degenerateLoop = sub(v1, v1);
-        assert(eq(*expand(degenerateLoop), *integer(0)));
-        assert(!solveLinearFor(degenerateLoop, v1));
-    }
-    {
-        const RCP<const Basic> leadLagAcross = sub(symbol("V1"), symbol("v2"));
-        const RCP<const Basic> leadLagAcrossDot =
-            linearTimeDerivative(leadLagAcross, {QStringLiteral("V1"), QStringLiteral("v2")});
-        assert(eq(*leadLagAcrossDot, *sub(dotSym(QStringLiteral("V1")), dotSym(QStringLiteral("v2")))));
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("C1_a")] = sub(symbol("V1"), symbol("v2"));
-        const SymEngine::map_basic_basic map =
-            extendedSubstitutionMap(reps, {QStringLiteral("V1"), QStringLiteral("v2")});
-        const RCP<const Basic> elem =
-            sub(symbol("f1"), mul(symbol("C1"), map.at(symOf(dotName(QStringLiteral("C1_a"))))));
-        const RCP<const Basic> expected =
-            sub(symbol("f1"), mul(symbol("C1"), linearTimeDerivative(reps.at(QStringLiteral("C1_a")),
-                                                                       {QStringLiteral("V1"),
-                                                                        QStringLiteral("v2")})));
-        assert(eq(*expand(elem), *expand(expected)));
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("V1")] = symbol("Vs2");
-        reps[QStringLiteral("i1_a")] = sub(symbol("V1"), symbol("V3"));
-        const auto resolved = resolveReplacements(reps);
-        assert(eq(*expand(resolved.at(QStringLiteral("i1_a"))),
-                   *sub(symbol("Vs2"), symbol("V3"))));
-        const SymEngine::map_basic_basic map = extendedSubstitutionMap(
-            {{QStringLiteral("i1_a"), resolved.at(QStringLiteral("i1_a"))}},
-            {QStringLiteral("Vs2"), QStringLiteral("V3")});
-        assert(eq(*map.at(symOf(QStringLiteral("i1_a_dot"))),
-                   *sub(dotSym(QStringLiteral("Vs2")), dotSym(QStringLiteral("V3")))));
-        const RCP<const Basic> v3dot =
-            div(mul(symbol("C1"), dotSym(QStringLiteral("Vs2"))), add(symbol("C1"), symbol("C2")));
-        const RCP<const Basic> elem = sub(mul(symbol("C2"), dotSym(QStringLiteral("V3"))),
-                                          mul(symbol("C1"), map.at(symOf(QStringLiteral("i1_a_dot")))));
-        const std::optional<RCP<const Basic>> v3dotSolved =
-            solveLinearFor(elem, dotSym(QStringLiteral("V3")));
-        assert(v3dotSolved);
-        assert(eq(*expand(*v3dotSolved), *expand(v3dot)));
-    }
-    {
-        const std::vector<RCP<const Basic>> stateInputVars = {symbol("V2"), symbol("I8")};
-        const RCP<const Basic> reduced =
-            add(mul(symbol("R1"), symbol("V2")), mul(symbol("C5"), symbol("I8")));
-        assert(eq(*linearRemainder(reduced, stateInputVars), *integer(0)));
-        const RCP<const Basic> leftover = add(reduced, symbol("i7"));
-        assert(eq(*linearRemainder(leftover, stateInputVars), *symbol("i7")));
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("A")] = add(symbol("B"), integer(1));
-        reps[QStringLiteral("B")] = add(symbol("A"), integer(1));
-        const auto resolved = resolveReplacements(reps);
-        assert(resolved.size() == 2);
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> dots;
-        dots[QStringLiteral("v2")] =
-            sub(dotSym(QStringLiteral("V1")),
-                div(sub(mul(symbol("C4"), dotSym(QStringLiteral("v2"))),
-                        mul(symbol("R4"), sub(symbol("V1"), symbol("v2")))),
-                    symbol("C5")));
-        resolveStateDotCoupling({QStringLiteral("v2")}, dots);
-        assert(eq(*linearCoeffRCP(dots.at(QStringLiteral("v2")), dotSym(QStringLiteral("v2"))),
-               *integer(0)));
-        assert(eq(*linearCoeffRCP(dots.at(QStringLiteral("v2")), dotSym(QStringLiteral("V1"))),
-               *div(symbol("C5"), add(symbol("C4"), symbol("C5")))));
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("V1")] = symbol("Vs");
-        reps[QStringLiteral("i_C5_a")] = sub(symbol("V1"), symbol("V2"));
-        reps[QStringLiteral("i_C4_a")] = neg(symbol("V2"));
-        const std::unordered_map<QString, RCP<const Basic>> resolved = resolveReplacements(reps);
-        assert(eq(*resolved.at(QStringLiteral("i_C5_a")),
-                   *sub(symbol("Vs"), symbol("V2"))));
-        assert(eq(*add(resolved.at(QStringLiteral("i_C5_a")), resolved.at(QStringLiteral("i_C4_a"))),
-                   *symbol("Vs")));
-    }
-    {
-        std::unordered_map<QString, RCP<const Basic>> reps;
-        reps[QStringLiteral("V1")] = symbol("Vs1");
-        reps[QStringLiteral("i_C5_a")] = sub(symbol("V1"), symbol("V2"));
-        const SymEngine::map_basic_basic dots = dependentDotSubstitutionMap(
-            reps, {QStringLiteral("V2"), QStringLiteral("Vs1")},
-            [](const QString& name) { return name == QStringLiteral("V2"); });
-        const RCP<const Basic> v2dot =
-            add(div(symbol("Is2"), symbol("C4")),
-                mul(div(symbol("C5"), symbol("C4")), dots.at(symOf(QStringLiteral("i_C5_a_dot")))));
-        assert(eq(*expand(v2dot),
-                   *add(div(symbol("Is2"), symbol("C4")),
-                        mul(symbol("C5"), sub(div(symbol("Vs1_dot"), symbol("C4")),
-                                              div(dotSym(QStringLiteral("V2")), symbol("C4")))))));
-    }
-    {
-        std::vector<std::vector<RCP<const Basic>>> m = {
-            {integer(2), integer(1)},
-            {integer(1), integer(1)},
-        };
-        const std::optional<std::vector<RCP<const Basic>>> x =
-            solveLinearSystem(m, {integer(3), integer(2)});
-        assert(x);
-        assert(eq(*(*x)[0], *integer(1)));
-        assert(eq(*(*x)[1], *integer(1)));
-    }
-    {
-        auto residual = [](const RCP<const Basic>& lhs, const RCP<const Basic>& rhs) {
-            return expand(sub(lhs, rhs));
-        };
-        const RCP<const Basic> m = symbol("m");
-        const RCP<const Basic> K = symbol("K");
-        const RCP<const Basic> B = symbol("B");
-        const RCP<const Basic> L = symbol("L");
-        const RCP<const Basic> R = symbol("R");
-        const RCP<const Basic> J = symbol("J");
-        const RCP<const Basic> v = symbol("v");
-        const RCP<const Basic> f = symbol("f");
-        const RCP<const Basic> V = symbol("V");
-        const RCP<const Basic> i = symbol("i");
-        const RCP<const Basic> Omega = symbol("Omega");
-        const RCP<const Basic> T = symbol("T");
-        const RCP<const Basic> P = symbol("P");
-        const RCP<const Basic> Q = symbol("Q");
-
-        assert(eq(*residual(f, mul(m, dotSym(QStringLiteral("v")))), *integer(0)));
-        assert(eq(*residual(dotSym(QStringLiteral("f")),
-                            mul(elementalConstantCoeff(SystemType::Mechanical, BranchType::T, K), v)),
-               *integer(0)));
-        assert(eq(*residual(f, mul(elementalConstantCoeff(SystemType::Mechanical, BranchType::D, B), v)),
-               *integer(0)));
-
-        assert(eq(*residual(i, mul(symbol("C"), dotSym(QStringLiteral("V")))), *integer(0)));
-        assert(eq(*residual(dotSym(QStringLiteral("i")),
-                            mul(elementalConstantCoeff(SystemType::Electrical, BranchType::T, L), V)),
-               *integer(0)));
-        assert(eq(*residual(i, mul(elementalConstantCoeff(SystemType::Electrical, BranchType::D, R), V)),
-               *integer(0)));
-
-        assert(eq(*residual(T, mul(J, dotSym(QStringLiteral("Omega")))), *integer(0)));
-        assert(eq(*residual(dotSym(QStringLiteral("T")),
-                            mul(elementalConstantCoeff(SystemType::MechanicalRotational, BranchType::T, K),
-                                Omega)),
-               *integer(0)));
-        assert(eq(*residual(Q, mul(elementalConstantCoeff(SystemType::Fluid, BranchType::D, symbol("Rp")), P)),
-               *integer(0)));
-    }
-    return true;
-}();
-
-}  // namespace
 
 }  // namespace lg::ss

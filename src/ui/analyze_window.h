@@ -32,10 +32,12 @@ signals:
 
 private:
     void refreshNormalTreeSection();
+    void refreshValidTreesList();
     void refreshSavedTreesList();
     void runFindNormalTree();
     void runSelectNormalTree();
     void runClearNormalTree();
+    void runUseValidTree();
     void runSaveCurrentTree();
     void runRemoveSavedTree();
     void runUseSavedTree();
@@ -49,6 +51,8 @@ private:
     QWidget* m_manualTreePanel = nullptr;
     QLabel* m_manualTreeStatus = nullptr;
     QPushButton* m_manualApplyBtn = nullptr;
+    QListWidget* m_validTreesList = nullptr;
+    QPushButton* m_useValidTreeBtn = nullptr;
     QListWidget* m_savedTreesList = nullptr;
     QPushButton* m_saveTreeBtn = nullptr;
     QPushButton* m_removeTreeBtn = nullptr;

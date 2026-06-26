@@ -29,11 +29,48 @@ bool matrixIsZero(const std::vector<QStringList>& rows) {
     return true;
 }
 
+namespace {
+
+QString latexSymbolBase(const QString& name) {
+    if (name.endsWith(QStringLiteral("_across"))) {
+        const QString base = name.left(name.size() - QStringLiteral("_across").size());
+        return QStringLiteral("%1_{\\mathrm{across}}").arg(base);
+    }
+    return name;
+}
+
+QString fixSyntheticAcrossInLatex(const QString& tex) {
+    QString out = tex;
+    const QString suffix = QStringLiteral("_across");
+    int searchFrom = 0;
+    while (true) {
+        const int idx = out.indexOf(suffix, searchFrom);
+        if (idx < 0) {
+            break;
+        }
+        int start = idx;
+        while (start > 0 && out.at(start - 1).isLetterOrNumber()) {
+            --start;
+        }
+        const QString base = out.mid(start, idx - start);
+        if (base.isEmpty()) {
+            searchFrom = idx + suffix.size();
+            continue;
+        }
+        const QString repl = QStringLiteral("%1_{\\mathrm{across}}").arg(base);
+        out.replace(start, idx - start + suffix.size(), repl);
+        searchFrom = start + repl.size();
+    }
+    return out;
+}
+
+}  // namespace
+
 QString latexMathSymbol(const QString& name) {
     if (name.endsWith(QStringLiteral("_dot"))) {
         return QStringLiteral("\\dot{%1}").arg(latexMathSymbol(name.left(name.size() - 4)));
     }
-    return name;
+    return latexSymbolBase(name);
 }
 
 QString latexInputDotLabel(const QString& inputLabel) {
@@ -61,7 +98,7 @@ QString latexCoeff(const RCP<const Basic>& coeff) {
     if (eq(*coeff, *integer(0))) {
         return QStringLiteral("0");
     }
-    return QString::fromStdString(SymEngine::latex(*coeff));
+    return fixSyntheticAcrossInLatex(QString::fromStdString(SymEngine::latex(*coeff)));
 }
 
 QString latexBmatrix(const std::vector<QStringList>& rows) {
@@ -82,6 +119,7 @@ QString latexColumnVector(const QStringList& entries) {
     return latexBmatrix(rows);
 }
 
+/*
 namespace {
 
 const bool kLatexSelfCheck = [] {
@@ -106,5 +144,6 @@ const bool kLatexSelfCheck = [] {
 }();
 
 }  // namespace
+*/
 
 }  // namespace lg::ss

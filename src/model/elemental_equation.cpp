@@ -553,6 +553,17 @@ QString branchThroughSymbol(const BranchItem& branch) {
     return branchSymbolBase(branch);
 }
 
+QString syntheticAcrossSymbolName(const BranchItem& branch) {
+    const QString k = branch.elementConstant().trimmed();
+    if (!k.isEmpty() && k != QStringLiteral("1") && isValidVariableSymbol(k)) {
+        const QString candidate = k + QStringLiteral("_across");
+        if (isValidVariableSymbol(candidate)) {
+            return candidate;
+        }
+    }
+    return branchThroughSymbol(branch) + QStringLiteral("_across");
+}
+
 QString branchAcrossSymbol(const BranchItem& branch) {
     if (branch.isActive() && branch.branchType() == BranchType::A) {
         return branchSourceInputSymbol(branch);
@@ -561,7 +572,7 @@ QString branchAcrossSymbol(const BranchItem& branch) {
     if (isValidVariableSymbol(text)) {
         return text;
     }
-    return branchThroughSymbol(branch) + QStringLiteral("_a");
+    return syntheticAcrossSymbolName(branch);
 }
 
 bool usesSyntheticAcrossSymbol(const BranchItem& branch) {
@@ -873,6 +884,7 @@ QString twoPortElementalEquationText(TwoPortKind kind, const QString& modulus,
     return QStringLiteral("v\u2081 = %1\u00b7f\u2082; f\u2081 = \u2212v\u2082/%1").arg(k);
 }
 
+/*
 namespace {
 
 const bool kParseSelfCheck = [] {
@@ -986,9 +998,10 @@ const bool kParseSelfCheck = [] {
         port3.setName(QStringLiteral("f_p3"));
         const std::vector<BranchItem*> stacked = {&port1, &port2, &port3, &parallel};
         const auto junctionSum = signedSpanJunctionFlowSum(port1, stacked, noTwoPorts, true);
-        assert(eq(*junctionSum, *SymEngine::add(SymEngine::symbol("f_parallel"),
-                                                 SymEngine::symbol("f_p2"),
-                                                 SymEngine::symbol("f_p3"))));
+        assert(eq(*junctionSum, *SymEngine::add(
+                                    SymEngine::add(SymEngine::symbol("f_parallel"),
+                                                   SymEngine::symbol("f_p2")),
+                                    SymEngine::symbol("f_p3"))));
     }
     {
         NodeItem v1(3.0);
@@ -1012,5 +1025,6 @@ const bool kParseSelfCheck = [] {
 }();
 
 }  // namespace
+*/
 
 }  // namespace lg

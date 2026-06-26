@@ -3,6 +3,7 @@
 
 
 #include "analyze_window.h"
+#include "app_log.h"
 #include "app_shortcuts.h"
 #include "app_update.h"
 #include "canvas.h"
@@ -77,6 +78,8 @@
 
 #include <QScrollArea>
 
+#include <QScrollBar>
+
 #include <QSet>
 
 #include <QStatusBar>
@@ -85,7 +88,11 @@
 
 #include <QStyleHints>
 
+#include <QFontDatabase>
+
 #include <QTableWidget>
+
+#include <QTextEdit>
 
 #include <QToolBar>
 
@@ -791,6 +798,8 @@ void MainWindow::buildMenuBar() {
 
         removeDockWidget(m_stateSpaceDock);
 
+        removeDockWidget(m_consoleDock);
+
         addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
 
         addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
@@ -800,6 +809,10 @@ void MainWindow::buildMenuBar() {
         tabifyDockWidget(m_propertyDock, m_analyzeDock);
 
         addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
+
+        addDockWidget(Qt::BottomDockWidgetArea, m_consoleDock);
+
+        tabifyDockWidget(m_stateSpaceDock, m_consoleDock);
 
         m_objectListDock->show();
 
@@ -818,15 +831,15 @@ void MainWindow::buildMenuBar() {
     analysisMenu->addSeparator();
 
     auto* findNormalTreeAction =
-        analysisMenu->addAction(tr("Find &Normal Tree..."));
+        analysisMenu->addAction(tr("Find All &Normal Trees..."));
 
     findNormalTreeAction->setObjectName(QStringLiteral("analysis.normalTree"));
 
     connect(findNormalTreeAction, &QAction::triggered, this, [this]() {
 
-        const lg::NormalTreeResult result = m_scene->findNormalTree();
+        const lg::NormalTreeEnumerationResult all = m_scene->findAllNormalTrees();
 
-        if (result.status == lg::NormalTreeResult::Status::Ok) {
+        if (!all.trees.empty()) {
 
             const lg::NormalTreeResult& normalTree = m_scene->lastNormalTreeResult();
 
@@ -851,15 +864,18 @@ void MainWindow::buildMenuBar() {
             const QString stateVarSummary =
                 stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
 
-            statusBar()->showMessage(
-
-                tr("Normal tree — %1 branches, %2 links, order %3: %4.")
+            QString statusMessage =
+                tr("Found %1 valid normal trees. Showing tree 1 — %2 branches, %3 links, order %4: %5.")
+                    .arg(all.trees.size())
                     .arg(normalTree.treeBranches.size())
                     .arg(branchCount - static_cast<int>(normalTree.treeBranches.size()))
                     .arg(normalTree.stateVariables.size())
-                    .arg(stateVarSummary),
+                    .arg(stateVarSummary);
+            if (!all.message.isEmpty()) {
+                statusMessage += QStringLiteral(" ") + all.message;
+            }
 
-                10000);
+            statusBar()->showMessage(statusMessage, 10000);
 
             updatePropertyPanel();
 
@@ -869,11 +885,11 @@ void MainWindow::buildMenuBar() {
 
         QMessageBox::warning(this, tr("Normal Tree"),
 
-                             result.message.isEmpty()
+                             all.message.isEmpty()
 
                                  ? tr("Could not find a valid normal tree.")
 
-                                 : result.message);
+                                 : all.message);
 
         statusBar()->showMessage(tr("Normal tree search failed."), 3000);
 
@@ -1136,6 +1152,13 @@ void MainWindow::buildToolbar() {
     m_analyzeAction->setToolTip(tr("Open analyze panel"));
     connect(m_analyzeAction, &QAction::triggered, this, &MainWindow::showAnalyzeWindow);
 
+    m_consoleAction = toolbar->addAction(themedIcon("utilities-terminal", QStyle::SP_ComputerIcon),
+                                         tr("Console"));
+    m_consoleAction->setObjectName(QStringLiteral("tool.console"));
+    m_consoleAction->setShortcutContext(Qt::ApplicationShortcut);
+    m_consoleAction->setToolTip(tr("Show Qt log output"));
+    connect(m_consoleAction, &QAction::triggered, this, &MainWindow::showConsoleWindow);
+
     connect(m_scene->undoStack(), &QUndoStack::canUndoChanged, m_undoAction, &QAction::setEnabled);
 
     connect(m_scene->undoStack(), &QUndoStack::canRedoChanged, m_redoAction, &QAction::setEnabled);
@@ -1273,7 +1296,45 @@ void MainWindow::buildDockPanels() {
         connect(m_analyzeDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
     }
 
+    m_consoleDock = new QDockWidget(tr("Console"), this);
+    m_consoleDock->setObjectName(QStringLiteral("consoleDock"));
+    m_consoleDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
+    m_consoleDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    m_consoleDock->setMinimumHeight(120);
 
+    auto* consolePanel = new QWidget(m_consoleDock);
+    auto* consoleLayout = new QVBoxLayout(consolePanel);
+    consoleLayout->setContentsMargins(4, 4, 4, 4);
+    consoleLayout->setSpacing(4);
+
+    m_consoleText = new QTextEdit(consolePanel);
+    m_consoleText->setReadOnly(true);
+    m_consoleText->setLineWrapMode(QTextEdit::NoWrap);
+    m_consoleText->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    for (const QString& line : AppLog::instance().lines()) {
+        m_consoleText->append(line);
+    }
+    connect(&AppLog::instance(), &AppLog::lineAppended, m_consoleText, [this](const QString& line) {
+        m_consoleText->append(line);
+        const QScrollBar* bar = m_consoleText->verticalScrollBar();
+        if (bar && bar->value() >= bar->maximum() - 2) {
+            m_consoleText->verticalScrollBar()->setValue(m_consoleText->verticalScrollBar()->maximum());
+        }
+    });
+
+    auto* clearBtn = new QPushButton(tr("Clear"), consolePanel);
+    connect(clearBtn, &QPushButton::clicked, this, [this]() {
+        AppLog::instance().clear();
+        m_consoleText->clear();
+    });
+
+    consoleLayout->addWidget(m_consoleText);
+    auto* consoleButtons = new QHBoxLayout;
+    consoleButtons->addStretch();
+    consoleButtons->addWidget(clearBtn);
+    consoleLayout->addLayout(consoleButtons);
+
+    m_consoleDock->setWidget(consolePanel);
 
     m_stateSpaceDock = new QDockWidget(tr("State Space"), this);
 
@@ -1311,7 +1372,13 @@ void MainWindow::buildDockPanels() {
 
     addDockWidget(Qt::BottomDockWidgetArea, m_stateSpaceDock);
 
+    addDockWidget(Qt::BottomDockWidgetArea, m_consoleDock);
+
+    tabifyDockWidget(m_stateSpaceDock, m_consoleDock);
+
     m_stateSpaceDock->hide();
+
+    m_consoleDock->hide();
 
 
 
@@ -2918,6 +2985,14 @@ void MainWindow::showAnalyzeWindow() {
         QSignalBlocker blocker(panelAction);
         panelAction->setChecked(true);
     }
+}
+
+void MainWindow::showConsoleWindow() {
+    if (!m_consoleDock) {
+        return;
+    }
+    m_consoleDock->show();
+    m_consoleDock->raise();
 }
 
 void MainWindow::showSettingsWindow() {

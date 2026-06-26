@@ -612,6 +612,18 @@ public:
 
     lg::NormalTreeResult findNormalTree();
 
+    lg::NormalTreeEnumerationResult findAllNormalTrees();
+
+    bool showDiscoveredNormalTree(int index);
+
+    const std::vector<lg::NormalTreeResult>& discoveredNormalTrees() const {
+        return m_discoveredNormalTrees;
+    }
+
+    int discoveredNormalTreeIndex() const { return m_discoveredNormalTreeIndex; }
+
+    QString discoveredNormalTreeListLabel(int index) const;
+
     lg::NormalTreeResult commitNormalTreeSelection(const std::vector<BranchItem*>& treeBranches);
 
     void beginManualNormalTreeSelection();
@@ -684,6 +696,8 @@ signals:
 
     void normalTreeHighlightChanged();
 
+    void discoveredNormalTreesChanged();
+
     void savedNormalTreesChanged();
 
     void manualNormalTreeValidationChanged(const lg::NormalTreeResult& result);
@@ -744,6 +758,10 @@ private:
 
     lg::NormalTreeResult m_lastNormalTreeResult;
 
+    std::vector<lg::NormalTreeResult> m_discoveredNormalTrees;
+
+    int m_discoveredNormalTreeIndex = -1;
+
     lg::StateSpaceResult m_lastStateSpaceResult;
 
     struct ManualNormalTreeBackup {
@@ -775,6 +793,8 @@ private:
 
     void collectGraphItems(std::vector<NodeItem*>& nodes, std::vector<BranchItem*>& branches,
                            std::vector<TwoPortItem*>& twoPorts) const;
+
+    void applyNormalTreeHighlight(const lg::NormalTreeResult& result);
 
     void notifyGraphChanged();
 

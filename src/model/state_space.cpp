@@ -680,6 +680,36 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
         }
     }
 
+    // ponytail: synthetic across state C5_across = V1−V2 — bind free node so V2_dot = Vs1_dot − C5_across_dot
+    for (const ComputedState& state : computedStates) {
+        if (!state.branch) {
+            continue;
+        }
+        const QString tautology = ss::branchTautologyAcrossSymbol(*state.branch);
+        if (tautology.isEmpty() || state.symbol != tautology) {
+            continue;
+        }
+        const QString acrossText = branchAcrossVariableText(*state.branch).trimmed();
+        const int dash = acrossText.indexOf(QStringLiteral(" - "));
+        if (dash <= 0) {
+            continue;
+        }
+        const QString hiName = acrossText.left(dash).trimmed();
+        const QString loName = acrossText.mid(dash + 3).trimmed();
+        if (!isValidVariableSymbol(hiName) || !isValidVariableSymbol(loName) ||
+            replacements.count(loName) != 0 || isPrimaryState(loName)) {
+            continue;
+        }
+        ss::RCP<const SymEngine::Basic> hiExpr = ss::symOf(hiName);
+        {
+            const auto resolved = ss::resolveReplacements(replacements);
+            if (const auto it = resolved.find(hiName); it != resolved.end()) {
+                hiExpr = it->second;
+            }
+        }
+        recordConstraint(loName, sub(hiExpr, ss::symOf(state.symbol)));
+    }
+
     for (const QString& input : result.inputs) {
         appendTimed(input);
     }
@@ -744,8 +774,11 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                 continue;
             }
             const ss::RCP<const SymEngine::Basic> dot = ss::dotSym(state.symbol);
+            const ss::RCP<const SymEngine::Basic> matchReduced =
+                ss::rewriteForSyntheticAcrossStateDot(reduced, *state.branch, state.symbol,
+                                                      valueSubMap, timedSymbols);
             const std::optional<ss::RCP<const SymEngine::Basic>> solved =
-                ss::solveLinearFor(reduced, dot);
+                ss::solveLinearFor(matchReduced, dot);
             if (!solved) {
                 continue;
             }
@@ -960,9 +993,30 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
         const auto it = stateBranchBySymbol.find(targetName);
         if (it != stateBranchBySymbol.end() && it->second) {
             const QString across = ss::branchTautologyAcrossSymbol(*it->second);
-            if (!across.isEmpty() &&
-                !eq(*ss::linearCoeffRCP(solved, ss::symOf(across)), *integer(0))) {
-                return false;
+            if (!across.isEmpty()) {
+                bool primaryIsAcrossNode = false;
+                const QString acrossText = branchAcrossVariableText(*it->second).trimmed();
+                const int dash = acrossText.indexOf(QStringLiteral(" - "));
+                if (dash > 0) {
+                    const QString hiName = acrossText.left(dash).trimmed();
+                    const QString loName = acrossText.mid(dash + 3).trimmed();
+                    if (isValidVariableSymbol(hiName) &&
+                        eq(*primarySym, *ss::symOf(hiName))) {
+                        primaryIsAcrossNode = true;
+                    }
+                    if (isValidVariableSymbol(loName) &&
+                        eq(*primarySym, *ss::symOf(loName))) {
+                        primaryIsAcrossNode = true;
+                    }
+                } else if (isValidVariableSymbol(acrossText) &&
+                           eq(*primarySym, *ss::symOf(acrossText))) {
+                    primaryIsAcrossNode = true;
+                }
+                // ponytail: branch flows (i_R1) may legitimately depend on state; block node-V only
+                if (primaryIsAcrossNode &&
+                    !eq(*ss::linearCoeffRCP(solved, ss::symOf(across)), *integer(0))) {
+                    return false;
+                }
             }
         }
         return !ss::substitutionIsCircular(targetExpr, primarySym, solved);

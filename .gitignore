@@ -8,3 +8,4 @@ build/
 .cursor/
 .idea/
 vcpkg_installed/
+build-debug/

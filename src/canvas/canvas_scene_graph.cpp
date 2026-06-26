@@ -585,6 +585,9 @@ void GraphScene::clearNormalTreeHighlight() {
     m_lastNormalTreeResult = {};
     m_lastStateSpaceResult = {};
     m_manualNormalTreeValidation = {};
+    const bool hadDiscovered = !m_discoveredNormalTrees.empty();
+    m_discoveredNormalTrees.clear();
+    m_discoveredNormalTreeIndex = -1;
     for (QGraphicsItem* item : items()) {
         if (auto* branch = dynamic_cast<BranchItem*>(item)) {
             branch->setNormalTreeRole(false, false);
@@ -599,6 +602,9 @@ void GraphScene::clearNormalTreeHighlight() {
     if (hadTree) {
         m_activeSavedNormalTreeIndex = -1;
         emit normalTreeHighlightChanged();
+    }
+    if (hadDiscovered) {
+        emit discoveredNormalTreesChanged();
     }
 }
 
@@ -817,22 +823,33 @@ QString GraphScene::takeLoadWarning() {
     return warning;
 }
 
-lg::NormalTreeResult GraphScene::findNormalTree() {
+void GraphScene::applyNormalTreeHighlight(const lg::NormalTreeResult& result) {
     std::vector<NodeItem*> nodes;
     std::vector<BranchItem*> branches;
     std::vector<TwoPortItem*> twoPorts;
-    nodes.reserve(static_cast<size_t>(items().size()));
-    branches.reserve(static_cast<size_t>(items().size()));
-    twoPorts.reserve(static_cast<size_t>(items().size()));
-    for (QGraphicsItem* item : items()) {
-        if (auto* node = dynamic_cast<NodeItem*>(item)) {
-            nodes.push_back(node);
-        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
-            branches.push_back(branch);
-        } else if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
-            twoPorts.push_back(twoPort);
+    collectGraphItems(nodes, branches, twoPorts);
+
+    m_normalTreeHighlightActive = true;
+    m_lastNormalTreeResult = result;
+    m_lastStateSpaceResult = {};
+    for (BranchItem* branch : branches) {
+        if (!branch) {
+            continue;
         }
+        const bool inTree =
+            std::find(result.treeBranches.begin(), result.treeBranches.end(), branch) !=
+            result.treeBranches.end();
+        branch->setNormalTreeRole(inTree, true);
     }
+    syncActiveSavedNormalTreeIndex();
+    emit normalTreeHighlightChanged();
+}
+
+lg::NormalTreeEnumerationResult GraphScene::findAllNormalTrees() {
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    std::vector<TwoPortItem*> twoPorts;
+    collectGraphItems(nodes, branches, twoPorts);
 
     for (QGraphicsItem* item : items()) {
         if (auto* branch = dynamic_cast<BranchItem*>(item)) {
@@ -843,25 +860,66 @@ lg::NormalTreeResult GraphScene::findNormalTree() {
     m_normalTreeManual = false;
     m_lastNormalTreeResult = {};
     m_lastStateSpaceResult = {};
+    m_discoveredNormalTrees.clear();
+    m_discoveredNormalTreeIndex = -1;
 
-    lg::NormalTreeResult result = lg::computeNormalTree(nodes, branches, twoPorts);
-    if (result.status != lg::NormalTreeResult::Status::Ok) {
+    const lg::NormalTreeEnumerationResult enumeration =
+        lg::enumerateNormalTrees(nodes, branches, twoPorts);
+    m_discoveredNormalTrees = enumeration.trees;
+    emit discoveredNormalTreesChanged();
+
+    if (m_discoveredNormalTrees.empty()) {
+        lg::NormalTreeEnumerationResult failure = enumeration;
+        failure.trees.clear();
+        return failure;
+    }
+
+    m_discoveredNormalTreeIndex = 0;
+    m_normalTreeManual = false;
+    applyNormalTreeHighlight(m_discoveredNormalTrees.front());
+    return enumeration;
+}
+
+lg::NormalTreeResult GraphScene::findNormalTree() {
+    const lg::NormalTreeEnumerationResult all = findAllNormalTrees();
+    lg::NormalTreeResult result;
+    if (all.trees.empty()) {
+        result.status = all.status;
+        result.message = all.message;
         return result;
     }
+    return all.trees.front();
+}
 
-    lg::populateNormalTreeStateVariables(result, branches, twoPorts);
-    m_normalTreeHighlightActive = true;
-    m_normalTreeManual = false;
-    m_lastNormalTreeResult = result;
-    for (BranchItem* branch : branches) {
-        const bool inTree =
-            std::find(result.treeBranches.begin(), result.treeBranches.end(), branch) !=
-            result.treeBranches.end();
-        branch->setNormalTreeRole(inTree, true);
+bool GraphScene::showDiscoveredNormalTree(int index) {
+    if (index < 0 || index >= static_cast<int>(m_discoveredNormalTrees.size())) {
+        return false;
     }
-    syncActiveSavedNormalTreeIndex();
-    emit normalTreeHighlightChanged();
-    return result;
+    m_normalTreeManual = false;
+    m_discoveredNormalTreeIndex = index;
+    applyNormalTreeHighlight(m_discoveredNormalTrees[static_cast<size_t>(index)]);
+    return true;
+}
+
+QString GraphScene::discoveredNormalTreeListLabel(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_discoveredNormalTrees.size())) {
+        return {};
+    }
+    const lg::NormalTreeResult& tree = m_discoveredNormalTrees[static_cast<size_t>(index)];
+    QStringList stateVarText;
+    stateVarText.reserve(static_cast<int>(tree.stateVariables.size()));
+    for (const lg::NormalTreeResult::StateVariable& state : tree.stateVariables) {
+        stateVarText.push_back(state.symbol);
+    }
+    const QString stateVarSummary =
+        stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
+    const QString activeMark =
+        index == m_discoveredNormalTreeIndex ? QStringLiteral(" *") : QString();
+    return tr("Tree %1 — order %2: %3%4")
+        .arg(index + 1)
+        .arg(tree.stateVariables.size())
+        .arg(stateVarSummary)
+        .arg(activeMark);
 }
 
 lg::NormalTreeResult GraphScene::commitNormalTreeSelection(

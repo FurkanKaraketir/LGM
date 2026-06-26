@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <cassert>
+#include <deque>
 #include <numeric>
 #include <optional>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -390,6 +392,264 @@ std::optional<BuildAttempt> tryBuildNormalTree(
     return success;
 }
 
+constexpr int kMaxEnumeratedNormalTrees = 200;
+
+int branchWeightRank(bool active, BranchType declaredType, BranchType passiveEffective) {
+    if (active) {
+        return declaredType == BranchType::A ? 1 : 5;
+    }
+    switch (passiveEffective) {
+    case BranchType::A:
+        return 2;
+    case BranchType::D:
+        return 3;
+    case BranchType::T:
+        return 4;
+    }
+    return 5;
+}
+
+int branchWeight(const BranchItem& branch) {
+    if (branch.isActive()) {
+        return branchWeightRank(true, branch.branchType(), BranchType::A);
+    }
+    return branchWeightRank(false, branch.branchType(), effectivePassiveBranchType(branch));
+}
+
+std::optional<BuildAttempt> kruskalNormalTree(const std::vector<NodeItem*>& nodes,
+                                              const std::vector<BranchItem*>& branches,
+                                              const PortConstraints& constraints,
+                                              const std::unordered_set<BranchItem*>& ignoredBranches =
+                                                  {}) {
+    const int n = static_cast<int>(nodes.size());
+    if (n <= 1) {
+        return BuildAttempt{};
+    }
+
+    std::unordered_map<NodeItem*, int> nodeIndex;
+    nodeIndex.reserve(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        nodeIndex[nodes[static_cast<size_t>(i)]] = i;
+    }
+
+    auto makeEdge = [&](BranchItem* branch) -> std::optional<Edge> {
+        if (!branch || constraints.forbidden.count(branch) != 0 ||
+            ignoredBranches.count(branch) != 0) {
+            return std::nullopt;
+        }
+        if (!branch->from() || !branch->to()) {
+            return std::nullopt;
+        }
+        const auto fromIt = nodeIndex.find(branch->from());
+        const auto toIt = nodeIndex.find(branch->to());
+        if (fromIt == nodeIndex.end() || toIt == nodeIndex.end()) {
+            return std::nullopt;
+        }
+        return Edge{branch, fromIt->second, toIt->second};
+    };
+
+    std::vector<Edge> usableEdges;
+    usableEdges.reserve(branches.size());
+    for (BranchItem* branch : branches) {
+        const std::optional<Edge> edge = makeEdge(branch);
+        if (edge) {
+            usableEdges.push_back(*edge);
+        }
+    }
+
+    const int componentCount = connectedComponents(n, usableEdges);
+    const int targetSize = n - componentCount;
+
+    std::vector<Edge> forcedIn;
+    std::vector<Edge> optionalEdges;
+    forcedIn.reserve(branches.size());
+    optionalEdges.reserve(branches.size());
+
+    bool forcedCycle = false;
+    for (BranchItem* branch : branches) {
+        if (!branch || constraints.forbidden.count(branch) != 0 ||
+            ignoredBranches.count(branch) != 0) {
+            continue;
+        }
+        const std::optional<Edge> edge = makeEdge(branch);
+        if (!edge) {
+            continue;
+        }
+        const bool forced = constraints.forcedIn.count(branch) != 0;
+        if (branch->isActive()) {
+            if (branch->branchType() == BranchType::A) {
+                forcedIn.push_back(*edge);
+            }
+            continue;
+        }
+        if (forced) {
+            forcedIn.push_back(*edge);
+            continue;
+        }
+        optionalEdges.push_back(*edge);
+    }
+
+    std::sort(optionalEdges.begin(), optionalEdges.end(),
+              [](const Edge& a, const Edge& b) {
+                  const int wa = branchWeight(*a.branch);
+                  const int wb = branchWeight(*b.branch);
+                  if (wa != wb) {
+                      return wa < wb;
+                  }
+                  return a.branch < b.branch;
+              });
+
+    UnionFind uf(n);
+    std::vector<BranchItem*> tree;
+    tree.reserve(static_cast<size_t>(targetSize));
+
+    auto addEdge = [&](const Edge& edge) -> bool {
+        if (uf.connected(edge.u, edge.v)) {
+            return false;
+        }
+        uf.unite(edge.u, edge.v);
+        tree.push_back(edge.branch);
+        return true;
+    };
+
+    for (const Edge& edge : forcedIn) {
+        if (!addEdge(edge)) {
+            if (edge.branch && edge.branch->isActive() &&
+                edge.branch->branchType() == BranchType::A) {
+                forcedCycle = true;
+            }
+        }
+    }
+    if (forcedCycle) {
+        BuildAttempt failure;
+        failure.status = NormalTreeResult::Status::ForcedCycle;
+        return failure;
+    }
+    for (const Edge& edge : forcedIn) {
+        if (!edge.branch) {
+            continue;
+        }
+        if (std::find(tree.begin(), tree.end(), edge.branch) == tree.end()) {
+            BuildAttempt failure;
+            failure.status = NormalTreeResult::Status::NotConnected;
+            return failure;
+        }
+    }
+
+    if (static_cast<int>(tree.size()) == targetSize) {
+        if (uf.components() != componentCount) {
+            BuildAttempt failure;
+            failure.status = NormalTreeResult::Status::NotConnected;
+            return failure;
+        }
+        BuildAttempt success;
+        success.treeBranches = tree;
+        return success;
+    }
+
+    for (const Edge& edge : optionalEdges) {
+        if (static_cast<int>(tree.size()) >= targetSize) {
+            break;
+        }
+        addEdge(edge);
+    }
+
+    if (static_cast<int>(tree.size()) != targetSize || uf.components() != componentCount) {
+        BuildAttempt failure;
+        failure.status = NormalTreeResult::Status::NotConnected;
+        return failure;
+    }
+
+    BuildAttempt success;
+    success.treeBranches = std::move(tree);
+    return success;
+}
+
+std::unordered_map<BranchItem*, int> buildBranchIndexMap(
+    const std::vector<BranchItem*>& branches) {
+    std::unordered_map<BranchItem*, int> branchIndex;
+    branchIndex.reserve(branches.size());
+    for (int i = 0; i < static_cast<int>(branches.size()); ++i) {
+        if (branches[static_cast<size_t>(i)]) {
+            branchIndex[branches[static_cast<size_t>(i)]] = i;
+        }
+    }
+    return branchIndex;
+}
+
+std::vector<int> treeBranchKey(const std::vector<BranchItem*>& tree,
+                               const std::unordered_map<BranchItem*, int>& branchIndex) {
+    std::vector<int> key;
+    key.reserve(tree.size());
+    for (BranchItem* branch : tree) {
+        const auto it = branchIndex.find(branch);
+        if (it != branchIndex.end()) {
+            key.push_back(it->second);
+        }
+    }
+    std::sort(key.begin(), key.end());
+    return key;
+}
+
+std::vector<BranchItem*> twigsOnTreePath(const std::vector<BranchItem*>& tree, BranchItem* link) {
+    if (!link || !link->from() || !link->to()) {
+        return {};
+    }
+    NodeItem* start = link->from();
+    NodeItem* goal = link->to();
+
+    std::unordered_map<NodeItem*, std::vector<std::pair<NodeItem*, BranchItem*>>> adj;
+    for (BranchItem* twig : tree) {
+        if (!twig || !twig->from() || !twig->to()) {
+            continue;
+        }
+        adj[twig->from()].emplace_back(twig->to(), twig);
+        adj[twig->to()].emplace_back(twig->from(), twig);
+    }
+
+    std::unordered_map<NodeItem*, BranchItem*> parentBranch;
+    std::unordered_set<NodeItem*> visited;
+    std::vector<NodeItem*> queue;
+    queue.push_back(start);
+    visited.insert(start);
+
+    while (!queue.empty()) {
+        NodeItem* node = queue.back();
+        queue.pop_back();
+        if (node == goal) {
+            break;
+        }
+        const auto adjIt = adj.find(node);
+        if (adjIt == adj.end()) {
+            continue;
+        }
+        for (const auto& [next, branch] : adjIt->second) {
+            if (visited.count(next) != 0) {
+                continue;
+            }
+            visited.insert(next);
+            parentBranch[next] = branch;
+            queue.push_back(next);
+        }
+    }
+
+    if (visited.count(goal) == 0) {
+        return {};
+    }
+
+    std::vector<BranchItem*> path;
+    for (NodeItem* at = goal; at != start;) {
+        const auto parentIt = parentBranch.find(at);
+        if (parentIt == parentBranch.end()) {
+            return {};
+        }
+        BranchItem* branch = parentIt->second;
+        path.push_back(branch);
+        at = branch->from() == at ? branch->to() : branch->from();
+    }
+    return path;
+}
+
 bool constraintsAreFeasible(const std::vector<NodeItem*>& nodes,
                             const std::vector<BranchItem*>& branches,
                             const PortConstraints& constraints,
@@ -399,37 +659,99 @@ bool constraintsAreFeasible(const std::vector<NodeItem*>& nodes,
     return attempt && attempt->status == NormalTreeResult::Status::Ok;
 }
 
-void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
-                              const std::vector<BranchItem*>& branches,
-                              const std::vector<TwoPortItem*>& twoPorts, int index,
-                              PortConstraints constraints, bool& found, int& bestTreeSize,
-                              TreeScore& bestScore,
-                              std::vector<BranchItem*>& bestTree,
-                              const std::unordered_set<BranchItem*>& ignoredBranches) {
+bool acceptEnumeratedTree(const std::vector<NodeItem*>& nodes,
+                          const std::vector<BranchItem*>& branches,
+                          const std::vector<TwoPortItem*>& twoPorts,
+                          const std::vector<BranchItem*>& tree) {
+    if (scoreTree(tree, branches, twoPorts).sameSpanTreeConflicts != 0) {
+        return false;
+    }
+    const NormalTreeResult validated =
+        validateManualNormalTree(nodes, branches, twoPorts, tree);
+    return validated.status == NormalTreeResult::Status::Ok;
+}
+
+void enumerateTreesForPortAssignment(
+    const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches,
+    const std::vector<TwoPortItem*>& twoPorts, const PortConstraints& constraints,
+    std::set<std::vector<int>>& seenKeys, std::vector<std::vector<BranchItem*>>& collected,
+    bool& capped) {
+    const std::optional<BuildAttempt> seed = kruskalNormalTree(nodes, branches, constraints);
+    if (!seed || seed->status != NormalTreeResult::Status::Ok) {
+        return;
+    }
+
+    const std::unordered_map<BranchItem*, int> branchIndex = buildBranchIndexMap(branches);
+    std::deque<std::vector<BranchItem*>> queue;
+
+    auto tryCollect = [&](const std::vector<BranchItem*>& tree, bool enqueue) {
+        if (capped) {
+            return;
+        }
+        const std::vector<int> key = treeBranchKey(tree, branchIndex);
+        if (key.empty() || seenKeys.count(key) != 0) {
+            return;
+        }
+        if (!acceptEnumeratedTree(nodes, branches, twoPorts, tree)) {
+            return;
+        }
+        seenKeys.insert(key);
+        collected.push_back(tree);
+        if (static_cast<int>(collected.size()) >= kMaxEnumeratedNormalTrees) {
+            capped = true;
+            return;
+        }
+        if (enqueue) {
+            queue.push_back(tree);
+        }
+    };
+
+    tryCollect(seed->treeBranches, true);
+
+    while (!queue.empty() && !capped) {
+        const std::vector<BranchItem*> tree = queue.front();
+        queue.pop_front();
+        const std::unordered_set<BranchItem*> inTree(tree.begin(), tree.end());
+
+        for (BranchItem* link : branches) {
+            if (!link || inTree.count(link) != 0 || constraints.forbidden.count(link) != 0) {
+                continue;
+            }
+            const std::vector<BranchItem*> path = twigsOnTreePath(tree, link);
+            const int linkWeight = branchWeight(*link);
+            for (BranchItem* twig : path) {
+                if (!twig || branchWeight(*twig) != linkWeight) {
+                    continue;
+                }
+                std::vector<BranchItem*> newTree;
+                newTree.reserve(tree.size());
+                for (BranchItem* branch : tree) {
+                    if (branch != twig) {
+                        newTree.push_back(branch);
+                    }
+                }
+                newTree.push_back(link);
+                tryCollect(newTree, true);
+            }
+        }
+    }
+}
+
+void collectTreesForPortAssignments(
+    const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches,
+    const std::vector<TwoPortItem*>& twoPorts, int index, PortConstraints constraints,
+    std::set<std::vector<int>>& seenKeys, std::vector<std::vector<BranchItem*>>& collected,
+    bool& capped, const std::unordered_set<BranchItem*>& ignoredBranches) {
     if (index >= static_cast<int>(twoPorts.size())) {
-        const std::optional<BuildAttempt> attempt =
-            tryBuildNormalTree(nodes, branches, constraints, ignoredBranches);
-        if (!attempt || attempt->status != NormalTreeResult::Status::Ok) {
-            return;
-        }
-        const int treeSize = static_cast<int>(attempt->treeBranches.size());
-        const TreeScore score = scoreTree(attempt->treeBranches, branches, twoPorts);
-        if (score.sameSpanTreeConflicts != 0) {
-            return;
-        }
-        if (treeSize > bestTreeSize || (treeSize == bestTreeSize && score.betterThan(bestScore))) {
-            found = true;
-            bestTreeSize = treeSize;
-            bestScore = score;
-            bestTree = attempt->treeBranches;
-        }
+        enumerateTreesForPortAssignment(nodes, branches, twoPorts, constraints, seenKeys,
+                                        collected, capped);
         return;
     }
 
     TwoPortItem* item = twoPorts[static_cast<size_t>(index)];
     if (!item) {
-        searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(constraints),
-                                 found, bestTreeSize, bestScore, bestTree, ignoredBranches);
+        collectTreesForPortAssignments(nodes, branches, twoPorts, index + 1, std::move(constraints),
+                                       seenKeys, collected, capped, ignoredBranches);
         return;
     }
 
@@ -440,8 +762,8 @@ void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
             if (!constraintsAreFeasible(nodes, branches, next, ignoredBranches)) {
                 continue;
             }
-            searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next), found,
-                                   bestTreeSize, bestScore, bestTree, ignoredBranches);
+            collectTreesForPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next),
+                                           seenKeys, collected, capped, ignoredBranches);
         }
         return;
     }
@@ -452,8 +774,8 @@ void searchTwoPortAssignments(const std::vector<NodeItem*>& nodes,
         if (!constraintsAreFeasible(nodes, branches, next, ignoredBranches)) {
             continue;
         }
-        searchTwoPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next), found,
-                               bestTreeSize, bestScore, bestTree, ignoredBranches);
+        collectTreesForPortAssignments(nodes, branches, twoPorts, index + 1, std::move(next),
+                                       seenKeys, collected, capped, ignoredBranches);
     }
 }
 
@@ -590,10 +912,10 @@ void populateNormalTreeStateVariables(NormalTreeResult& result,
     extractStateVariables(result, branches, twoPorts);
 }
 
-NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
-                                   const std::vector<BranchItem*>& branches,
-                                   const std::vector<TwoPortItem*>& twoPorts) {
-    NormalTreeResult result;
+NormalTreeEnumerationResult enumerateNormalTrees(const std::vector<NodeItem*>& nodes,
+                                                 const std::vector<BranchItem*>& branches,
+                                                 const std::vector<TwoPortItem*>& twoPorts) {
+    NormalTreeEnumerationResult result;
     const int n = static_cast<int>(nodes.size());
     if (n == 0) {
         result.status = NormalTreeResult::Status::Incomplete;
@@ -610,52 +932,82 @@ NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
     }
 
     if (n == 1) {
+        NormalTreeResult single;
+        single.status = NormalTreeResult::Status::Ok;
+        extractStateVariables(single, branches, orderedTwoPorts);
         result.status = NormalTreeResult::Status::Ok;
-        extractStateVariables(result, branches, orderedTwoPorts);
+        result.trees.push_back(std::move(single));
         return result;
     }
 
-    bool found = false;
-    int bestTreeSize = 0;
-    TreeScore bestScore;
-    std::vector<BranchItem*> bestTree;
+    std::set<std::vector<int>> seenKeys;
+    std::vector<std::vector<BranchItem*>> collected;
+    bool capped = false;
 
     if (orderedTwoPorts.empty()) {
-        const std::optional<BuildAttempt> attempt =
-            tryBuildNormalTree(nodes, branches, PortConstraints{});
-        if (attempt && attempt->status == NormalTreeResult::Status::Ok) {
-            found = true;
-            bestTree = attempt->treeBranches;
-        } else if (attempt) {
-            result.status = attempt->status;
-            result.message = attempt->status == NormalTreeResult::Status::ForcedCycle
-                                 ? QStringLiteral("A-type active elements form a loop; "
-                                                  "compatibility is violated.")
-                                 : QStringLiteral("The graph is not connected enough to form a "
-                                                  "normal tree with the current elements.");
-            return result;
-        }
+        enumerateTreesForPortAssignment(nodes, branches, orderedTwoPorts, PortConstraints{},
+                                        seenKeys, collected, capped);
     } else {
-        searchTwoPortAssignments(nodes, branches, orderedTwoPorts, 0, PortConstraints{}, found,
-                                 bestTreeSize, bestScore, bestTree, {});
+        collectTreesForPortAssignments(nodes, branches, orderedTwoPorts, 0, PortConstraints{},
+                                       seenKeys, collected, capped, {});
     }
 
-    if (!found) {
+    if (collected.empty()) {
+        const std::optional<BuildAttempt> probe = kruskalNormalTree(nodes, branches, PortConstraints{});
+        if (probe && probe->status == NormalTreeResult::Status::ForcedCycle) {
+            result.status = NormalTreeResult::Status::ForcedCycle;
+            result.message = QStringLiteral("A-type active elements form a loop; "
+                                            "compatibility is violated.");
+            return result;
+        }
         result.status = orderedTwoPorts.empty() ? NormalTreeResult::Status::Incomplete
-                                              : NormalTreeResult::Status::TwoPortConstraint;
-        result.message = orderedTwoPorts.empty()
-                             ? QStringLiteral("Could not form a spanning normal tree with the "
-                                              "current elements and constraints.")
-                             : QStringLiteral("Could not form a normal tree satisfying transformer "
-                                              "(exactly one branch) and gyrator (zero or both "
-                                              "branches) rules.");
+                                                : NormalTreeResult::Status::TwoPortConstraint;
+        result.message =
+            orderedTwoPorts.empty()
+                ? QStringLiteral("Could not form a spanning normal tree with the "
+                                   "current elements and constraints.")
+                : QStringLiteral("Could not form a normal tree satisfying transformer "
+                                   "(exactly one branch) and gyrator (zero or both "
+                                   "branches) rules.");
         return result;
+    }
+
+    std::sort(collected.begin(), collected.end(),
+              [&](const std::vector<BranchItem*>& left, const std::vector<BranchItem*>& right) {
+                  const TreeScore leftScore = scoreTree(left, branches, orderedTwoPorts);
+                  const TreeScore rightScore = scoreTree(right, branches, orderedTwoPorts);
+                  return leftScore.betterThan(rightScore);
+              });
+
+    result.trees.reserve(collected.size());
+    for (const std::vector<BranchItem*>& tree : collected) {
+        NormalTreeResult entry;
+        entry.status = NormalTreeResult::Status::Ok;
+        entry.treeBranches = tree;
+        extractStateVariables(entry, branches, orderedTwoPorts);
+        result.trees.push_back(std::move(entry));
     }
 
     result.status = NormalTreeResult::Status::Ok;
-    result.treeBranches = std::move(bestTree);
-    extractStateVariables(result, branches, orderedTwoPorts);
+    if (capped) {
+        result.message =
+            QStringLiteral("Enumeration stopped after %1 trees; more may exist.")
+                .arg(kMaxEnumeratedNormalTrees);
+    }
     return result;
+}
+
+NormalTreeResult computeNormalTree(const std::vector<NodeItem*>& nodes,
+                                   const std::vector<BranchItem*>& branches,
+                                   const std::vector<TwoPortItem*>& twoPorts) {
+    const NormalTreeEnumerationResult all = enumerateNormalTrees(nodes, branches, twoPorts);
+    NormalTreeResult result;
+    if (all.trees.empty()) {
+        result.status = all.status;
+        result.message = all.message;
+        return result;
+    }
+    return all.trees.front();
 }
 
 NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
@@ -807,6 +1159,7 @@ NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
     return result;
 }
 
+/*
 namespace {
 
 const bool kNormalTreeSelfCheck = [] {
@@ -829,9 +1182,16 @@ const bool kNormalTreeSelfCheck = [] {
     TreeScore worseT;
     worseT.tPassive = 2;
     assert(betterT.betterThan(worseT));
+
+    assert(branchWeightRank(true, BranchType::A, BranchType::A) == 1);
+    assert(branchWeightRank(false, BranchType::A, BranchType::A) == 2);
+    assert(branchWeightRank(false, BranchType::A, BranchType::D) == 3);
+    assert(branchWeightRank(false, BranchType::A, BranchType::T) == 4);
+    assert(branchWeightRank(true, BranchType::T, BranchType::T) == 5);
     return true;
 }();
 
 }  // namespace
+*/
 
 }  // namespace lg

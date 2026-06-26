@@ -13,6 +13,7 @@
 #include <QAbstractItemView>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace lg {
@@ -73,7 +74,7 @@ void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateS
 AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent)
     : QWidget(parent), m_scene(scene), m_view(view) {
     auto* normalTreeGroup = new QGroupBox(tr("Normal Tree"), this);
-    auto* findBtn = new QPushButton(tr("Find Normal Tree"), normalTreeGroup);
+    auto* findBtn = new QPushButton(tr("Find All Normal Trees"), normalTreeGroup);
     auto* selectBtn = new QPushButton(tr("Select Manually"), normalTreeGroup);
     auto* clearBtn = new QPushButton(tr("Clear Highlight"), normalTreeGroup);
     connect(findBtn, &QPushButton::clicked, this, &AnalyzeWindow::runFindNormalTree);
@@ -122,6 +123,36 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     normalTreeLayout->addWidget(m_normalTreeStatus);
     normalTreeLayout->addWidget(m_manualTreePanel);
 
+    auto* validTreesGroup = new QGroupBox(tr("Valid Normal Trees"), this);
+    m_validTreesList = new QListWidget(validTreesGroup);
+    m_validTreesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    connect(m_validTreesList, &QListWidget::itemDoubleClicked, this, &AnalyzeWindow::runUseValidTree);
+    connect(m_validTreesList, &QListWidget::itemClicked, this, [this](QListWidgetItem*) {
+        const int row = m_validTreesList->currentRow();
+        if (row < 0) {
+            return;
+        }
+        m_scene->showDiscoveredNormalTree(row);
+        refreshNormalTreeSection();
+        refreshValidTreesList();
+        if (m_refreshCallback) {
+            m_refreshCallback();
+        }
+    });
+    connect(m_validTreesList, &QListWidget::itemSelectionChanged, this, [this]() {
+        m_useValidTreeBtn->setEnabled(m_validTreesList->currentRow() >= 0);
+    });
+
+    m_useValidTreeBtn = new QPushButton(tr("Use Selected"), validTreesGroup);
+    connect(m_useValidTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runUseValidTree);
+
+    auto* validTreeButtons = new QHBoxLayout;
+    validTreeButtons->addWidget(m_useValidTreeBtn);
+
+    auto* validTreesLayout = new QVBoxLayout(validTreesGroup);
+    validTreesLayout->addWidget(m_validTreesList);
+    validTreesLayout->addLayout(validTreeButtons);
+
     auto* savedTreesGroup = new QGroupBox(tr("Saved Normal Trees"), this);
     m_savedTreesList = new QListWidget(savedTreesGroup);
     m_savedTreesList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -161,14 +192,18 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->addWidget(normalTreeGroup);
+    layout->addWidget(validTreesGroup);
     layout->addWidget(savedTreesGroup);
     layout->addWidget(stateSpaceGroup);
     layout->addStretch();
 
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshValidTreesList);
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshSavedTreesList);
+    connect(m_scene, &GraphScene::discoveredNormalTreesChanged, this, &AnalyzeWindow::refreshValidTreesList);
+    connect(m_scene, &GraphScene::discoveredNormalTreesChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeValidationChanged, this,
             &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeAccepted, this, &AnalyzeWindow::refreshNormalTreeSection);
@@ -177,7 +212,27 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     connect(m_scene, &GraphScene::savedNormalTreesChanged, this, &AnalyzeWindow::refreshSavedTreesList);
 
     refreshNormalTreeSection();
+    refreshValidTreesList();
     refreshSavedTreesList();
+}
+
+void AnalyzeWindow::refreshValidTreesList() {
+    const QSignalBlocker blocker(m_validTreesList);
+    const int previousRow = m_validTreesList->currentRow();
+    m_validTreesList->clear();
+    const std::vector<lg::NormalTreeResult>& trees = m_scene->discoveredNormalTrees();
+    for (int i = 0; i < static_cast<int>(trees.size()); ++i) {
+        m_validTreesList->addItem(m_scene->discoveredNormalTreeListLabel(i));
+    }
+    if (previousRow >= 0 && previousRow < m_validTreesList->count()) {
+        m_validTreesList->setCurrentRow(previousRow);
+    } else if (m_scene->discoveredNormalTreeIndex() >= 0 &&
+               m_scene->discoveredNormalTreeIndex() < m_validTreesList->count()) {
+        m_validTreesList->setCurrentRow(m_scene->discoveredNormalTreeIndex());
+    }
+
+    const bool hasSelection = m_validTreesList->currentRow() >= 0;
+    m_useValidTreeBtn->setEnabled(hasSelection);
 }
 
 void AnalyzeWindow::refreshSavedTreesList() {
@@ -230,7 +285,7 @@ void AnalyzeWindow::refreshNormalTreeSection() {
     }
 
     if (!m_scene->normalTreeHighlightActive()) {
-        m_normalTreeStatus->setText(tr("No normal tree selected. Use Find or Select Manually."));
+        m_normalTreeStatus->setText(tr("No normal tree selected. Use Find All or Select Manually."));
         return;
     }
 
@@ -259,18 +314,37 @@ void AnalyzeWindow::refreshNormalTreeSection() {
 }
 
 void AnalyzeWindow::runFindNormalTree() {
-    const lg::NormalTreeResult result = m_scene->findNormalTree();
-    if (result.status == lg::NormalTreeResult::Status::Ok) {
+    const lg::NormalTreeEnumerationResult all = m_scene->findAllNormalTrees();
+    if (!all.trees.empty()) {
         refreshNormalTreeSection();
+        refreshValidTreesList();
         refreshSavedTreesList();
         if (m_refreshCallback) {
             m_refreshCallback();
         }
         return;
     }
+    refreshValidTreesList();
     QMessageBox::warning(this, tr("Normal Tree"),
-                         result.message.isEmpty() ? tr("Could not find a valid normal tree.")
-                                                  : result.message);
+                         all.message.isEmpty() ? tr("Could not find a valid normal tree.")
+                                               : all.message);
+}
+
+void AnalyzeWindow::runUseValidTree() {
+    const int row = m_validTreesList->currentRow();
+    if (row < 0) {
+        return;
+    }
+    if (!m_scene->showDiscoveredNormalTree(row)) {
+        QMessageBox::warning(this, tr("Normal Tree"), tr("Could not apply the selected tree."));
+        return;
+    }
+    refreshNormalTreeSection();
+    refreshValidTreesList();
+    refreshSavedTreesList();
+    if (m_refreshCallback) {
+        m_refreshCallback();
+    }
 }
 
 void AnalyzeWindow::runSelectNormalTree() {
@@ -285,6 +359,7 @@ void AnalyzeWindow::runSelectNormalTree() {
 void AnalyzeWindow::runClearNormalTree() {
     m_scene->clearNormalTreeHighlight();
     refreshNormalTreeSection();
+    refreshValidTreesList();
     refreshSavedTreesList();
     if (m_refreshCallback) {
         m_refreshCallback();

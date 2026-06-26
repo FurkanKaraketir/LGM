@@ -53,6 +53,9 @@ std::optional<std::vector<RCP<const Basic>>> solveLinearSystem(
     std::vector<std::vector<RCP<const Basic>>> matrix, std::vector<RCP<const Basic>> rhs);
 void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
                              std::unordered_map<QString, RCP<const Basic>>& stateDots);
+RCP<const Basic> rewriteForSyntheticAcrossStateDot(
+    const RCP<const Basic>& equation, const BranchItem& branch, const QString& stateSymbol,
+    const SymEngine::map_basic_basic& valueSubMap, const std::vector<QString>& timedSymbols);
 
 // --- graph ---
 
