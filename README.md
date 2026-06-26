@@ -4,6 +4,8 @@ A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branc
 
 The app targets coursework-style system dynamics (mechanical, electrical, fluid, thermal, and rotational domains) following the linear graph formulation used in MIT 2.151.
 
+**Download:** [v0.1.11](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.11) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+
 ## Features
 
 | Area | What it does |
@@ -50,13 +52,13 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.2.0`, …) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.1.11` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
-| Platform | Download |
-|----------|----------|
-| Windows | `LGM-x.y.z-win64-setup.exe` or portable zip |
-| macOS | `LGM-x.y.z-macos.dmg` |
-| Linux | `LGM-x.y.z-linux-x86_64.AppImage` |
+| Platform | Installer | Portable |
+|----------|-----------|----------|
+| Windows | `LGM-x.y.z-win64-setup.exe` | `LGM-x.y.z-win64-portable.zip` |
+| macOS | `LGM-x.y.z-macos.dmg` | `LGM-x.y.z-macos-portable.zip` |
+| Linux | `LGM-x.y.z-linux-x86_64.AppImage` | — |
 
 - Maintainer guide: [docs/releases.md](docs/releases.md)
 - In-app: **Help → Check for Updates**

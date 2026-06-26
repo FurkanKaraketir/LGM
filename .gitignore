@@ -3,3 +3,7 @@ CMakeUserPresets.json
 
 # Release artifacts
 dist/
+build/
+.vscode/
+.cursor/
+.idea/
