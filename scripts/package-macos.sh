@@ -14,13 +14,36 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
+# ponytail: ad-hoc sign only (no Apple notarization). Sign nested binaries first, not --deep on the bundle.
+sign_macos_bundle() {
+  local app="$1"
+
+  if [[ -d "$app/Contents/Frameworks" ]]; then
+    while IFS= read -r framework; do
+      local name
+      name="$(basename "$framework" .framework)"
+      if [[ -f "$framework/Versions/A/$name" ]]; then
+        codesign --force --sign - "$framework/Versions/A/$name"
+      fi
+      codesign --force --sign - "$framework"
+    done < <(find "$app/Contents/Frameworks" -depth -type d -name '*.framework')
+    find "$app/Contents/Frameworks" -type f -name '*.dylib' -exec codesign --force --sign - {} \;
+  fi
+
+  if [[ -d "$app/Contents/PlugIns" ]]; then
+    find "$app/Contents/PlugIns" -type f -name '*.dylib' -exec codesign --force --sign - {} \;
+  fi
+
+  codesign --force --sign - "$app/Contents/MacOS/LGM"
+  codesign --force --sign - "$app"
+}
+
 QT_BIN="$(dirname "$(command -v macdeployqt)")"
 "$QT_BIN/macdeployqt" "$APP" -always-overwrite
 
-# ponytail: ad-hoc sign only (no Apple notarization). Without this, Gatekeeper often
-# reports the downloaded .app as "damaged" when quarantine + unsigned bundle fail verification.
-codesign --force --deep --sign - "$APP"
+sign_macos_bundle "$APP"
 xattr -cr "$APP"
+codesign --verify --deep --strict "$APP"
 
 mkdir -p "$DIST"
 rm -rf "$STAGING" "$DMG"

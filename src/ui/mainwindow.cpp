@@ -198,6 +198,13 @@ QString objectKindLabel(GraphObjectKind kind) {
 }
 
 QString examplesDir() {
+#ifdef Q_OS_MACOS
+    const QString inResources = QDir(QCoreApplication::applicationDirPath())
+                                    .absoluteFilePath(QStringLiteral("../Resources/Examples"));
+    if (QDir(inResources).exists()) {
+        return inResources;
+    }
+#endif
     const QString besideExe =
         QCoreApplication::applicationDirPath() + QStringLiteral("/Examples");
     if (QDir(besideExe).exists()) {

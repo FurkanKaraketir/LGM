@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.1.13 LANGUAGES CXX)
+project(LGM VERSION 0.1.14 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -144,7 +144,12 @@ function(lgm_deploy_qt target)
 endfunction()
 lgm_deploy_qt(LGM)
 
+if(APPLE AND LGM_MACOS_BUNDLE)
+    set(_lgm_examples_dest "$<TARGET_BUNDLE_DIR:LGM>/Contents/Resources/Examples")
+else()
+    set(_lgm_examples_dest "$<TARGET_FILE_DIR:LGM>/Examples")
+endif()
 add_custom_command(TARGET LGM POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/Examples" "$<TARGET_FILE_DIR:LGM>/Examples"
+        "${CMAKE_SOURCE_DIR}/Examples" "${_lgm_examples_dest}"
     COMMENT "Copying example graphs")
