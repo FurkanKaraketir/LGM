@@ -47,7 +47,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -r ../wiki-out/* .
+          cp -r ../wiki-out/* . 
 
           git add -A
           if git diff --staged --quiet; then
