@@ -3,7 +3,10 @@
 #include "canvas.h"
 #include "latex_widget.h"
 #include "normal_tree.h"
+#include "trademarks.h"
 
+#include <QFile>
+#include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -19,6 +22,23 @@
 #include <algorithm>
 
 namespace lg {
+
+void exportStateSpaceMatlabScript(QWidget* parent, const StateSpaceResult& stateSpace) {
+    const QString matlab = app::matlabRegistered();
+    const QString path = QFileDialog::getSaveFileName(
+        parent, QObject::tr("Export %1 Script").arg(matlab), QStringLiteral("model.m"),
+        QObject::tr("%1 Script (*.m);;All Files (*)").arg(matlab));
+    if (path.isEmpty()) {
+        return;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(parent, QObject::tr("Export %1 Script").arg(matlab),
+                             QObject::tr("Could not write %1.").arg(path));
+        return;
+    }
+    file.write(generateMatlabScript(stateSpace).toUtf8());
+}
 
 void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateSpaceResult& stateSpace) {
     auto addSection = [layout, parent](const QString& title, const QStringList& lines) {
@@ -186,6 +206,15 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     auto* stateSpaceGroup = new QGroupBox(tr("State Space"), this);
     auto* computeBtn = new QPushButton(tr("Compute State Space"), stateSpaceGroup);
     connect(computeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runComputeStateSpace);
+    m_exportMatlabBtn = new QPushButton(tr("Export %1 Script").arg(app::matlabRegistered()), stateSpaceGroup);
+    m_exportMatlabBtn->setEnabled(false);
+    connect(m_exportMatlabBtn, &QPushButton::clicked, this, [this]() {
+        lg::exportStateSpaceMatlabScript(this, m_scene->lastStateSpaceResult());
+    });
+    auto* stateSpaceButtons = new QHBoxLayout;
+    stateSpaceButtons->addWidget(computeBtn);
+    stateSpaceButtons->addWidget(m_exportMatlabBtn);
+    stateSpaceButtons->addStretch();
 
     auto* outputsLabel = new QLabel(tr("Output variables (C and D matrices):"), stateSpaceGroup);
     outputsLabel->setWordWrap(true);
@@ -209,7 +238,7 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
         new QLabel(tr("Results appear in the State Space panel below."), stateSpaceGroup);
     stateSpaceHint->setWordWrap(true);
     auto* stateSpaceLayout = new QVBoxLayout(stateSpaceGroup);
-    stateSpaceLayout->addWidget(computeBtn);
+    stateSpaceLayout->addLayout(stateSpaceButtons);
     stateSpaceLayout->addWidget(outputsLabel);
     stateSpaceLayout->addLayout(outputButtons);
     stateSpaceLayout->addWidget(m_outputVariablesList);
@@ -227,6 +256,7 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshValidTreesList);
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshOutputVariablesList);
+    connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshExportMatlabButton);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::discoveredNormalTreesChanged, this, &AnalyzeWindow::refreshValidTreesList);
@@ -242,6 +272,16 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     refreshValidTreesList();
     refreshSavedTreesList();
     refreshOutputVariablesList();
+    refreshExportMatlabButton();
+}
+
+void AnalyzeWindow::refreshExportMatlabButton() {
+    if (!m_exportMatlabBtn) {
+        return;
+    }
+    const lg::StateSpaceResult& result = m_scene->lastStateSpaceResult();
+    m_exportMatlabBtn->setEnabled(result.status == lg::StateSpaceResult::Status::Ok
+                                  && !result.matrices.A.empty());
 }
 
 void AnalyzeWindow::refreshOutputVariablesList() {
@@ -504,6 +544,7 @@ void AnalyzeWindow::runUseSavedTree() {
 void AnalyzeWindow::runComputeStateSpace() {
     const lg::StateSpaceResult result = m_scene->computeStateSpaceRep();
     if (result.status == lg::StateSpaceResult::Status::Ok) {
+        refreshExportMatlabButton();
         emit stateSpaceComputed();
         if (m_refreshCallback) {
             m_refreshCallback();

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.2.0 LANGUAGES CXX)
+project(LGM VERSION 0.2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -83,6 +83,7 @@ add_executable(LGM WIN32
     src/model/state_space_eliminate.cpp
     src/model/state_space_graph.cpp
     src/model/state_space_latex.cpp
+    src/model/state_space_matlab.cpp
     src/model/state_space_sym.cpp
     src/ui/latex_widget.cpp
     src/ui/latex_widget.h
@@ -124,6 +125,7 @@ target_link_libraries(LGM PRIVATE
     JKQTPlotter6::JKQTMathText6
 )
 target_include_directories(LGM PRIVATE
+    src
     src/canvas
     src/model
     src/ui

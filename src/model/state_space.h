@@ -16,6 +16,16 @@ struct GraphOutputVariable {
     QString label;
 };
 
+struct StateSpaceMatrices {
+    std::vector<QStringList> A;
+    std::vector<QStringList> B;
+    std::vector<QStringList> E;
+    std::vector<QStringList> C;
+    std::vector<QStringList> D;
+    std::vector<QStringList> F;
+    QStringList parameters;
+};
+
 struct StateSpaceResult {
     enum class Status { Ok, NeedNormalTree, Unsupported, SymbolicError, GraphError };
 
@@ -33,7 +43,10 @@ struct StateSpaceResult {
     QStringList outputEquations;
     QString matrixForm;
     QString outputMatrixForm;
+    StateSpaceMatrices matrices;
 };
+
+QString generateMatlabScript(const StateSpaceResult& result);
 
 std::vector<GraphOutputVariable> collectOutputVariableChoices(
     const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches);

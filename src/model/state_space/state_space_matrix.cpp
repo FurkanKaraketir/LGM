@@ -18,6 +18,34 @@
 
 namespace lg {
 
+namespace {
+
+void trackCoeff(const ss::RCP<const ss::Basic>& coeff, std::unordered_set<QString>& parameters) {
+    ss::collectExprSymbols(coeff, parameters);
+}
+
+QStringList filterParameters(const std::unordered_set<QString>& symbols, const QStringList& states,
+                             const QStringList& inputs) {
+    QStringList params;
+    params.reserve(static_cast<int>(symbols.size()));
+    for (const QString& sym : symbols) {
+        if (states.contains(sym) || inputs.contains(sym)) {
+            continue;
+        }
+        if (sym.endsWith(QStringLiteral("_dot"))) {
+            const QString base = sym.left(sym.size() - 4);
+            if (states.contains(base) || inputs.contains(base)) {
+                continue;
+            }
+        }
+        params.push_back(sym);
+    }
+    params.sort();
+    return params;
+}
+
+}  // namespace
+
 void ssAssembleMatrix(StateSpaceContext& ctx,
                       const std::unordered_map<QString, ss::RCP<const ss::Basic>>& stateDots) {
     using SymEngine::eq;
@@ -29,6 +57,10 @@ void ssAssembleMatrix(StateSpaceContext& ctx,
         std::vector<QStringList> aRows;
         std::vector<QStringList> bRows;
         std::vector<QStringList> eRows;
+        std::vector<QStringList> aRowsMatlab;
+        std::vector<QStringList> bRowsMatlab;
+        std::vector<QStringList> eRowsMatlab;
+        std::unordered_set<QString> parameterSymbols;
         QStringList uEntries;
         QStringList uDotEntries;
         xDotEntries.reserve(static_cast<int>(ctx.computedStates.size()));
@@ -51,22 +83,43 @@ void ssAssembleMatrix(StateSpaceContext& ctx,
             xDotEntries.push_back(ss::latexMathSymbol(ss::dotName(state.symbol)));
             xEntries.push_back(ss::latexMathSymbol(state.symbol));
             QStringList aRow;
+            QStringList aRowMatlab;
             aRow.reserve(static_cast<int>(ctx.computedStates.size()));
+            aRowMatlab.reserve(static_cast<int>(ctx.computedStates.size()));
             for (const ComputedState& col : ctx.computedStates) {
-                aRow.push_back(ss::latexCoeff(ss::linearCoeffRCP(rhs, ss::symOf(col.symbol))));
+                const ss::RCP<const SymEngine::Basic> coeff =
+                    ss::linearCoeffRCP(rhs, ss::symOf(col.symbol));
+                aRow.push_back(ss::latexCoeff(coeff));
+                aRowMatlab.push_back(ss::matlabCoeff(coeff));
+                trackCoeff(coeff, parameterSymbols);
             }
             aRows.push_back(aRow);
+            aRowsMatlab.push_back(aRowMatlab);
             if (!ctx.result.inputs.isEmpty()) {
                 QStringList bRow;
                 QStringList eRow;
+                QStringList bRowMatlab;
+                QStringList eRowMatlab;
                 bRow.reserve(ctx.result.inputs.size());
                 eRow.reserve(ctx.result.inputs.size());
+                bRowMatlab.reserve(ctx.result.inputs.size());
+                eRowMatlab.reserve(ctx.result.inputs.size());
                 for (const QString& input : ctx.result.inputs) {
-                    bRow.push_back(ss::latexCoeff(ss::linearCoeffRCP(rhs, ss::symOf(input))));
-                    eRow.push_back(ss::latexCoeff(ss::linearCoeffRCP(rhs, ss::symOf(ss::dotName(input)))));
+                    const ss::RCP<const SymEngine::Basic> bCoeff =
+                        ss::linearCoeffRCP(rhs, ss::symOf(input));
+                    const ss::RCP<const SymEngine::Basic> eCoeff =
+                        ss::linearCoeffRCP(rhs, ss::symOf(ss::dotName(input)));
+                    bRow.push_back(ss::latexCoeff(bCoeff));
+                    eRow.push_back(ss::latexCoeff(eCoeff));
+                    bRowMatlab.push_back(ss::matlabCoeff(bCoeff));
+                    eRowMatlab.push_back(ss::matlabCoeff(eCoeff));
+                    trackCoeff(bCoeff, parameterSymbols);
+                    trackCoeff(eCoeff, parameterSymbols);
                 }
                 bRows.push_back(bRow);
                 eRows.push_back(eRow);
+                bRowsMatlab.push_back(bRowMatlab);
+                eRowsMatlab.push_back(eRowMatlab);
             }
         }
         QString latex = QStringLiteral("$");
@@ -89,6 +142,11 @@ void ssAssembleMatrix(StateSpaceContext& ctx,
         }
         latex += QStringLiteral("$");
         ctx.result.matrixForm = latex;
+        ctx.result.matrices.A = std::move(aRowsMatlab);
+        ctx.result.matrices.B = std::move(bRowsMatlab);
+        ctx.result.matrices.E = std::move(eRowsMatlab);
+        ctx.result.matrices.parameters =
+            filterParameters(parameterSymbols, ctx.result.stateVariables, ctx.result.inputs);
         ss::ssLog(QStringLiteral("matrix_form"), latex);
     }
 
@@ -260,7 +318,14 @@ bool ssAssembleOutputs(
     std::vector<QStringList> cRows;
     std::vector<QStringList> dRows;
     std::vector<QStringList> fRows;
+    std::vector<QStringList> cRowsMatlab;
+    std::vector<QStringList> dRowsMatlab;
+    std::vector<QStringList> fRowsMatlab;
     QStringList yEntries;
+    std::unordered_set<QString> parameterSymbols;
+    for (const QString& sym : ctx.result.matrices.parameters) {
+        parameterSymbols.insert(sym);
+    }
     cRows.reserve(ctx.requestedOutputs.size());
     dRows.reserve(ctx.requestedOutputs.size());
     fRows.reserve(ctx.requestedOutputs.size());
@@ -307,24 +372,44 @@ bool ssAssembleOutputs(
 
         yEntries.push_back(ss::latexMathSymbol(label));
         QStringList cRow;
+        QStringList cRowMatlab;
         cRow.reserve(static_cast<int>(ctx.computedStates.size()));
+        cRowMatlab.reserve(static_cast<int>(ctx.computedStates.size()));
         for (const ComputedState& state : ctx.computedStates) {
-            cRow.push_back(ss::latexCoeff(ss::linearCoeffRCP(expr, ss::symOf(state.symbol))));
+            const ss::RCP<const SymEngine::Basic> coeff =
+                ss::linearCoeffRCP(expr, ss::symOf(state.symbol));
+            cRow.push_back(ss::latexCoeff(coeff));
+            cRowMatlab.push_back(ss::matlabCoeff(coeff));
+            trackCoeff(coeff, parameterSymbols);
         }
         cRows.push_back(cRow);
+        cRowsMatlab.push_back(cRowMatlab);
 
         if (!ctx.result.inputs.isEmpty()) {
             QStringList dRow;
             QStringList fRow;
+            QStringList dRowMatlab;
+            QStringList fRowMatlab;
             dRow.reserve(ctx.result.inputs.size());
             fRow.reserve(ctx.result.inputs.size());
+            dRowMatlab.reserve(ctx.result.inputs.size());
+            fRowMatlab.reserve(ctx.result.inputs.size());
             for (const QString& input : ctx.result.inputs) {
-                dRow.push_back(ss::latexCoeff(ss::linearCoeffRCP(expr, ss::symOf(input))));
-                fRow.push_back(
-                    ss::latexCoeff(ss::linearCoeffRCP(expr, ss::symOf(ss::dotName(input)))));
+                const ss::RCP<const SymEngine::Basic> dCoeff =
+                    ss::linearCoeffRCP(expr, ss::symOf(input));
+                const ss::RCP<const SymEngine::Basic> fCoeff =
+                    ss::linearCoeffRCP(expr, ss::symOf(ss::dotName(input)));
+                dRow.push_back(ss::latexCoeff(dCoeff));
+                fRow.push_back(ss::latexCoeff(fCoeff));
+                dRowMatlab.push_back(ss::matlabCoeff(dCoeff));
+                fRowMatlab.push_back(ss::matlabCoeff(fCoeff));
+                trackCoeff(dCoeff, parameterSymbols);
+                trackCoeff(fCoeff, parameterSymbols);
             }
             dRows.push_back(dRow);
             fRows.push_back(fRow);
+            dRowsMatlab.push_back(dRowMatlab);
+            fRowsMatlab.push_back(fRowMatlab);
         }
 
         const QString rhs =
@@ -353,6 +438,11 @@ bool ssAssembleOutputs(
     }
     latex += QStringLiteral("$");
     ctx.result.outputMatrixForm = latex;
+    ctx.result.matrices.C = std::move(cRowsMatlab);
+    ctx.result.matrices.D = std::move(dRowsMatlab);
+    ctx.result.matrices.F = std::move(fRowsMatlab);
+    ctx.result.matrices.parameters =
+        filterParameters(parameterSymbols, ctx.result.stateVariables, ctx.result.inputs);
     ss::ssLog(QStringLiteral("output_matrix_form"), latex);
     return true;
 }

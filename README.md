@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.2.0](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.0) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.2.1](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.1) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 ## Features
 
@@ -14,7 +14,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 |------|----------------|
 | [Canvas editor](docs/canvas.md) | CAD-style graph drawing, selection, undo/redo, `.lgm` files |
 | [Graph model](docs/model.md) | Branch types (A/T/D), domains, elemental equations, two-ports |
-| [Analysis](docs/analysis.md) | Normal-tree search, manual tree selection, state-space derivation |
+| [Analysis](docs/analysis.md) | Normal-tree search, manual tree selection, state-space derivation, MATLAB® export |
 | [Examples](Examples/README.md) | Sample `.lgm` graphs (motor, RLC, transformer cascade) |
 
 In-app guides: **Help → Guides** (Quick Start, Multiple Normal Tree Finding, State-Space Derivation).
@@ -54,7 +54,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.2.0` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.2.1` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
@@ -72,8 +72,13 @@ Tagged releases (`v0.2.0` is the latest) are built for Windows, macOS, and Linux
 3. Edit names, constants, and branch types in the **Properties** dock.
 4. Open **Analyze** → find or select a **normal tree** → (optional) check **output variables** → **Compute State Space**.
 5. Review state equations (`ẋ = Ax + Bu`) and, when outputs were selected, output equations (`y = Cx + Du`) in the **State Space** dock (LaTeX via JKQtMathText).
+6. **Export MATLAB® Script** (Analyze dock) saves `A`, `B`, `C`, `D`, and related matrices as a `.m` file for MATLAB®.
 
 See [docs/canvas.md](docs/canvas.md) for controls and [docs/analysis.md](docs/analysis.md) for the analysis pipeline.
+
+---
+
+MATLAB and Simulink are registered trademarks of The MathWorks, Inc. See [mathworks.com/trademarks](https://www.mathworks.com/company/trust-center/trademarks.html) for additional trademarks.
 
 ## Project layout
 

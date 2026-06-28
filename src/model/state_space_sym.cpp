@@ -5,9 +5,11 @@
 #include <symengine/add.h>
 #include <symengine/integer.h>
 #include <symengine/mul.h>
+#include <symengine/pow.h>
+#include <symengine/rational.h>
+#include <symengine/symbol.h>
 #include <symengine/parser.h>
 #include <symengine/subs.h>
-#include <symengine/symbol.h>
 
 #include <QDebug>
 
@@ -67,6 +69,47 @@ RCP<const Basic> symOf(const QString& name) {
 
 QString exprText(const RCP<const Basic>& expr) {
     return QString::fromStdString(SymEngine::str(*expr));
+}
+
+QString matlabCoeff(const RCP<const Basic>& coeff) {
+    if (eq(*coeff, *integer(0))) {
+        return QStringLiteral("0");
+    }
+    return exprText(coeff).replace(QStringLiteral("**"), QStringLiteral("^"));
+}
+
+void collectExprSymbols(const RCP<const Basic>& expr, std::unordered_set<QString>& out) {
+    using SymEngine::Add;
+    using SymEngine::Integer;
+    using SymEngine::Mul;
+    using SymEngine::Pow;
+    using SymEngine::Rational;
+    using SymEngine::Symbol;
+    using SymEngine::down_cast;
+    if (SymEngine::is_a<Symbol>(*expr)) {
+        out.insert(QString::fromStdString(down_cast<const Symbol&>(*expr).get_name()));
+        return;
+    }
+    if (SymEngine::is_a<Integer>(*expr) || SymEngine::is_a<Rational>(*expr)) {
+        return;
+    }
+    if (SymEngine::is_a<Add>(*expr)) {
+        for (const RCP<const Basic>& arg : down_cast<const Add&>(*expr).get_args()) {
+            collectExprSymbols(arg, out);
+        }
+        return;
+    }
+    if (SymEngine::is_a<Mul>(*expr)) {
+        for (const RCP<const Basic>& arg : down_cast<const Mul&>(*expr).get_args()) {
+            collectExprSymbols(arg, out);
+        }
+        return;
+    }
+    if (SymEngine::is_a<Pow>(*expr)) {
+        const Pow& powExpr = down_cast<const Pow&>(*expr);
+        collectExprSymbols(powExpr.get_base(), out);
+        collectExprSymbols(powExpr.get_exp(), out);
+    }
 }
 
 QString dotName(const QString& base) {

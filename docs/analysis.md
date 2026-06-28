@@ -50,6 +50,12 @@ Before step 10, check observables under **Output variables (C and D matrices)** 
 
 Results appear in the **State Space** dock: elemental, continuity, compatibility, state equations, state matrix form, and (when outputs are selected) output equations plus the **C** / **D** matrix form (JKQtMathText).
 
+### MATLAB® export
+
+After a successful **Compute State Space**, use **Export MATLAB® Script** in the Analyze dock to save `A`, `B`, `C`, `D`, and optional `E` / `F` matrices as a `.m` script. The file is intended for use with [MATLAB®](https://www.mathworks.com/products/matlab.html) from The MathWorks, Inc.
+
+MATLAB and Simulink are registered trademarks of The MathWorks, Inc. See [mathworks.com/trademarks](https://www.mathworks.com/company/trust-center/trademarks.html) for additional trademarks.
+
 ### Status codes
 
 | Result | Meaning |

@@ -27,6 +27,7 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    void openDocument(const QString& path);
 
 protected:
     void closeEvent(QCloseEvent* event) override;

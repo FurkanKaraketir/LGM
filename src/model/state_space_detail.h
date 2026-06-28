@@ -26,6 +26,8 @@ void ssLogExprs(const QString& label, const std::vector<RCP<const Basic>>& exprs
 std::optional<RCP<const Basic>> trySymOf(const QString& name);
 RCP<const Basic> symOf(const QString& name);
 QString exprText(const RCP<const Basic>& expr);
+QString matlabCoeff(const RCP<const Basic>& coeff);
+void collectExprSymbols(const RCP<const Basic>& expr, std::unordered_set<QString>& out);
 QString dotName(const QString& base);
 RCP<const Basic> dotSym(const QString& base);
 

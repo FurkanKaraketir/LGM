@@ -82,6 +82,10 @@ void MainWindow::fileOpenExample(const QString& path) {
     loadDocumentFromPath(path, true);
 }
 
+void MainWindow::openDocument(const QString& path) {
+    loadDocumentFromPath(path);
+}
+
 bool MainWindow::loadDocumentFromPath(const QString& path, bool fromExamplesMenu) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {

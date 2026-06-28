@@ -16,6 +16,7 @@ class QVBoxLayout;
 namespace lg {
 
 void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateSpaceResult& stateSpace);
+void exportStateSpaceMatlabScript(QWidget* parent, const StateSpaceResult& stateSpace);
 
 }  // namespace lg
 
@@ -45,6 +46,7 @@ private:
     void syncOutputVariablesFromList();
     void setAllOutputVariablesChecked(bool checked);
     void runComputeStateSpace();
+    void refreshExportMatlabButton();
 
     GraphScene* m_scene = nullptr;
     GraphView* m_view = nullptr;
@@ -59,4 +61,5 @@ private:
     QPushButton* m_saveTreeBtn = nullptr;
     QPushButton* m_removeTreeBtn = nullptr;
     QListWidget* m_outputVariablesList = nullptr;
+    QPushButton* m_exportMatlabBtn = nullptr;
 };

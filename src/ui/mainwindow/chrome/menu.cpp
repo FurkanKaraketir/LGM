@@ -13,6 +13,7 @@ using namespace mw;
 #include "normal_tree.h"
 #include "state_space.h"
 #include "tool_icons.h"
+#include "trademarks.h"
 
 #include <QActionGroup>
 #include <QApplication>
@@ -522,8 +523,9 @@ void MainWindow::buildMenuBar() {
                "<p>%2</p>"
                "<p>%3</p>"
                "<p>%4</p>"
-               "<p>Copyright &copy; %5 Furkan Karaketir</p>"
-               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%6</a></p>")
+               "<p>%5</p>"
+               "<p>Copyright &copy; %6 Furkan Karaketir</p>"
+               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%7</a></p>")
                 .arg(tr("Linear graph modeling and state-space analysis."),
                      tr("Version %1").arg(QApplication::applicationVersion()),
                      tr("This program is free software; you can redistribute it and/or modify "
@@ -537,6 +539,7 @@ void MainWindow::buildMenuBar() {
                         "112&ndash;121. "
                         "<a href=\"https://doi.org/10.13140/RG.2.2.29940.96647\">"
                         "doi:10.13140/RG.2.2.29940.96647</a>."),
+                     app::mathWorksTrademarkNotice(),
                      QString::number(QDate::currentDate().year()),
                      tr("GNU General Public License v3.0")));
     });

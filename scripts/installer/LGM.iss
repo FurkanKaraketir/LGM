@@ -1,11 +1,11 @@
 ; LGM Windows installer (Inno Setup 6)
-; Build: ISCC.exe /DAppVersion=0.2.0 /DStageDir=C:\path\to\staged\files LGM.iss
+; Build: ISCC.exe /DAppVersion=0.2.1 /DStageDir=C:\path\to\staged\files LGM.iss
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 #ifndef StageDir
-  #define StageDir "..\..\dist\LGM-0.2.0-win64"
+  #define StageDir "..\..\dist\LGM-0.2.1-win64"
 #endif
 #ifndef RepoRoot
   #define RepoRoot "..\.."
@@ -40,6 +40,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "assocfiles"; Description: "Associate .lgm files with LGM"; GroupDescription: "File associations:"; Flags: unchecked
+
+[Registry]
+Root: HKCR; Subkey: ".lgm"; ValueType: string; ValueName: ""; ValueData: "LGMFile"; Flags: uninsdeletevalue; Tasks: assocfiles
+Root: HKCR; Subkey: "LGMFile"; ValueType: string; ValueName: ""; ValueData: "Linear Graph Model"; Flags: uninsdeletekey; Tasks: assocfiles
+Root: HKCR; Subkey: "LGMFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\LGM.exe,0"; Tasks: assocfiles
+Root: HKCR; Subkey: "LGMFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\LGM.exe"" ""%1"""; Tasks: assocfiles
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

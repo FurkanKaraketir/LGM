@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QIcon>
 #include <QTextStream>
 
@@ -55,6 +56,19 @@ static int runAnalyzeCli(const QString& path, const QStringList& outputs) {
     return 0;
 }
 
+static QString openPathFromArgs(const QStringList& args) {
+    for (const QString& arg : args) {
+        if (arg.startsWith(QLatin1Char('-'))) {
+            continue;
+        }
+        const QFileInfo info(arg);
+        if (info.isFile() && info.suffix().compare(QStringLiteral("lgm"), Qt::CaseInsensitive) == 0) {
+            return info.absoluteFilePath();
+        }
+    }
+    return {};
+}
+
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("LGM"));
@@ -76,6 +90,11 @@ int main(int argc, char* argv[]) {
 
     MainWindow window;
     window.showMaximized();
+
+    const QString openPath = openPathFromArgs(app.arguments().mid(1));
+    if (!openPath.isEmpty()) {
+        window.openDocument(openPath);
+    }
 
     return app.exec();
 }
