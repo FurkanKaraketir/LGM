@@ -9,3 +9,7 @@ build/
 .idea/
 vcpkg_installed/
 build-debug/
+
+# Generated wiki sync output (scripts/sync-wiki.py)
+wiki-out/
+wiki-repo-push/

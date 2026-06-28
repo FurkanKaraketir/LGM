@@ -8,6 +8,8 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 **Download:** [v0.2.3](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.3) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
+**Documentation:** [GitHub Wiki](https://github.com/FurkanKaraketir/LGM/wiki) — user guides, theory, and developer reference (synced from `docs/`).
+
 ## Features
 
 | Area | What it does |
