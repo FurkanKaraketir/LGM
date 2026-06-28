@@ -306,7 +306,7 @@ void applySourceThroughNaming(BranchItem* branch) {
     if (branch->branchType() != BranchType::T && branch->branchType() != BranchType::A) {
         return;
     }
-    if (!isAutoThroughName(branch->name()) && !isAutoPassiveThroughName(*branch)) {
+    if (!isAutoThroughName(branch->name()) && !isAutoPassiveThroughName(branch->name())) {
         return;
     }
     branch->setName(branchSourceInputSymbol(*branch));

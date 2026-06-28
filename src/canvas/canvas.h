@@ -674,6 +674,12 @@ public:
 
     const lg::StateSpaceResult& lastStateSpaceResult() const { return m_lastStateSpaceResult; }
 
+    const QStringList& outputVariables() const { return m_outputVariables; }
+
+    void setOutputVariables(const QStringList& symbols) { m_outputVariables = symbols; }
+
+    std::vector<lg::GraphOutputVariable> availableOutputVariables() const;
+
     void clearDocument();
 
     QByteArray documentToJson() const;
@@ -763,6 +769,8 @@ private:
     int m_discoveredNormalTreeIndex = -1;
 
     lg::StateSpaceResult m_lastStateSpaceResult;
+
+    QStringList m_outputVariables;
 
     struct ManualNormalTreeBackup {
         bool highlightActive = false;

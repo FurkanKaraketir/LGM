@@ -34,6 +34,15 @@ QString branchThroughSymbol(const BranchItem& branch) {
 }
 
 QString syntheticAcrossSymbolName(const BranchItem& branch) {
+    if (branch.isActive()) {
+        const QString name = branch.name().trimmed();
+        if (isValidVariableSymbol(name)) {
+            const QString candidate = name + QStringLiteral("_across");
+            if (isValidVariableSymbol(candidate)) {
+                return candidate;
+            }
+        }
+    }
     const QString k = branch.elementConstant().trimmed();
     if (!k.isEmpty() && k != QStringLiteral("1") && isValidVariableSymbol(k)) {
         const QString candidate = k + QStringLiteral("_across");

@@ -16,6 +16,8 @@
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace lg {
 
 void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateSpaceResult& stateSpace) {
@@ -30,7 +32,7 @@ void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateS
         layout->addWidget(header);
         for (const QString& line : lines) {
             auto* label = new QLabel(line, parent);
-            label->setWordWrap(true);
+            label->setWordWrap(false);
             label->setTextInteractionFlags(Qt::TextSelectableByMouse);
             layout->addWidget(label);
         }
@@ -64,6 +66,23 @@ void populateStateSpaceLayout(QVBoxLayout* layout, QWidget* parent, const StateS
         header->setFont(font);
         layout->addWidget(header);
         layout->addWidget(createLatexDisplayWidget(stateSpace.matrixForm, parent));
+    }
+
+    if (!stateSpace.outputs.isEmpty()) {
+        const QString outputSummary =
+            stateSpace.outputLabels.isEmpty() ? stateSpace.outputs.join(QStringLiteral(", "))
+                                              : stateSpace.outputLabels.join(QStringLiteral(", "));
+        addSection(QObject::tr("Outputs"), {outputSummary});
+    }
+    addSection(QObject::tr("Output equations"), stateSpace.outputEquations);
+
+    if (!stateSpace.outputMatrixForm.isEmpty()) {
+        auto* header = new QLabel(QObject::tr("Output matrix form"), parent);
+        QFont font = header->font();
+        font.setBold(true);
+        header->setFont(font);
+        layout->addWidget(header);
+        layout->addWidget(createLatexDisplayWidget(stateSpace.outputMatrixForm, parent));
     }
 
     layout->addStretch();
@@ -139,41 +158,26 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
             m_refreshCallback();
         }
     });
-    connect(m_validTreesList, &QListWidget::itemSelectionChanged, this, [this]() {
-        m_useValidTreeBtn->setEnabled(m_validTreesList->currentRow() >= 0);
-    });
-
-    m_useValidTreeBtn = new QPushButton(tr("Use Selected"), validTreesGroup);
-    connect(m_useValidTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runUseValidTree);
-
-    auto* validTreeButtons = new QHBoxLayout;
-    validTreeButtons->addWidget(m_useValidTreeBtn);
 
     auto* validTreesLayout = new QVBoxLayout(validTreesGroup);
     validTreesLayout->addWidget(m_validTreesList);
-    validTreesLayout->addLayout(validTreeButtons);
 
     auto* savedTreesGroup = new QGroupBox(tr("Saved Normal Trees"), this);
     m_savedTreesList = new QListWidget(savedTreesGroup);
     m_savedTreesList->setSelectionMode(QAbstractItemView::SingleSelection);
     connect(m_savedTreesList, &QListWidget::itemDoubleClicked, this, &AnalyzeWindow::runUseSavedTree);
     connect(m_savedTreesList, &QListWidget::itemSelectionChanged, this, [this]() {
-        const bool hasSelection = m_savedTreesList->currentRow() >= 0;
-        m_removeTreeBtn->setEnabled(hasSelection);
-        m_useTreeBtn->setEnabled(hasSelection);
+        m_removeTreeBtn->setEnabled(m_savedTreesList->currentRow() >= 0);
     });
 
     m_saveTreeBtn = new QPushButton(tr("Save Current"), savedTreesGroup);
     m_removeTreeBtn = new QPushButton(tr("Remove"), savedTreesGroup);
-    m_useTreeBtn = new QPushButton(tr("Use Selected"), savedTreesGroup);
     connect(m_saveTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runSaveCurrentTree);
     connect(m_removeTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runRemoveSavedTree);
-    connect(m_useTreeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runUseSavedTree);
 
     auto* savedTreeButtons = new QHBoxLayout;
     savedTreeButtons->addWidget(m_saveTreeBtn);
     savedTreeButtons->addWidget(m_removeTreeBtn);
-    savedTreeButtons->addWidget(m_useTreeBtn);
 
     auto* savedTreesLayout = new QVBoxLayout(savedTreesGroup);
     savedTreesLayout->addWidget(m_savedTreesList);
@@ -182,11 +186,33 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     auto* stateSpaceGroup = new QGroupBox(tr("State Space"), this);
     auto* computeBtn = new QPushButton(tr("Compute State Space"), stateSpaceGroup);
     connect(computeBtn, &QPushButton::clicked, this, &AnalyzeWindow::runComputeStateSpace);
+
+    auto* outputsLabel = new QLabel(tr("Output variables (C and D matrices):"), stateSpaceGroup);
+    outputsLabel->setWordWrap(true);
+    auto* selectAllOutputsBtn = new QPushButton(tr("Select All"), stateSpaceGroup);
+    auto* clearAllOutputsBtn = new QPushButton(tr("Clear All"), stateSpaceGroup);
+    connect(selectAllOutputsBtn, &QPushButton::clicked, this,
+            [this]() { setAllOutputVariablesChecked(true); });
+    connect(clearAllOutputsBtn, &QPushButton::clicked, this,
+            [this]() { setAllOutputVariablesChecked(false); });
+    auto* outputButtons = new QHBoxLayout;
+    outputButtons->addWidget(selectAllOutputsBtn);
+    outputButtons->addWidget(clearAllOutputsBtn);
+    outputButtons->addStretch();
+
+    m_outputVariablesList = new QListWidget(stateSpaceGroup);
+    m_outputVariablesList->setSelectionMode(QAbstractItemView::NoSelection);
+    connect(m_outputVariablesList, &QListWidget::itemChanged, this,
+            &AnalyzeWindow::syncOutputVariablesFromList);
+
     auto* stateSpaceHint =
         new QLabel(tr("Results appear in the State Space panel below."), stateSpaceGroup);
     stateSpaceHint->setWordWrap(true);
     auto* stateSpaceLayout = new QVBoxLayout(stateSpaceGroup);
     stateSpaceLayout->addWidget(computeBtn);
+    stateSpaceLayout->addWidget(outputsLabel);
+    stateSpaceLayout->addLayout(outputButtons);
+    stateSpaceLayout->addWidget(m_outputVariablesList);
     stateSpaceLayout->addWidget(stateSpaceHint);
 
     auto* layout = new QVBoxLayout(this);
@@ -200,6 +226,7 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshValidTreesList);
     connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshSavedTreesList);
+    connect(m_scene, &GraphScene::graphChanged, this, &AnalyzeWindow::refreshOutputVariablesList);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::normalTreeHighlightChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::discoveredNormalTreesChanged, this, &AnalyzeWindow::refreshValidTreesList);
@@ -214,6 +241,65 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     refreshNormalTreeSection();
     refreshValidTreesList();
     refreshSavedTreesList();
+    refreshOutputVariablesList();
+}
+
+void AnalyzeWindow::refreshOutputVariablesList() {
+    if (!m_outputVariablesList) {
+        return;
+    }
+    const QSignalBlocker blocker(m_outputVariablesList);
+    const std::vector<lg::GraphOutputVariable> choices = m_scene->availableOutputVariables();
+    QStringList selected = m_scene->outputVariables();
+    QStringList validSelected;
+    validSelected.reserve(selected.size());
+    for (const QString& symbol : selected) {
+        const bool stillAvailable = std::any_of(
+            choices.begin(), choices.end(),
+            [&](const lg::GraphOutputVariable& choice) { return choice.symbol == symbol; });
+        if (stillAvailable) {
+            validSelected.push_back(symbol);
+        }
+    }
+    if (validSelected != selected) {
+        m_scene->setOutputVariables(validSelected);
+        selected = validSelected;
+    }
+    m_outputVariablesList->clear();
+    for (const lg::GraphOutputVariable& choice : choices) {
+        auto* item = new QListWidgetItem(choice.label, m_outputVariablesList);
+        item->setData(Qt::UserRole, choice.symbol);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(selected.contains(choice.symbol) ? Qt::Checked : Qt::Unchecked);
+    }
+}
+
+void AnalyzeWindow::syncOutputVariablesFromList() {
+    if (!m_outputVariablesList) {
+        return;
+    }
+    QStringList selected;
+    for (int row = 0; row < m_outputVariablesList->count(); ++row) {
+        QListWidgetItem* item = m_outputVariablesList->item(row);
+        if (item && item->checkState() == Qt::Checked) {
+            selected.push_back(item->data(Qt::UserRole).toString());
+        }
+    }
+    m_scene->setOutputVariables(selected);
+}
+
+void AnalyzeWindow::setAllOutputVariablesChecked(bool checked) {
+    if (!m_outputVariablesList) {
+        return;
+    }
+    const QSignalBlocker blocker(m_outputVariablesList);
+    const Qt::CheckState state = checked ? Qt::Checked : Qt::Unchecked;
+    for (int row = 0; row < m_outputVariablesList->count(); ++row) {
+        if (QListWidgetItem* item = m_outputVariablesList->item(row)) {
+            item->setCheckState(state);
+        }
+    }
+    syncOutputVariablesFromList();
 }
 
 void AnalyzeWindow::refreshValidTreesList() {
@@ -230,9 +316,6 @@ void AnalyzeWindow::refreshValidTreesList() {
                m_scene->discoveredNormalTreeIndex() < m_validTreesList->count()) {
         m_validTreesList->setCurrentRow(m_scene->discoveredNormalTreeIndex());
     }
-
-    const bool hasSelection = m_validTreesList->currentRow() >= 0;
-    m_useValidTreeBtn->setEnabled(hasSelection);
 }
 
 void AnalyzeWindow::refreshSavedTreesList() {
@@ -255,7 +338,6 @@ void AnalyzeWindow::refreshSavedTreesList() {
 
     const bool hasSelection = m_savedTreesList->currentRow() >= 0;
     m_removeTreeBtn->setEnabled(hasSelection);
-    m_useTreeBtn->setEnabled(hasSelection);
 }
 
 void AnalyzeWindow::refreshNormalTreeSection() {

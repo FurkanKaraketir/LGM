@@ -44,8 +44,11 @@ Pipeline (`lg::computeStateSpace` in `src/model/state_space/state_space.cpp`):
 7. Solve for `state_dot` from storage elementals
 8. Eliminate remaining branch/node symbols
 9. Emit state equations and LaTeX `ẋ = A x + B u [+ E u̇]`
+10. For each **output variable** selected in the Analyze panel, emit scalar output equations and LaTeX `y = C x + D u [+ F u̇]`
 
-Results appear in the **State Space** dock: elemental, continuity, compatibility, and final state equations plus matrix form (JKQtMathText).
+Before step 10, check observables under **Output variables (C and D matrices)** in the Analyze dock (**Select All** / **Clear All** shortcuts are available). Recompute after changing the selection.
+
+Results appear in the **State Space** dock: elemental, continuity, compatibility, state equations, state matrix form, and (when outputs are selected) output equations plus the **C** / **D** matrix form (JKQtMathText).
 
 ### Status codes
 
@@ -69,6 +72,6 @@ Also available in the repository (with source links): [docs/state_space_from_nor
 
 1. Open [Examples/Motor.lgm](../Examples/Motor.lgm) — PM DC motor with electrical/mechanical domains.
 2. **Find Normal Tree** — expect states such as `OmegaJ`, `i_L` and input `Vs1`.
-3. **Compute State Space** — coupled motor dynamics through `Ka`, `J`, `L`, `R`, `B`.
+3. **Compute State Space** — coupled motor dynamics through `Ka`, `J`, `L`, `R`, `B`; optionally check `OmegaJ`, `i_L`, or other outputs in Analyze to review **C** and **D** matrices.
 
 Other samples: [Examples/README.md](../Examples/README.md).

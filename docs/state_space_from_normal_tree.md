@@ -40,7 +40,8 @@ flowchart TD
     replacements --> stateDots[Solve state_dot from elementals]
     stateDots --> eliminate[Iterative elimination incl node across]
     eliminate --> coupling[resolveStateDotCoupling and refine_pass]
-    coupling --> matrix[Extract A B E and LaTeX]
+    coupling --> stateMatrix[Extract A B E and LaTeX]
+    stateMatrix --> outputMatrix[Extract C D F if outputs selected]
 ```
 
 The pipeline in `computeStateSpaceImpl`:
@@ -51,6 +52,7 @@ The pipeline in `computeStateSpaceImpl`:
 4. Adds **across-only** two-port bindings (`two_port_across_bind`), then **port-span inertia** junctions (`port_span_junction`).
 5. Optionally reflects co-tree compliance through transformer chains (`mass_spring_reflect`).
 6. Solves storage elementals for `state_dot`, then **eliminates** remaining node/branch symbols (with coupling resolve and refine passes).
+7. Builds state matrix form `ẋ = A x + B u [+ E u̇]`, then — when output variables are selected in the **Analyze** panel — output matrix form `y = C x + D u [+ F u̇]`.
 
 **Important:** `recordConstraint` never overwrites a symbol already set by continuity or compatibility. Two-port **flow** relations (`i1 = −Ka·T2`) are **not** duplicated into `replacements` — they remain in the elemental set only, avoiding conflicts such as overwriting `i1 = i_L`.
 
@@ -259,13 +261,30 @@ Both depend only on `{OmegaJ, i_L, Vs1}` → validation passes.
 
 ---
 
-### Phase I — Matrix form and output
+### Phase I — State matrix form
 
-**Where:** end of `computeStateSpaceImpl` — `state_equation`, `matrix_form`, `ok`.
+**Where:** [`ssAssembleMatrix`](../src/model/state_space/state_space_matrix.cpp) — `state_equation`, `matrix_form`.
 
 Builds `stateEquations` and LaTeX `ẋ = A x + B u [+ E u̇]`.
 
 **Motor.lgm:** succeeds (`status: Ok`, state order 2).
+
+---
+
+### Phase J — Output equations (C and D matrices)
+
+**Where:** [`ssAssembleOutputs`](../src/model/state_space/state_space_matrix.cpp) — runs after Phase I when the user selects one or more **output variables** in the **Analyze** dock (node across, branch through, and other graph observables).
+
+For each selected output symbol, the implementation:
+
+1. Seeds an expression from replacements, branch elementals, or constitutive relations.
+2. Eliminates non-state symbols using the same reduction machinery as state-dot derivation.
+3. Verifies the result is **linear** in states, inputs, and input derivatives.
+4. Appends a scalar `output = …` equation and fills rows of **C**, **D**, and (when needed) **F**.
+
+LaTeX output: `y = C x + D u [+ F u̇]` (`output_matrix_form` log tag). If no outputs are selected, this phase is skipped and the **State Space** dock shows only the state matrix.
+
+**Motor.lgm** — with outputs `OmegaJ` and `i_L` selected, expect non-trivial **C** (e.g. `OmegaJ` as a state maps to itself) and **D** (direct feedthrough from `Vs1` when applicable). Exact coefficients depend on the chosen observables.
 
 ---
 
@@ -295,9 +314,11 @@ Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) with Qt debug output
 | `pre_coupling` / `state_dot` | H | After first elimination pass |
 | `coupling` | H | `resolveStateDotCoupling` progress |
 | `refine_pass` | H | Post-coupling refinement |
-| `state_equation` | I | Final scalar equations |
-| `matrix_form` | I | LaTeX matrix output |
-| `ok` | I | Success and state order |
+| `state_equation` | I | Final scalar state equations |
+| `matrix_form` | I | LaTeX state matrix `ẋ = A x + B u [+ E u̇]` |
+| `output_equation` | J | Scalar output equation per selected variable |
+| `output_matrix_form` | J | LaTeX output matrix `y = C x + D u [+ F u̇]` |
+| `ok` | I–J | Success and state order |
 
 ---
 
@@ -310,6 +331,9 @@ Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) with Qt debug output
 | `compatibilityEquations` | Active A-type node bindings only |
 | `stateEquations` | Final `symbol_dot = …` |
 | `matrixForm` | LaTeX `ẋ = A x + B u [+ E u̇]` |
+| `outputs` / `outputLabels` | Selected output symbols and display labels (Phase J) |
+| `outputEquations` | Final `y_i = …` scalar equations |
+| `outputMatrixForm` | LaTeX `y = C x + D u [+ F u̇]` |
 
 ---
 
@@ -324,6 +348,7 @@ Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) with Qt debug output
 | [`src/model/elemental_equation/`](../src/model/elemental_equation/) | `branchNodeAcrossExpr`, symbols, port-span helpers |
 | [`src/model/state_space_eliminate.cpp`](../src/model/state_space_eliminate.cpp) | Elimination and coupling resolve |
 | [`src/model/state_space_sym.cpp`](../src/model/state_space_sym.cpp) | `resolveReplacements`, linear solve, `ssLog` |
+| [`src/model/state_space/state_space_matrix.cpp`](../src/model/state_space/state_space_matrix.cpp) | State matrix (A, B, E) and output matrix (C, D, F) assembly |
 | [`src/model/state_space_latex.cpp`](../src/model/state_space_latex.cpp) | LaTeX matrix formatting |
 | [`src/model/normal_tree/`](../src/model/normal_tree/) | Normal tree search and state-variable selection |
 
@@ -338,3 +363,4 @@ For `Examples/Motor.lgm` with tree `[Vs1, i1, T_J, i_R]`:
 3. **Compatibility** sets `V1 = Vs1` only.
 4. **Two-port across** adds `V3 = OmegaJ/Ka`; flows are **not** re-bound in `replacements`.
 5. **State equations** emerge as standard DC-motor dynamics coupled through `Ka`, `J`, `L`, `R`, `B`.
+6. **Output equations** (optional) — check observables in **Analyze → Output variables**, then recompute to get **C** and **D** (and **F** if input-derivative feedthrough remains).

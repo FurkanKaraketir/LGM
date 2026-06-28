@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.1.15](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.1.15) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.2.0](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.0) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 ## Features
 
@@ -54,7 +54,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.1.15` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.2.0` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
@@ -70,8 +70,8 @@ Tagged releases (`v0.1.15` is the latest) are built for Windows, macOS, and Linu
 1. Pick a **domain** from the toolbar (or **Settings**).
 2. Draw the graph: nodes, branches, two-ports.
 3. Edit names, constants, and branch types in the **Properties** dock.
-4. Open **Analyze** → find or select a **normal tree** → **Compute State Space**.
-5. Review equations in the **State Space** dock (LaTeX via JKQtMathText).
+4. Open **Analyze** → find or select a **normal tree** → (optional) check **output variables** → **Compute State Space**.
+5. Review state equations (`ẋ = Ax + Bu`) and, when outputs were selected, output equations (`y = Cx + Du`) in the **State Space** dock (LaTeX via JKQtMathText).
 
 See [docs/canvas.md](docs/canvas.md) for controls and [docs/analysis.md](docs/analysis.md) for the analysis pipeline.
 

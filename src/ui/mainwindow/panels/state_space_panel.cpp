@@ -39,6 +39,8 @@ void MainWindow::updateStateSpacePanel() {
 
     lg::populateStateSpaceLayout(m_stateSpaceLayout, m_stateSpaceScrollContent, stateSpace);
 
+    m_stateSpaceScrollContent->adjustSize();
+
     if (stateSpace.status == lg::StateSpaceResult::Status::Ok) {
 
         showOutputTab(kStateSpaceTab);

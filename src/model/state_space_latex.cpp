@@ -102,12 +102,23 @@ QString latexCoeff(const RCP<const Basic>& coeff) {
 }
 
 QString latexBmatrix(const std::vector<QStringList>& rows) {
+    if (rows.empty()) {
+        return QStringLiteral("\\left[\\begin{array}{c}\\end{array}\\right]");
+    }
+    int cols = 0;
+    for (const QStringList& row : rows) {
+        if (row.size() > cols) {
+            cols = row.size();
+        }
+    }
     QStringList latexRows;
+    latexRows.reserve(static_cast<int>(rows.size()));
     for (const QStringList& row : rows) {
         latexRows.push_back(row.join(QStringLiteral(" & ")));
     }
-    return QStringLiteral("\\begin{bmatrix}%1\\end{bmatrix}")
-        .arg(latexRows.join(QStringLiteral(" \\\\ ")));
+    const QString colSpec = QString(cols, QLatin1Char('c'));
+    return QStringLiteral("\\left[\\begin{array}{%1}%2\\end{array}\\right]")
+        .arg(colSpec, latexRows.join(QStringLiteral(" \\\\ ")));
 }
 
 QString latexColumnVector(const QStringList& entries) {
@@ -119,31 +130,6 @@ QString latexColumnVector(const QStringList& entries) {
     return latexBmatrix(rows);
 }
 
-/*
-namespace {
 
-const bool kLatexSelfCheck = [] {
-    assert(latexMathSymbol(QStringLiteral("x_dot")) == QStringLiteral("\\dot{x}"));
-    assert(latexCoeff(SymEngine::div(SymEngine::integer(1), SymEngine::symbol("m"))) ==
-           QStringLiteral("\\frac{1}{m}"));
-    {
-        const RCP<const Basic> nested = SymEngine::div(
-            SymEngine::integer(-1),
-            SymEngine::mul(SymEngine::symbol("L7"),
-                           SymEngine::add(SymEngine::integer(1),
-                                          SymEngine::div(SymEngine::symbol("L3"),
-                                                         SymEngine::symbol("L7")))));
-        const QString tex = latexCoeff(nested);
-        assert(tex.startsWith(QStringLiteral("\\frac{")));
-        assert(!tex.contains(QStringLiteral("\\cdot")));
-        assert(tex.count(QLatin1Char('(')) == tex.count(QLatin1Char(')')));
-    }
-    assert(latexColumnVector({QStringLiteral("a"), QStringLiteral("b")}) ==
-           QStringLiteral("\\begin{bmatrix}a \\\\ b\\end{bmatrix}"));
-    return true;
-}();
-
-}  // namespace
-*/
 
 }  // namespace lg::ss

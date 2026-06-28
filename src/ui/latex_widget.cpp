@@ -61,8 +61,8 @@ QWidget* createLatexDisplayWidget(const QString& latex, QWidget* parent) {
 #endif
     math->setFontSize(11);
     label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    label->setWordWrap(true);
-    label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    label->setWordWrap(false);
+    label->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     label->setLatex(latex);
     return label;
 }

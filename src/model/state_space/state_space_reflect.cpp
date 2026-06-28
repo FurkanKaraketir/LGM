@@ -135,6 +135,17 @@ bool ssReflectAndBind(StateSpaceContext& ctx) {
         ctx.recordConstraint(loName, sub(hiExpr, ss::symOf(state.symbol)));
     }
 
+    for (BranchItem* branch : branches) {
+        if (!branch || !usesSyntheticAcrossSymbol(*branch)) {
+            continue;
+        }
+        const QString acrossSym = branchAcrossSymbol(*branch);
+        if (ctx.isPrimaryState(acrossSym) || ctx.replacements.count(acrossSym) != 0) {
+            continue;
+        }
+        ctx.recordConstraint(acrossSym, branchNodeAcrossExpr(*branch));
+    }
+
     for (const QString& input : ctx.result.inputs) {
         ctx.appendTimed(input);
     }

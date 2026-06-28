@@ -177,15 +177,17 @@ void MainWindow::buildDockPanels() {
 
     auto* stateSpaceScroll = new QScrollArea(m_outputTabs);
 
-    stateSpaceScroll->setWidgetResizable(true);
+    stateSpaceScroll->setWidgetResizable(false);
 
     stateSpaceScroll->setFrameShape(QFrame::NoFrame);
 
-    stateSpaceScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    stateSpaceScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
-
+    stateSpaceScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     m_stateSpaceScrollContent = new QWidget(stateSpaceScroll);
+
+    m_stateSpaceScrollContent->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     m_stateSpaceLayout = new QVBoxLayout(m_stateSpaceScrollContent);
 

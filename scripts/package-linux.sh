@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-0.1.0}"
+VERSION="${1:-0.2.0}"
 BUILD_DIR="${2:-build}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BINARY="$ROOT/$BUILD_DIR/LGM"

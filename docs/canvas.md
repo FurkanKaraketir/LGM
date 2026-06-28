@@ -38,7 +38,7 @@ Branches are directed (`from → to`). Multiple branches between the same node p
 - **Objects** — grouped tree of two-ports, nodes, and branches with icons; rename items inline; double-click to center the canvas.
 - **Properties** — branch/two-port name, element constant, A/T/D type, active source flag, bow offset.
 - **Analyze** — normal tree and state-space actions (see [analysis.md](analysis.md)).
-- **State Space** — rendered equations after a successful derivation.
+- **State Space** — rendered state and output equations (`ẋ = Ax + Bu`, `y = Cx + Du` when outputs are selected) after a successful derivation.
 
 ## Document format (`.lgm`)
 

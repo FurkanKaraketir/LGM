@@ -265,39 +265,6 @@ NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
     return result;
 }
 
-/*
-namespace {
 
-const bool kNormalTreeSelfCheck = [] {
-    UnionFind uf(3);
-    assert(uf.components() == 3);
-    assert(uf.unite(0, 1));
-    assert(uf.components() == 2);
-    assert(uf.unite(1, 2));
-    assert(uf.components() == 1);
-    assert(!uf.unite(0, 2));
-
-    TreeScore betterA;
-    betterA.aPassive = 2;
-    TreeScore worseA;
-    worseA.aPassive = 1;
-    assert(betterA.betterThan(worseA));
-
-    TreeScore betterT;
-    betterT.tPassive = 0;
-    TreeScore worseT;
-    worseT.tPassive = 2;
-    assert(betterT.betterThan(worseT));
-
-    assert(branchWeightRank(true, BranchType::A, BranchType::A) == 1);
-    assert(branchWeightRank(false, BranchType::A, BranchType::A) == 2);
-    assert(branchWeightRank(false, BranchType::A, BranchType::D) == 3);
-    assert(branchWeightRank(false, BranchType::A, BranchType::T) == 4);
-    assert(branchWeightRank(true, BranchType::T, BranchType::T) == 5);
-    return true;
-}();
-
-}  // namespace
-*/
 
 }  // namespace lg

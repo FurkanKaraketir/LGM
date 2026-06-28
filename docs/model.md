@@ -58,8 +58,8 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 | `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` |
 | `normal_tree.h` | Normal-tree result types and public API |
 | `normal_tree/` | `build` (search), `enumerate`, `normal_tree` (API glue) |
-| `state_space.h` | Result types and `computeStateSpace` entry |
-| `state_space/` | `state_space` (orchestrator), `constraints`, `reflect`, `states`, `matrix` |
+| `state_space.h` | Result types (`matrixForm`, `outputMatrixForm`, …) and `computeStateSpace` entry |
+| `state_space/` | `state_space` (orchestrator), `constraints`, `reflect`, `states`, `matrix` (A/B/E and C/D/F) |
 | `state_space_graph.cpp` | Graph walks (cut-sets, storage branches) |
 | `state_space_sym.cpp` | SymEngine linear solve, replacement chaining |
 | `state_space_eliminate.cpp` | Symbol elimination and coupling resolve |

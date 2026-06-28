@@ -41,6 +41,9 @@ private:
     void runSaveCurrentTree();
     void runRemoveSavedTree();
     void runUseSavedTree();
+    void refreshOutputVariablesList();
+    void syncOutputVariablesFromList();
+    void setAllOutputVariablesChecked(bool checked);
     void runComputeStateSpace();
 
     GraphScene* m_scene = nullptr;
@@ -52,9 +55,8 @@ private:
     QLabel* m_manualTreeStatus = nullptr;
     QPushButton* m_manualApplyBtn = nullptr;
     QListWidget* m_validTreesList = nullptr;
-    QPushButton* m_useValidTreeBtn = nullptr;
     QListWidget* m_savedTreesList = nullptr;
     QPushButton* m_saveTreeBtn = nullptr;
     QPushButton* m_removeTreeBtn = nullptr;
-    QPushButton* m_useTreeBtn = nullptr;
+    QListWidget* m_outputVariablesList = nullptr;
 };

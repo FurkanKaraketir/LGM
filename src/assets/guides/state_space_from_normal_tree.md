@@ -38,7 +38,8 @@ flowchart TD
     replacements --> stateDots[Solve state_dot from elementals]
     stateDots --> eliminate[Eliminate branch and node symbols]
     eliminate --> coupling[Resolve coupling and refine]
-    coupling --> matrix[Build A B E and LaTeX output]
+    coupling --> stateMatrix[Build state matrix A B E]
+    stateMatrix --> outputMatrix[Build output matrix C D F if selected]
 ```
 
 1. **Elemental** equations in node-across form (`V1−V2`, `OmegaJ`, …).
@@ -47,6 +48,7 @@ flowchart TD
 4. **Two-port across** bindings only (flows stay in elementals + continuity).
 5. Optional **mass–spring reflect** through transformer chains.
 6. Solve for `state_dot`, eliminate remaining symbols, emit `ẋ = Ax + Bu [+ E u̇]`.
+7. When output variables are checked in **Analyze**, also emit `y = Cx + Du [+ F u̇]`.
 
 **Important:** across bindings never overwrite continuity or compatibility. Two-port **flow** laws (e.g. `i1 = −Ka·T2`) are **not** copied into the replacement map — that would overwrite cuts like `i1 = i_L`.
 
@@ -211,7 +213,7 @@ i_L_dot    = Vs1/L - OmegaJ/(L*Ka) - R*i_L/L
 
 ---
 
-### Phase I — Matrix form
+### Phase I — State matrix form
 
 Build scalar state equations and LaTeX `ẋ = A x + B u [+ E u̇]` in the **State Space** dock.
 
@@ -219,9 +221,26 @@ Build scalar state equations and LaTeX `ẋ = A x + B u [+ E u̇]` in the **Stat
 
 ---
 
+### Phase J — Output equations (C and D)
+
+Optional. In **Analyze**, check one or more **Output variables (C and D matrices)** before **Compute State Space**.
+
+For each selected observable the app:
+
+1. Builds an expression from graph relations and the resolved replacement map.
+2. Eliminates non-state symbols.
+3. Checks linearity in `{x, u, u̇}`.
+4. Adds scalar output equations and LaTeX `y = C x + D u [+ F u̇]`.
+
+Skip this phase by leaving all output checkboxes cleared — only the state matrix appears.
+
+**Motor** — select `OmegaJ` and `i_L` to populate **C** (state feedthrough) and **D** (input feedthrough) as applicable.
+
+---
+
 ## Debug output
 
-Run **Compute State Space** from a terminal to see `[state_space]` log lines (`begin`, `continuity`, `replacements_resolved`, `state_dot`, `matrix_form`, …).
+Run **Compute State Space** from a terminal to see `[state_space]` log lines (`begin`, `continuity`, `replacements_resolved`, `state_dot`, `matrix_form`, `output_equation`, `output_matrix_form`, …).
 
 ---
 
@@ -233,7 +252,10 @@ Run **Compute State Space** from a terminal to see `[state_space]` log lines (`b
 | Continuity equations | Flow replacements |
 | Compatibility equations | Active A-type bindings |
 | State equations | Final `symbol_dot = …` |
-| Matrix form | LaTeX `ẋ = Ax + Bu` |
+| Matrix form | LaTeX `ẋ = Ax + Bu [+ E u̇]` |
+| Outputs | Selected observables (when checked in Analyze) |
+| Output equations | Final `y = …` |
+| Output matrix form | LaTeX `y = Cx + Du [+ F u̇]` |
 
 ---
 
@@ -246,3 +268,4 @@ For **Motor.lgm** with tree `[Vs1, i1, T_J, i_R]`:
 3. **Compatibility** sets `V1 = Vs1`.
 4. **Two-port across** adds `V3 = OmegaJ/Ka`; flows stay out of replacements.
 5. **State equations** are standard DC-motor dynamics through `Ka`, `J`, `L`, `R`, `B`.
+6. **Output equations** (optional) — select observables in Analyze to get **C** and **D** matrices.

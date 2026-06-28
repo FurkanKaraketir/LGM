@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(LGM VERSION 0.1.15 LANGUAGES CXX)
+project(LGM VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -78,6 +78,7 @@ add_executable(LGM WIN32
     src/model/state_space/state_space_constraints.cpp
     src/model/state_space/state_space_reflect.cpp
     src/model/state_space/state_space_states.cpp
+    src/model/state_space/state_space_reduce.cpp
     src/model/state_space/state_space_matrix.cpp
     src/model/state_space_eliminate.cpp
     src/model/state_space_graph.cpp

@@ -10,7 +10,7 @@ Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or dr
 
 ## Tips
 
-- After opening, run **Find Normal Tree** then **Compute State Space** from the **Analyze** dock.
+- After opening, run **Find Normal Tree**, optionally select **output variables** in Analyze, then **Compute State Space**.
 - Rename branches and edit constants in **Properties** before analysis.
 - Use **Domain** on the toolbar if variable labels do not match your intended energy domain.
 

@@ -557,7 +557,20 @@ lg::StateSpaceResult GraphScene::computeStateSpaceRep() {
     }
 
     m_lastStateSpaceResult =
-        lg::computeStateSpace(m_lastNormalTreeResult, nodes, branches, twoPorts);
+        lg::computeStateSpace(m_lastNormalTreeResult, nodes, branches, twoPorts, m_outputVariables);
     return m_lastStateSpaceResult;
+}
+
+std::vector<lg::GraphOutputVariable> GraphScene::availableOutputVariables() const {
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    for (QGraphicsItem* item : items()) {
+        if (auto* node = dynamic_cast<NodeItem*>(item)) {
+            nodes.push_back(node);
+        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            branches.push_back(branch);
+        }
+    }
+    return lg::collectOutputVariableChoices(nodes, branches);
 }
 

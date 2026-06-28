@@ -25,17 +25,6 @@ DocVersionStatus classifyDocumentVersion(int version) {
     return DocVersionStatus::Ok;
 }
 
-/*
-const bool kDocVersionSelfCheck = [] {
-    static_assert(kDocumentVersion == 3, "Self-check expectations assume kDocumentVersion == 3.");
-    assert(classifyDocumentVersion(0) == DocVersionStatus::Invalid);
-    assert(classifyDocumentVersion(1) == DocVersionStatus::Older);
-    assert(classifyDocumentVersion(2) == DocVersionStatus::Older);
-    assert(classifyDocumentVersion(3) == DocVersionStatus::Ok);
-    assert(classifyDocumentVersion(4) == DocVersionStatus::TooNew);
-    return true;
-}();
-*/
 
 QJsonObject pointToJson(const QPointF& p) {
     return QJsonObject{{QStringLiteral("x"), p.x()}, {QStringLiteral("y"), p.y()}};

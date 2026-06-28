@@ -29,7 +29,7 @@ Branches bow to the left of the directed edge (`from → to`). Multiple branches
 
 - **Find Normal Tree** — automatic tree selection and highlight (green tree twigs, gray co-tree links).
 - **Select Normal Tree** — click branches to build a manual tree, then apply.
-- **Compute State Space** — derives state equations from the committed normal tree.
+- **Compute State Space** — derives state equations (`ẋ = Ax + Bu`) from the committed normal tree; check **output variables** first to also get `y = Cx + Du`.
 
 See **Help → Guides → State-Space Derivation** for the in-app algorithm walkthrough. Source-level detail with file links: [docs/state_space_from_normal_tree.md](../docs/state_space_from_normal_tree.md) on GitHub.
 

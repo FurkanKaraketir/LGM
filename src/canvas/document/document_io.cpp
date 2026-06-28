@@ -17,6 +17,7 @@ void GraphScene::clearDocument() {
     m_normalTreeManual = false;
     m_lastNormalTreeResult = {};
     m_lastStateSpaceResult = {};
+    m_outputVariables.clear();
     m_savedNormalTrees.clear();
     m_activeSavedNormalTreeIndex = -1;
     for (QGraphicsItem* item : items()) {
@@ -151,6 +152,13 @@ QByteArray GraphScene::documentToJson() const {
         {QStringLiteral("branches"), branchArray},
         {QStringLiteral("normalTrees"), normalTreeArray},
     };
+    if (!m_outputVariables.isEmpty()) {
+        QJsonArray outputArray;
+        for (const QString& symbol : m_outputVariables) {
+            outputArray.append(symbol);
+        }
+        root.insert(QStringLiteral("outputVariables"), outputArray);
+    }
     if (m_activeSavedNormalTreeIndex >= 0) {
         root.insert(QStringLiteral("activeNormalTreeIndex"), m_activeSavedNormalTreeIndex);
     }
@@ -229,6 +237,13 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
         savedNormalTrees.push_back(savedNormalTreeFromJson(value.toObject()));
     }
     const int activeNormalTreeIndex = root.value(QStringLiteral("activeNormalTreeIndex")).toInt(-1);
+    QStringList savedOutputVariables;
+    for (const QJsonValue& value : root.value(QStringLiteral("outputVariables")).toArray()) {
+        const QString symbol = value.toString().trimmed();
+        if (!symbol.isEmpty()) {
+            savedOutputVariables.push_back(symbol);
+        }
+    }
 
     QSet<int> twoPortBranchSerialIds;
     for (const TwoPortLoadData& data : twoPorts) {
@@ -336,6 +351,7 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
     }
 
     m_undoStack.clear();
+    m_outputVariables = std::move(savedOutputVariables);
     refreshAppearance();
     notifyGraphChanged();
     emit savedNormalTreesChanged();

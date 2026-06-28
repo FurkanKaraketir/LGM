@@ -8,12 +8,14 @@ namespace lg {
 StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                                        const std::vector<NodeItem*>& nodes,
                                        const std::vector<BranchItem*>& branches,
-                                       const std::vector<TwoPortItem*>& twoPorts);
+                                       const std::vector<TwoPortItem*>& twoPorts,
+                                       const QStringList& outputVariables);
 
 StateSpaceResult computeStateSpace(const NormalTreeResult& tree,
                                    const std::vector<NodeItem*>& nodes,
                                    const std::vector<BranchItem*>& branches,
-                                   const std::vector<TwoPortItem*>& twoPorts) {
+                                   const std::vector<TwoPortItem*>& twoPorts,
+                                   const QStringList& outputVariables) {
     StateSpaceResult result;
     ss::ssLog(QStringLiteral("compute"),
               QStringLiteral("nodes=%1 branches=%2 two_ports=%3 tree_status=%4")
@@ -23,7 +25,7 @@ StateSpaceResult computeStateSpace(const NormalTreeResult& tree,
                   .arg(static_cast<int>(tree.status)));
     (void)nodes;
     try {
-        return computeStateSpaceImpl(tree, nodes, branches, twoPorts);
+        return computeStateSpaceImpl(tree, nodes, branches, twoPorts, outputVariables);
     } catch (const std::exception& e) {
         ss::ssLog(QStringLiteral("exception"), QString::fromUtf8(e.what()));
         result.status = StateSpaceResult::Status::SymbolicError;
@@ -41,8 +43,10 @@ StateSpaceResult computeStateSpace(const NormalTreeResult& tree,
 StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
                                        const std::vector<NodeItem*>& nodes,
                                        const std::vector<BranchItem*>& branches,
-                                       const std::vector<TwoPortItem*>& twoPorts) {
+                                       const std::vector<TwoPortItem*>& twoPorts,
+                                       const QStringList& outputVariables) {
     StateSpaceContext ctx(tree, nodes, branches, twoPorts);
+    ctx.requestedOutputs = outputVariables;
     if (!ctx.initStates()) {
         return ctx.result;
     }
@@ -57,6 +61,9 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
         return ctx.result;
     }
     ssAssembleMatrix(ctx, stateDots);
+    if (!ssAssembleOutputs(ctx, stateDots)) {
+        return ctx.result;
+    }
     ctx.result.status = StateSpaceResult::Status::Ok;
     ctx.result.message = QStringLiteral("State order %1, %2 continuity, %3 compatibility, %4 inputs.")
                              .arg(ctx.computedStates.size())

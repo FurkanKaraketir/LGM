@@ -1,3 +1,4 @@
+#include "state_space.h"
 #include "state_space_detail.h"
 
 #include "canvas.h"
@@ -304,3 +305,51 @@ std::vector<QString> collectNodeAcrossSymbols(const std::vector<NodeItem*>& node
 }
 
 }  // namespace lg::ss
+
+namespace lg {
+
+std::vector<GraphOutputVariable> collectOutputVariableChoices(
+    const std::vector<NodeItem*>& nodes, const std::vector<BranchItem*>& branches) {
+    std::vector<GraphOutputVariable> out;
+    std::unordered_set<QString> seen;
+
+    const auto add = [&](const QString& symbol, const QString& label) {
+        if (symbol.isEmpty() || symbol == QStringLiteral("0") || !isValidVariableSymbol(symbol)) {
+            return;
+        }
+        if (seen.count(symbol) != 0) {
+            return;
+        }
+        seen.insert(symbol);
+        out.push_back({symbol, label});
+    };
+
+    for (BranchItem* branch : branches) {
+        if (!branch) {
+            continue;
+        }
+        const QString branchName = branch->name();
+        const QString through = branchThroughSymbol(*branch);
+        add(through, QStringLiteral("%1 through").arg(branchName));
+        const QString across = branchAcrossSymbol(*branch);
+        add(across, QStringLiteral("%1 across").arg(branchName));
+    }
+    for (NodeItem* node : nodes) {
+        if (!node || node->isGround()) {
+            continue;
+        }
+        const QString across = node->acrossVariable().trimmed();
+        if (across.isEmpty()) {
+            continue;
+        }
+        add(across, QStringLiteral("%1 across").arg(across));
+    }
+
+    std::sort(out.begin(), out.end(),
+              [](const GraphOutputVariable& a, const GraphOutputVariable& b) {
+                  return a.symbol < b.symbol;
+              });
+    return out;
+}
+
+}  // namespace lg

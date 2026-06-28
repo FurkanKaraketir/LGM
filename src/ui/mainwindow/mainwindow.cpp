@@ -120,6 +120,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     setDockNestingEnabled(true);
 
+    // Side docks span full height; bottom output sits under the canvas only.
+    setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
+
 }
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (event->type() != QEvent::KeyPress) {
