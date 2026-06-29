@@ -6,6 +6,7 @@ Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or dr
 |------|-------------|
 | [Motor.lgm](Motor.lgm) | Permanent-magnet DC motor: `R`, `L`, voltage source, transformer `1/Ka`, inertia `J`, damper `B`. Good first analysis example — see [docs/analysis.md](../docs/analysis.md). |
 | [Electrical.lgm](Electrical.lgm) | Electrical network with sources and passive branches (RLC-style topology). |
+| [Gyrator.lgm](Gyrator.lgm) | Hydraulic actuator: fluid pressure source, `R`, compliance, gyrator modulus `1/A`, and parallel mechanical `m`–`k`–`b`. Cross-domain coupling — both gyrator port branches must be in the normal tree or both in the co-tree. |
 | [TransformerCascade.lgm](TransformerCascade.lgm) | Multi-section graph with cascaded transformers and mixed mechanical/electrical elements (higher complexity). |
 
 ## Tips

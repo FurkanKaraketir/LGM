@@ -44,13 +44,13 @@ void BranchItem::updatePath() {
     const QPointF a = m_from->scenePos();
     const QPointF b = m_to->scenePos();
     const bool dashedTail = !m_active && m_type == BranchType::A;
-    const BranchEgress egress = computeBranchEgress(this);
     const bool drawArrow = !isTwoPortPortBranch(this);
     if (std::abs(m_bow) > 1e-6) {
         setPath(bowedBranch(a, b, m_bow, m_active, dashedTail, drawArrow));
     } else {
-        setPath(parallelBranch(a, b, m_index, m_count, egress.kickA, egress.kickB, m_active, dashedTail,
-                                drawArrow));
+        const BranchEgress egress = computeBranchEgress(this);
+        setPath(fieldLineBranch(a, b, m_index, m_count, m_active, dashedTail, drawArrow, egress.kickA,
+                                egress.kickB));
     }
 }
 
@@ -152,8 +152,9 @@ QRectF BranchItem::boundingRect() const {
     const QPointF a = m_from->scenePos();
     const QPointF b = m_to->scenePos();
     const BranchEgress egress = computeBranchEgress(this);
-    const BranchArrowGeom arrow =
-        branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB);
+    const BranchArrowGeom arrow = std::abs(m_bow) > 1e-6
+                                      ? branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB)
+                                      : fieldLineArrowGeom(a, b, m_index, m_count, egress.kickA, egress.kickB);
     const QString label = branchAnnotationLabel(this);
     QFont font;
     font.setPointSizeF(9.0);
@@ -178,8 +179,9 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     const QPointF a = m_from->scenePos();
     const QPointF b = m_to->scenePos();
     const BranchEgress egress = computeBranchEgress(this);
-    const BranchArrowGeom arrow =
-        branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB);
+    const BranchArrowGeom arrow = std::abs(m_bow) > 1e-6
+                                      ? branchArrowGeom(a, b, m_index, m_count, m_bow, egress.kickA, egress.kickB)
+                                      : fieldLineArrowGeom(a, b, m_index, m_count, egress.kickA, egress.kickB);
 
     painter->save();
     painter->setClipping(false);

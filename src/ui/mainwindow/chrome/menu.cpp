@@ -336,8 +336,6 @@ void MainWindow::buildMenuBar() {
 
     viewMenu->addSeparator();
 
-    
-
     auto* resetLayoutAction = viewMenu->addAction(tr("&Reset Layout"));
 
     connect(resetLayoutAction, &QAction::triggered, this, [this]() {

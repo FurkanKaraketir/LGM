@@ -33,6 +33,9 @@ QPainterPath stadiumPath(const QRectF& rect);
 QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int count,
                             const QPointF& kickA = {}, const QPointF& kickB = {}, bool active = false,
                             bool dashedTail = false, bool drawArrow = true);
+QPainterPath fieldLineBranch(const QPointF& a, const QPointF& b, int index, int count, bool active = false,
+                             bool dashedTail = false, bool drawArrow = true, const QPointF& kickA = {},
+                             const QPointF& kickB = {});
 QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false,
                          bool dashedTail = false, bool drawArrow = true);
 void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius);
@@ -61,6 +64,8 @@ BranchEgress computeBranchEgress(const BranchItem* branch);
 QString branchAnnotationLabel(const BranchItem* branch);
 BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, int count, qreal bow,
                                 const QPointF& kickA = {}, const QPointF& kickB = {});
+BranchArrowGeom fieldLineArrowGeom(const QPointF& a, const QPointF& b, int index, int count,
+                                   const QPointF& kickA = {}, const QPointF& kickB = {});
 QRectF nodeAcrossLabelRect(const QString& text, qreal radius, const QFont& font);
 QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const QString& text,
                          const QFont& font);

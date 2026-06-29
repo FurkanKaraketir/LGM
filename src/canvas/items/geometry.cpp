@@ -28,7 +28,10 @@
 namespace ci {
 
 constexpr qreal kBowFactor = 0.24;
-constexpr qreal kLaneSpread = 36.0;
+constexpr qreal kLaneSpread = 48.0;
+constexpr qreal kFieldSpread = 48.0;
+constexpr qreal kFieldSingleBow = 0.08;
+constexpr qreal kFieldRepelFactor = 0.8;
 constexpr qreal kBranchPickWidth = 6.0;
 
 QPainterPath strokedPickShape(const QPainterPath& source, qreal width = kBranchPickWidth) {
@@ -194,6 +197,95 @@ QPainterPath parallelBranch(const QPointF& a, const QPointF& b, int index, int c
                 dashedPart.moveTo(pt);
             }
             
+            if (drawing) {
+                if (dashedPart.isEmpty()) {
+                    dashedPart.moveTo(lastPt);
+                }
+                dashedPart.lineTo(pt);
+            }
+            lastPt = pt;
+        }
+        path.addPath(dashedPart);
+    } else {
+        path.moveTo(a);
+        path.cubicTo(c1, c2, b);
+    }
+
+    const QPointF mid = cubicPoint(a, c1, c2, b, 0.5);
+    if (drawArrow && active) {
+        appendArrowHead(path, mid, cubicTangent(a, c1, c2, b, 0.5), 9.0, true);
+    }
+    return path;
+}
+
+void fieldLineControls(const QPointF& a, const QPointF& b, int index, int count, QPointF& c1, QPointF& c2,
+                       const QPointF& kickA = {}, const QPointF& kickB = {}) {
+    const QPointF dir = b - a;
+    const qreal len = std::hypot(dir.x(), dir.y());
+    if (len < 1e-6) {
+        c1 = a;
+        c2 = b;
+        return;
+    }
+    const QPointF u(dir.x() / len, dir.y() / len);
+
+    QPointF canonFrom = a;
+    QPointF canonTo = b;
+    if (a.x() > b.x() + 1e-6 || (std::abs(a.x() - b.x()) < 1e-6 && a.y() > b.y())) {
+        std::swap(canonFrom, canonTo);
+    }
+    const QPointF canonDir = canonTo - canonFrom;
+    const qreal canonLen = std::hypot(canonDir.x(), canonDir.y());
+    const QPointF canonU(canonDir.x() / canonLen, canonDir.y() / canonLen);
+    const QPointF n(canonU.y(), -canonU.x());
+
+    QPointF offset;
+    if (count <= 1) {
+        offset = QPointF(u.y(), -u.x()) * (len * kFieldSingleBow);
+    } else {
+        const qreal lane = kFieldSpread * (index - (count - 1) / 2.0);
+        offset = n * lane * kFieldRepelFactor;
+    }
+    c1 = a + u * (len / 3.0) + offset + kickA;
+    c2 = b - u * (len / 3.0) + offset + kickB;
+}
+
+QPainterPath fieldLineBranch(const QPointF& a, const QPointF& b, int index, int count, bool active,
+                             bool dashedTail, bool drawArrow, const QPointF& kickA, const QPointF& kickB) {
+    QPainterPath path;
+    QPointF c1;
+    QPointF c2;
+    fieldLineControls(a, b, index, count, c1, c2, kickA, kickB);
+
+    if (dashedTail) {
+        QPainterPath solidPart;
+        solidPart.moveTo(a);
+        for (qreal t = 0.0; t <= 0.5; t += 0.01) {
+            solidPart.lineTo(cubicPoint(a, c1, c2, b, t));
+        }
+        path.addPath(solidPart);
+
+        QPainterPath dashedPart;
+        const qreal dashLen = 8.0;
+        const qreal gapLen = 6.0;
+        qreal distance = 0.0;
+        bool drawing = true;
+        QPointF lastPt = cubicPoint(a, c1, c2, b, 0.5);
+
+        for (qreal t = 0.5; t <= 1.0; t += 0.005) {
+            QPointF pt = cubicPoint(a, c1, c2, b, t);
+            qreal segLen = std::hypot(pt.x() - lastPt.x(), pt.y() - lastPt.y());
+            distance += segLen;
+
+            if (drawing && distance >= dashLen) {
+                distance = 0.0;
+                drawing = false;
+            } else if (!drawing && distance >= gapLen) {
+                distance = 0.0;
+                drawing = true;
+                dashedPart.moveTo(pt);
+            }
+
             if (drawing) {
                 if (dashedPart.isEmpty()) {
                     dashedPart.moveTo(lastPt);
@@ -632,6 +724,14 @@ BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, i
     const QPointF bowOffset = left * (len * kBowFactor + lane);
     const QPointF c1 = a + u * (len / 3.0) + bowOffset + kickA;
     const QPointF c2 = b - u * (len / 3.0) + bowOffset + kickB;
+    return {cubicPoint(a, c1, c2, b, 0.5), cubicTangent(a, c1, c2, b, 0.5)};
+}
+
+BranchArrowGeom fieldLineArrowGeom(const QPointF& a, const QPointF& b, int index, int count,
+                                   const QPointF& kickA, const QPointF& kickB) {
+    QPointF c1;
+    QPointF c2;
+    fieldLineControls(a, b, index, count, c1, c2, kickA, kickB);
     return {cubicPoint(a, c1, c2, b, 0.5), cubicTangent(a, c1, c2, b, 0.5)};
 }
 
