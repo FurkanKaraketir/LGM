@@ -205,43 +205,6 @@ void MainWindow::refreshChromeTheme() {
     refreshToolIcons();
 }
 
-void MainWindow::showAnalyzeWindow() {
-    if (!m_analyzeDock) {
-        return;
-    }
-    m_analyzeDock->show();
-    m_analyzeDock->raise();
-    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.analyzePanel"))) {
-        QSignalBlocker blocker(panelAction);
-        panelAction->setChecked(true);
-    }
-}
-
-void MainWindow::showPropertyPanel() {
-    if (!m_propertyDock) {
-        return;
-    }
-    m_propertyDock->show();
-    m_propertyDock->raise();
-}
-
-void MainWindow::raisePropertyPanelForSelection() {
-    if (m_clearingDocument || m_blockSceneSelectionSync || !m_propertyDock) {
-        return;
-    }
-    if (m_scene->selectedItems().isEmpty()) {
-        return;
-    }
-    if (!m_analyzeDock || !m_analyzeDock->isVisible()) {
-        return;
-    }
-    showPropertyPanel();
-}
-
-void MainWindow::showConsoleWindow() {
-    showOutputTab(kConsoleTab);
-}
-
 void MainWindow::showSettingsWindow() {
     if (!m_settingsWindow) {
         m_settingsWindow = new SettingsWindow;

@@ -2,6 +2,7 @@
 
 #include "app_settings.h"
 #include "canvas.h"
+#include "detail.h"
 
 #include <QMainWindow>
 
@@ -57,8 +58,10 @@ private:
     void showPropertyPanel();
     void raisePropertyPanelForSelection();
     void showConsoleWindow();
-    void showOutputTab(int index);
-    void syncStateSpacePanelAction();
+    void showPanelTab(mw::PanelTab tab);
+    void hidePanelTab(mw::PanelTab tab);
+    bool isPanelTabVisible(mw::PanelTab tab) const;
+    void syncPanelMenuActions();
     void refreshChromeTheme();
     void refreshToolIcons();
     void updateWindowTitle();
@@ -95,10 +98,10 @@ private:
     QString m_currentFilePath;
     bool m_isExampleDocument = false;
     
-    QDockWidget* m_propertyDock = nullptr;
+    QDockWidget* m_sidePanelDock = nullptr;
     QDockWidget* m_objectListDock = nullptr;
-    QDockWidget* m_analyzeDock = nullptr;
     QDockWidget* m_outputDock = nullptr;
+    QTabWidget* m_sidePanelTabs = nullptr;
     QTabWidget* m_outputTabs = nullptr;
     QTableWidget* m_propertyTable = nullptr;
     QTreeWidget* m_objectTree = nullptr;

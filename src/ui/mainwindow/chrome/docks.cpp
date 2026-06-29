@@ -51,29 +51,47 @@ void MainWindow::buildStatusBar() {
 
 void MainWindow::buildDockPanels() {
 
-    m_propertyDock = new QDockWidget(tr("Properties"), this);
+    m_sidePanelDock = new QDockWidget(tr("Panels"), this);
+    m_sidePanelDock->setObjectName(QStringLiteral("sidePanelDock"));
+    m_sidePanelDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_sidePanelDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
 
-    m_propertyDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_sidePanelTabs = new QTabWidget(m_sidePanelDock);
+    m_sidePanelTabs->setObjectName(QStringLiteral("sidePanelTabs"));
+    m_sidePanelTabs->setDocumentMode(true);
+    m_sidePanelTabs->setTabsClosable(true);
+    m_sidePanelTabs->setMovable(true);
 
-    
+    auto* propertyPanel = new QWidget(m_sidePanelTabs);
+    auto* propertyLayout = new QVBoxLayout(propertyPanel);
+    propertyLayout->setContentsMargins(0, 0, 0, 0);
 
-    m_propertyTable = new QTableWidget(0, 2, m_propertyDock);
-
+    m_propertyTable = new QTableWidget(0, 2, propertyPanel);
     m_propertyTable->setHorizontalHeaderLabels({tr("Property"), tr("Value")});
-
     m_propertyTable->horizontalHeader()->setStretchLastSection(true);
-
     m_propertyTable->verticalHeader()->setVisible(false);
-
     m_propertyTable->setAlternatingRowColors(true);
-
     m_propertyTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    propertyLayout->addWidget(m_propertyTable);
 
-    
+    m_sidePanelTabs->addTab(propertyPanel, tr("Properties"));
+    m_sidePanelTabs->tabBar()->setTabData(kPropertiesTab, static_cast<int>(PanelTab::Properties));
 
-    m_propertyDock->setWidget(m_propertyTable);
+    m_analyzePanel = new AnalyzeWindow(m_scene, m_view, m_sidePanelTabs);
+    m_analyzePanel->setRefreshCallback([this]() { updatePropertyPanel(); });
+    connect(m_analyzePanel, &AnalyzeWindow::stateSpaceComputed, this, &MainWindow::updateStateSpacePanel);
+    m_sidePanelTabs->addTab(m_analyzePanel, tr("Analyze"));
+    m_sidePanelTabs->tabBar()->setTabData(kAnalyzeTab, static_cast<int>(PanelTab::Analyze));
+    m_sidePanelTabs->tabBar()->setTabVisible(kAnalyzeTab, false);
 
-    addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
+    m_sidePanelDock->setWidget(m_sidePanelTabs);
+    addDockWidget(Qt::RightDockWidgetArea, m_sidePanelDock);
+
+    connect(m_sidePanelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        const auto tab = static_cast<PanelTab>(m_sidePanelTabs->tabBar()->tabData(index).toInt());
+        hidePanelTab(tab);
+    });
+    connect(m_sidePanelTabs, &QTabWidget::currentChanged, this, &MainWindow::syncPanelMenuActions);
 
 
 
@@ -117,21 +135,6 @@ void MainWindow::buildDockPanels() {
 
 
 
-    m_analyzeDock = new QDockWidget(tr("Analyze"), this);
-    m_analyzeDock->setObjectName(QStringLiteral("analyzeDock"));
-    m_analyzeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    m_analyzePanel = new AnalyzeWindow(m_scene, m_view, m_analyzeDock);
-    m_analyzePanel->setRefreshCallback([this]() { updatePropertyPanel(); });
-    connect(m_analyzePanel, &AnalyzeWindow::stateSpaceComputed, this, &MainWindow::updateStateSpacePanel);
-    m_analyzeDock->setWidget(m_analyzePanel);
-    addDockWidget(Qt::RightDockWidgetArea, m_analyzeDock);
-    tabifyDockWidget(m_propertyDock, m_analyzeDock);
-    m_analyzeDock->hide();
-
-    if (auto* panelAction = findChild<QAction*>(QStringLiteral("view.analyzePanel"))) {
-        connect(m_analyzeDock, &QDockWidget::visibilityChanged, panelAction, &QAction::setChecked);
-    }
-
     m_outputDock = new QDockWidget(tr("Output"), this);
     m_outputDock->setObjectName(QStringLiteral("outputDock"));
     m_outputDock->setAllowedAreas(Qt::BottomDockWidgetArea);
@@ -139,7 +142,10 @@ void MainWindow::buildDockPanels() {
     m_outputDock->setMinimumHeight(120);
 
     m_outputTabs = new QTabWidget(m_outputDock);
+    m_outputTabs->setObjectName(QStringLiteral("outputTabs"));
     m_outputTabs->setDocumentMode(true);
+    m_outputTabs->setTabsClosable(true);
+    m_outputTabs->setMovable(true);
 
     auto* consolePanel = new QWidget(m_outputTabs);
     auto* consoleLayout = new QVBoxLayout(consolePanel);
@@ -174,6 +180,8 @@ void MainWindow::buildDockPanels() {
     consoleLayout->addLayout(consoleButtons);
 
     m_outputTabs->addTab(consolePanel, tr("Console"));
+    m_outputTabs->tabBar()->setTabData(kConsoleTab, static_cast<int>(PanelTab::Console));
+    m_outputTabs->tabBar()->setTabVisible(kConsoleTab, false);
 
     auto* stateSpaceScroll = new QScrollArea(m_outputTabs);
 
@@ -198,12 +206,17 @@ void MainWindow::buildDockPanels() {
     stateSpaceScroll->setWidget(m_stateSpaceScrollContent);
 
     m_outputTabs->addTab(stateSpaceScroll, tr("State Space"));
+    m_outputTabs->tabBar()->setTabData(kStateSpaceTab, static_cast<int>(PanelTab::StateSpace));
+    m_outputTabs->tabBar()->setTabVisible(kStateSpaceTab, false);
     m_outputDock->setWidget(m_outputTabs);
     addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
     m_outputDock->hide();
 
-    connect(m_outputDock, &QDockWidget::visibilityChanged, this, &MainWindow::syncStateSpacePanelAction);
-    connect(m_outputTabs, &QTabWidget::currentChanged, this, &MainWindow::syncStateSpacePanelAction);
+    connect(m_outputTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        const auto tab = static_cast<PanelTab>(m_outputTabs->tabBar()->tabData(index).toInt());
+        hidePanelTab(tab);
+    });
+    connect(m_outputTabs, &QTabWidget::currentChanged, this, &MainWindow::syncPanelMenuActions);
 
 
 
@@ -338,5 +351,7 @@ void MainWindow::buildDockPanels() {
     updateFlipBranchAction();
 
     updateStateSpacePanel();
+
+    syncPanelMenuActions();
 
 }

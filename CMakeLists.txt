@@ -111,6 +111,7 @@ add_executable(LGM WIN32
     src/ui/mainwindow/chrome/theme.cpp
     src/ui/mainwindow/panels/object_tree.cpp
     src/ui/mainwindow/panels/property_panel.cpp
+    src/ui/mainwindow/panels/panel_tabs.cpp
     src/ui/mainwindow/panels/state_space_panel.cpp
     src/ui/tool_icons.cpp
     src/ui/tool_icons.h

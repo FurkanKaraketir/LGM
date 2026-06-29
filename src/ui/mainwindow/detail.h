@@ -23,8 +23,12 @@ class GraphView;
 
 namespace mw {
 
+constexpr int kPropertiesTab = 0;
+constexpr int kAnalyzeTab = 1;
 constexpr int kConsoleTab = 0;
 constexpr int kStateSpaceTab = 1;
+
+enum class PanelTab { Properties, Analyze, Console, StateSpace };
 
 enum class GraphObjectKind { Node, Branch, TwoPort };
 

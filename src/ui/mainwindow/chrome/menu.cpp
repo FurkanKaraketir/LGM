@@ -256,18 +256,18 @@ void MainWindow::buildMenuBar() {
 
     auto* propertyPanelAction = viewMenu->addAction(tr("&Properties Panel"));
 
+    propertyPanelAction->setObjectName(QStringLiteral("view.propertyPanel"));
+
     propertyPanelAction->setCheckable(true);
 
     propertyPanelAction->setChecked(true);
 
     connect(propertyPanelAction, &QAction::toggled, this, [this](bool checked) {
-
-        if (m_propertyDock) {
-
-            m_propertyDock->setVisible(checked);
-
+        if (checked) {
+            showPanelTab(PanelTab::Properties);
+        } else {
+            hidePanelTab(PanelTab::Properties);
         }
-
     });
 
     
@@ -293,8 +293,24 @@ void MainWindow::buildMenuBar() {
     analyzePanelAction->setCheckable(true);
     analyzePanelAction->setChecked(false);
     connect(analyzePanelAction, &QAction::toggled, this, [this](bool checked) {
-        if (m_analyzeDock) {
-            m_analyzeDock->setVisible(checked);
+        if (checked) {
+            showPanelTab(PanelTab::Analyze);
+        } else {
+            hidePanelTab(PanelTab::Analyze);
+        }
+    });
+
+    
+
+    auto* consolePanelAction = viewMenu->addAction(tr("&Console"));
+    consolePanelAction->setObjectName(QStringLiteral("view.consolePanel"));
+    consolePanelAction->setCheckable(true);
+    consolePanelAction->setChecked(false);
+    connect(consolePanelAction, &QAction::toggled, this, [this](bool checked) {
+        if (checked) {
+            showPanelTab(PanelTab::Console);
+        } else {
+            hidePanelTab(PanelTab::Console);
         }
     });
 
@@ -309,13 +325,10 @@ void MainWindow::buildMenuBar() {
     stateSpacePanelAction->setChecked(false);
 
     connect(stateSpacePanelAction, &QAction::toggled, this, [this](bool checked) {
-        if (!m_outputDock || !m_outputTabs) {
-            return;
-        }
         if (checked) {
-            showOutputTab(kStateSpaceTab);
-        } else if (m_outputTabs->currentIndex() == kStateSpaceTab) {
-            m_outputDock->hide();
+            showPanelTab(PanelTab::StateSpace);
+        } else {
+            hidePanelTab(PanelTab::StateSpace);
         }
     });
 
@@ -329,26 +342,29 @@ void MainWindow::buildMenuBar() {
 
     connect(resetLayoutAction, &QAction::triggered, this, [this]() {
 
-        removeDockWidget(m_propertyDock);
+        removeDockWidget(m_sidePanelDock);
 
         removeDockWidget(m_objectListDock);
 
-        removeDockWidget(m_analyzeDock);
-
         addDockWidget(Qt::LeftDockWidgetArea, m_objectListDock);
 
-        addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
-
-        addDockWidget(Qt::RightDockWidgetArea, m_analyzeDock);
-
-        tabifyDockWidget(m_propertyDock, m_analyzeDock);
+        addDockWidget(Qt::RightDockWidgetArea, m_sidePanelDock);
 
         removeDockWidget(m_outputDock);
         addDockWidget(Qt::BottomDockWidgetArea, m_outputDock);
 
         m_objectListDock->show();
 
-        m_propertyDock->show();
+        m_sidePanelTabs->tabBar()->setTabVisible(kPropertiesTab, true);
+        m_sidePanelTabs->tabBar()->setTabVisible(kAnalyzeTab, false);
+        m_sidePanelTabs->setCurrentIndex(kPropertiesTab);
+        m_sidePanelDock->show();
+
+        m_outputTabs->tabBar()->setTabVisible(kConsoleTab, false);
+        m_outputTabs->tabBar()->setTabVisible(kStateSpaceTab, false);
+        m_outputDock->hide();
+
+        syncPanelMenuActions();
 
     });
 
