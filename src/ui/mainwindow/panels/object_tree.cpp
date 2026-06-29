@@ -357,6 +357,7 @@ void MainWindow::onObjectTreeSelectionChanged() {
     m_blockSceneSelectionSync = false;
 
     updatePropertyPanel();
+    raisePropertyPanelForSelection();
 
 }
 

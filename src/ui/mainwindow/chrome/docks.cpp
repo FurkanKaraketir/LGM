@@ -299,6 +299,8 @@ void MainWindow::buildDockPanels() {
 
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::updatePropertyPanel);
 
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::raisePropertyPanelForSelection);
+
     connect(m_scene, &QGraphicsScene::selectionChanged, this, &MainWindow::updateFlipBranchAction);
 
     connect(m_objectTree, &QTreeWidget::itemSelectionChanged, this, &MainWindow::onObjectTreeSelectionChanged);

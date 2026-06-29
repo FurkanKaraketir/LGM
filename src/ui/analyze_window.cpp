@@ -211,10 +211,9 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     connect(m_exportMatlabBtn, &QPushButton::clicked, this, [this]() {
         lg::exportStateSpaceMatlabScript(this, m_scene->lastStateSpaceResult());
     });
-    auto* stateSpaceButtons = new QHBoxLayout;
+    auto* stateSpaceButtons = new QVBoxLayout;
     stateSpaceButtons->addWidget(computeBtn);
     stateSpaceButtons->addWidget(m_exportMatlabBtn);
-    stateSpaceButtons->addStretch();
 
     auto* outputsLabel = new QLabel(tr("Output variables (C and D matrices):"), stateSpaceGroup);
     outputsLabel->setWordWrap(true);
@@ -224,10 +223,10 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
             [this]() { setAllOutputVariablesChecked(true); });
     connect(clearAllOutputsBtn, &QPushButton::clicked, this,
             [this]() { setAllOutputVariablesChecked(false); });
-    auto* outputButtons = new QHBoxLayout;
-    outputButtons->addWidget(selectAllOutputsBtn);
-    outputButtons->addWidget(clearAllOutputsBtn);
-    outputButtons->addStretch();
+    auto* outputHeader = new QHBoxLayout;
+    outputHeader->addWidget(outputsLabel, 1);
+    outputHeader->addWidget(selectAllOutputsBtn);
+    outputHeader->addWidget(clearAllOutputsBtn);
 
     m_outputVariablesList = new QListWidget(stateSpaceGroup);
     m_outputVariablesList->setSelectionMode(QAbstractItemView::NoSelection);
@@ -239,8 +238,7 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     stateSpaceHint->setWordWrap(true);
     auto* stateSpaceLayout = new QVBoxLayout(stateSpaceGroup);
     stateSpaceLayout->addLayout(stateSpaceButtons);
-    stateSpaceLayout->addWidget(outputsLabel);
-    stateSpaceLayout->addLayout(outputButtons);
+    stateSpaceLayout->addLayout(outputHeader);
     stateSpaceLayout->addWidget(m_outputVariablesList);
     stateSpaceLayout->addWidget(stateSpaceHint);
 

@@ -54,6 +54,8 @@ private:
     void applyShortcuts(const AppSettings& settings);
     void showSettingsWindow();
     void showAnalyzeWindow();
+    void showPropertyPanel();
+    void raisePropertyPanelForSelection();
     void showConsoleWindow();
     void showOutputTab(int index);
     void syncStateSpacePanelAction();
