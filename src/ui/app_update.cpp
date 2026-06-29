@@ -112,7 +112,7 @@ void checkForUpdates(QWidget* parent, bool silentWhenCurrent, bool respectDeferr
                          QPushButton* downloadButton =
                              box->addButton(QObject::tr("Download"), QMessageBox::AcceptRole);
                          QPushButton* remindButton =
-                             box->addButton(QObject::tr("Remind me later"), QMessageBox::RejectRole);
+                             box->addButton(QObject::tr("Remind Me Later"), QMessageBox::RejectRole);
                          QPushButton* ignoreButton =
                              box->addButton(QObject::tr("Ignore This Update"), QMessageBox::DestructiveRole);
                          box->setDefaultButton(downloadButton);
