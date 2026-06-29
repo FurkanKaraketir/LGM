@@ -1,9 +1,11 @@
 #include "mainwindow.h"
 
 #include "app_settings.h"
+#include "app_update.h"
 #include "canvas.h"
 
 #include <QApplication>
+#include <QTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QIcon>
@@ -90,6 +92,7 @@ int main(int argc, char* argv[]) {
 
     MainWindow window;
     window.showMaximized();
+    QTimer::singleShot(0, &window, [&window]() { checkForUpdates(&window, true, true); });
 
     const QString openPath = openPathFromArgs(app.arguments().mid(1));
     if (!openPath.isEmpty()) {

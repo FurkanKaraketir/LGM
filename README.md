@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.2.3](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.3) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.2.4](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.4) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 **Documentation:** [GitHub Wiki](https://github.com/FurkanKaraketir/LGM/wiki) — user guides, theory, and developer reference (synced from `docs/`).
 
@@ -56,7 +56,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.2.3` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.2.4` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|

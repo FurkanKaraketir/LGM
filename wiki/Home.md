@@ -6,7 +6,7 @@ A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branc
 
 ## Download
 
-**Latest:** [v0.2.3](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.3)
+**Latest:** [v0.2.4](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.4)
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
