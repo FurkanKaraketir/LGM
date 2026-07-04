@@ -533,7 +533,41 @@ bool GraphScene::applySavedNormalTree(int index) {
     return true;
 }
 
+void GraphScene::pruneStaleOutputVariables() {
+    const std::vector<lg::GraphOutputVariable> choices = availableOutputVariables();
+    QStringList valid;
+    valid.reserve(m_outputVariables.size());
+    for (const QString& symbol : m_outputVariables) {
+        const bool stillAvailable = std::any_of(
+            choices.begin(), choices.end(),
+            [&](const lg::GraphOutputVariable& choice) { return choice.symbol == symbol; });
+        if (stillAvailable) {
+            valid.push_back(symbol);
+        }
+    }
+    m_outputVariables = std::move(valid);
+}
+
+void GraphScene::renameOutputVariableSymbol(const QString& from, const QString& to) {
+    if (from.isEmpty() || to.isEmpty() || from == to) {
+        return;
+    }
+    for (int i = 0; i < m_outputVariables.size(); ++i) {
+        if (m_outputVariables[i] != from) {
+            continue;
+        }
+        if (m_outputVariables.contains(to)) {
+            m_outputVariables.removeAt(i);
+            --i;
+        } else {
+            m_outputVariables[i] = to;
+        }
+    }
+}
+
 lg::StateSpaceResult GraphScene::computeStateSpaceRep() {
+    pruneStaleOutputVariables();
+
     std::vector<NodeItem*> nodes;
     std::vector<BranchItem*> branches;
     std::vector<TwoPortItem*> twoPorts;

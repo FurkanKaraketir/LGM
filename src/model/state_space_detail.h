@@ -53,6 +53,12 @@ RCP<const Basic> linearRemainder(const RCP<const Basic>& expr,
                                  const std::vector<RCP<const Basic>>& linearVars);
 std::optional<std::vector<RCP<const Basic>>> solveLinearSystem(
     std::vector<std::vector<RCP<const Basic>>> matrix, std::vector<RCP<const Basic>> rhs);
+std::optional<std::unordered_map<QString, RCP<const Basic>>> solveLinearSubsystem(
+    const std::vector<RCP<const Basic>>& relations, const std::vector<QString>& unknowns,
+    const std::vector<RCP<const Basic>>& knownVars);
+std::unordered_set<QString> expandCoupledAlgebraicUnknowns(
+    const std::unordered_set<QString>& seeds, const std::vector<RCP<const Basic>>& relations,
+    const std::function<bool(const QString&)>& isAlgebraicUnknown);
 void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
                              std::unordered_map<QString, RCP<const Basic>>& stateDots);
 RCP<const Basic> rewriteForSyntheticAcrossStateDot(

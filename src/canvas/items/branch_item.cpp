@@ -72,6 +72,9 @@ void BranchItem::setActive(bool active) {
             graphScene->registerSourceInputId(m_sourceInputId);
         }
     }
+    if (active) {
+        m_elementConstant.clear();
+    }
     lg::applySourceThroughNaming(this);
     updatePath();
 }

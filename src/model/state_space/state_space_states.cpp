@@ -367,11 +367,11 @@ bool ssDeriveStateDots(StateSpaceContext& ctx,
         }
         const auto stateIt = stateBranchBySymbol.find(targetName);
         if (stateIt != stateBranchBySymbol.end() && stateIt->second) {
+            const ss::RCP<const SymEngine::Basic> ownDot = ss::dotSym(targetName);
             const QString stateFlow = branchThroughSymbol(*stateIt->second);
             const std::optional<ss::RCP<const SymEngine::Basic>> stateFlowSym =
                 ss::trySymOf(stateFlow);
             if (stateFlowSym && eq(*primarySym, **stateFlowSym)) {
-                const ss::RCP<const SymEngine::Basic> ownDot = ss::dotSym(targetName);
                 const ss::RCP<const SymEngine::Basic> coeffBefore =
                     ss::linearCoeffRCP(targetExpr, ownDot);
                 const ss::RCP<const SymEngine::Basic> coeffAfter =
@@ -379,6 +379,11 @@ bool ssDeriveStateDots(StateSpaceContext& ctx,
                 if (!eq(*coeffBefore, *coeffAfter)) {
                     return false;
                 }
+            }
+            // ponytail: block any elim whose solved form recycles own Q_dot (pump.lgm Q_L1/P1)
+            if (!eq(*ss::linearCoeffRCP(solved, ownDot), *integer(0)) &&
+                !eq(*ss::linearCoeffRCP(next, ownDot), *integer(0))) {
+                return false;
             }
         }
         for (const QString& input : ctx.result.inputs) {
@@ -471,6 +476,101 @@ bool ssDeriveStateDots(StateSpaceContext& ctx,
         stateInputVars.push_back(ss::symOf(input));
         stateInputVars.push_back(ss::symOf(ss::dotName(input)));
     }
+
+    std::unordered_set<QString> elementConstants;
+    for (BranchItem* branch : branches) {
+        if (!branch) {
+            continue;
+        }
+        const QString constant = branch->elementConstant().trimmed();
+        if (isValidVariableSymbol(constant)) {
+            elementConstants.insert(constant);
+        }
+    }
+    std::unordered_set<QString> algebraicVariables;
+    for (const QString& nodeAcross : nodeAcrossSymbols) {
+        if (canEliminateBranchSymbol(nodeAcross)) {
+            algebraicVariables.insert(nodeAcross);
+        }
+    }
+    for (BranchItem* branch : branches) {
+        if (!branch) {
+            continue;
+        }
+        for (const QString& symbol :
+             {branchThroughSymbol(*branch), branchAcrossSymbol(*branch)}) {
+            if (canEliminateBranchSymbol(symbol)) {
+                algebraicVariables.insert(symbol);
+            }
+        }
+    }
+    for (const auto& [name, expr] : ctx.replacements) {
+        (void)expr;
+        if (canEliminateBranchSymbol(name)) {
+            algebraicVariables.insert(name);
+        }
+    }
+
+    const auto isAlgebraicUnknown = [&](const QString& sym) {
+        return canEliminateBranchSymbol(sym) && algebraicVariables.count(sym) != 0 &&
+               elementConstants.count(sym) == 0;
+    };
+
+    const std::vector<ss::RCP<const SymEngine::Basic>> subsystemRelations =
+        ctx.reductionRelations->reducedWithFlow();
+    for (size_t pass = 0; pass < 4; ++pass) {
+        std::unordered_set<QString> leftoverUnknowns;
+        for (const auto& [stateName, expr] : stateDots) {
+            (void)stateName;
+            std::unordered_set<QString> symbols;
+            ss::collectExprSymbols(expr, symbols);
+            for (const QString& sym : symbols) {
+                if (isAlgebraicUnknown(sym)) {
+                    leftoverUnknowns.insert(sym);
+                }
+            }
+        }
+        if (leftoverUnknowns.empty()) {
+            break;
+        }
+        leftoverUnknowns =
+            ss::expandCoupledAlgebraicUnknowns(leftoverUnknowns, subsystemRelations,
+                                               isAlgebraicUnknown);
+        std::vector<QString> unknownList(leftoverUnknowns.begin(), leftoverUnknowns.end());
+        std::sort(unknownList.begin(), unknownList.end());
+        ss::ssLog(QStringLiteral("subsystem_solve"),
+                  QStringLiteral("pass %1 unknowns=%2")
+                      .arg(pass)
+                      .arg(QStringList(unknownList.begin(), unknownList.end())
+                               .join(QStringLiteral(", "))));
+        const std::optional<std::unordered_map<QString, ss::RCP<const SymEngine::Basic>>> solved =
+            ss::solveLinearSubsystem(subsystemRelations, unknownList, stateInputVars);
+        if (!solved) {
+            ss::ssLog(QStringLiteral("subsystem_solve"), QStringLiteral("failed"));
+            break;
+        }
+        SymEngine::map_basic_basic subMap;
+        for (const QString& name : unknownList) {
+            subMap[ss::symOf(name)] = solved->at(name);
+        }
+        bool changed = false;
+        for (auto& [name, expr] : stateDots) {
+            (void)name;
+            const ss::RCP<const SymEngine::Basic> next = expand(subs(expr, subMap));
+            if (!eq(*next, *expr)) {
+                expr = next;
+                changed = true;
+            }
+        }
+        ss::ssLog(QStringLiteral("subsystem_solved"),
+                  QStringLiteral("pass %1 substituted %2 unknowns")
+                      .arg(pass)
+                      .arg(solved->size()));
+        if (!changed) {
+            break;
+        }
+    }
+
     for (const ComputedState& state : ctx.computedStates) {
         const ss::RCP<const SymEngine::Basic> remainder =
             ss::linearRemainder(stateDots.at(state.symbol), stateInputVars);

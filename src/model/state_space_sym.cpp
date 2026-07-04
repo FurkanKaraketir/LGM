@@ -283,6 +283,149 @@ std::optional<std::vector<RCP<const Basic>>> solveLinearSystem(
     return solution;
 }
 
+std::optional<std::unordered_map<QString, RCP<const Basic>>> solveLinearSubsystem(
+    const std::vector<RCP<const Basic>>& relations, const std::vector<QString>& unknowns,
+    const std::vector<RCP<const Basic>>& knownVars) {
+    if (unknowns.empty()) {
+        return std::unordered_map<QString, RCP<const Basic>>{};
+    }
+
+    std::vector<RCP<const Basic>> unknownSyms;
+    unknownSyms.reserve(unknowns.size());
+    for (const QString& name : unknowns) {
+        unknownSyms.push_back(symOf(name));
+    }
+    std::vector<RCP<const Basic>> allVars = unknownSyms;
+    allVars.insert(allVars.end(), knownVars.begin(), knownVars.end());
+
+    struct Row {
+        std::vector<RCP<const Basic>> coeffs;
+        RCP<const Basic> rhs;
+    };
+    std::vector<Row> linearRows;
+    linearRows.reserve(relations.size());
+    for (const RCP<const Basic>& relation : relations) {
+        const RCP<const Basic> expr = expand(relation);
+        if (!eq(*linearRemainder(expr, allVars), *integer(0))) {
+            continue;
+        }
+        Row row;
+        row.coeffs.reserve(unknowns.size());
+        for (const RCP<const Basic>& unknownSym : unknownSyms) {
+            row.coeffs.push_back(linearCoeffRCP(expr, unknownSym));
+        }
+        row.rhs = neg(linearRemainder(expr, unknownSyms));
+        linearRows.push_back(std::move(row));
+    }
+
+    const size_t n = unknowns.size();
+    if (linearRows.size() < n) {
+        return std::nullopt;
+    }
+
+    std::vector<std::vector<RCP<const Basic>>> matrix;
+    matrix.reserve(linearRows.size());
+    std::vector<RCP<const Basic>> rhs;
+    rhs.reserve(linearRows.size());
+    for (const Row& row : linearRows) {
+        matrix.push_back(row.coeffs);
+        rhs.push_back(row.rhs);
+    }
+
+    const size_t m = matrix.size();
+    size_t pivotRow = 0;
+    for (size_t col = 0; col < n && pivotRow < m; ++col) {
+        size_t best = pivotRow;
+        for (size_t r = pivotRow + 1; r < m; ++r) {
+            if (eq(*matrix[best][col], *integer(0)) && !eq(*matrix[r][col], *integer(0))) {
+                best = r;
+            }
+        }
+        if (eq(*matrix[best][col], *integer(0))) {
+            return std::nullopt;
+        }
+        if (best != pivotRow) {
+            std::swap(matrix[best], matrix[pivotRow]);
+            std::swap(rhs[best], rhs[pivotRow]);
+        }
+        for (size_t r = 0; r < m; ++r) {
+            if (r == pivotRow || eq(*matrix[r][col], *integer(0))) {
+                continue;
+            }
+            const RCP<const Basic> factor = div(matrix[r][col], matrix[pivotRow][col]);
+            for (size_t k = col; k < n; ++k) {
+                matrix[r][k] = expand(sub(matrix[r][k], mul(factor, matrix[pivotRow][k])));
+            }
+            rhs[r] = expand(sub(rhs[r], mul(factor, rhs[pivotRow])));
+        }
+        ++pivotRow;
+    }
+    if (pivotRow != n) {
+        return std::nullopt;
+    }
+    for (size_t r = pivotRow; r < m; ++r) {
+        bool allZero = true;
+        for (size_t c = 0; c < n; ++c) {
+            if (!eq(*matrix[r][c], *integer(0))) {
+                allZero = false;
+                break;
+            }
+        }
+        if (allZero && !eq(*rhs[r], *integer(0))) {
+            return std::nullopt;
+        }
+    }
+
+    std::vector<RCP<const Basic>> solution(n);
+    for (int r = static_cast<int>(n) - 1; r >= 0; --r) {
+        RCP<const Basic> sum = rhs[static_cast<size_t>(r)];
+        for (size_t c = static_cast<size_t>(r) + 1; c < n; ++c) {
+            sum = expand(sub(sum, mul(matrix[static_cast<size_t>(r)][c], solution[c])));
+        }
+        if (eq(*matrix[static_cast<size_t>(r)][static_cast<size_t>(r)], *integer(0))) {
+            return std::nullopt;
+        }
+        solution[static_cast<size_t>(r)] =
+            div(sum, matrix[static_cast<size_t>(r)][static_cast<size_t>(r)]);
+    }
+
+    std::unordered_map<QString, RCP<const Basic>> out;
+    for (size_t i = 0; i < n; ++i) {
+        out[unknowns[i]] = expand(solution[i]);
+    }
+    return out;
+}
+
+std::unordered_set<QString> expandCoupledAlgebraicUnknowns(
+    const std::unordered_set<QString>& seeds, const std::vector<RCP<const Basic>>& relations,
+    const std::function<bool(const QString&)>& isAlgebraicUnknown) {
+    std::unordered_set<QString> unknowns = seeds;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const RCP<const Basic>& relation : relations) {
+            std::unordered_set<QString> relSyms;
+            collectExprSymbols(relation, relSyms);
+            bool touches = false;
+            for (const QString& sym : relSyms) {
+                if (unknowns.count(sym) != 0) {
+                    touches = true;
+                    break;
+                }
+            }
+            if (!touches) {
+                continue;
+            }
+            for (const QString& sym : relSyms) {
+                if (isAlgebraicUnknown(sym) && unknowns.insert(sym).second) {
+                    changed = true;
+                }
+            }
+        }
+    }
+    return unknowns;
+}
+
 RCP<const Basic> rewriteForSyntheticAcrossStateDot(
     const RCP<const Basic>& equation, const BranchItem& branch, const QString& stateSymbol,
     const SymEngine::map_basic_basic& /*valueSubMap*/,
@@ -426,6 +569,32 @@ void resolveStateDotCoupling(const std::vector<QString>& stateSymbols,
     ssLog(QStringLiteral("coupling"), QStringLiteral("end"));
 }
 
+namespace {
 
+void solveLinearSubsystemSelfCheck() {
+    // ponytail: node-3 {V3, i_R3} coupled pair from circuit with 2 inputs
+    const RCP<const Basic> i_R3 = symOf(QStringLiteral("i_R3"));
+    const RCP<const Basic> V3 = symOf(QStringLiteral("V3"));
+    const RCP<const Basic> V4 = symOf(QStringLiteral("V4"));
+    const RCP<const Basic> i_L = symOf(QStringLiteral("i_L"));
+    const RCP<const Basic> Vs1 = symOf(QStringLiteral("Vs1"));
+    const RCP<const Basic> R1 = symOf(QStringLiteral("R1"));
+    const RCP<const Basic> R3 = symOf(QStringLiteral("R3"));
+    const std::vector<RCP<const Basic>> relations = {
+        expand(sub(i_R3, sub(div(V3, R3), div(V4, R3)))),
+        expand(sub(add(i_L, i_R3), sub(div(Vs1, R1), div(V3, R1)))),
+    };
+    const std::vector<QString> unknowns = {QStringLiteral("V3"), QStringLiteral("i_R3")};
+    const std::vector<RCP<const Basic>> knownVars = {V4, i_L, Vs1, R1, R3};
+    const std::optional<std::unordered_map<QString, RCP<const Basic>>> solved =
+        solveLinearSubsystem(relations, unknowns, knownVars);
+    assert(solved);
+    assert(eq(*linearCoeffRCP(solved->at(QStringLiteral("V3")), V3), *integer(0)));
+    assert(eq(*linearCoeffRCP(solved->at(QStringLiteral("i_R3")), i_R3), *integer(0)));
+}
+
+const bool kSolveLinearSubsystemSelfCheck = (solveLinearSubsystemSelfCheck(), true);
+
+}  // namespace
 
 }  // namespace lg::ss

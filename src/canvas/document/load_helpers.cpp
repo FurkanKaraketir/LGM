@@ -101,7 +101,9 @@ void applyLoadedBranchData(GraphScene* scene, BranchItem* branch, const BranchLo
         branch->setSourceInputId(data.sourceInputId);
         scene->registerSourceInputId(data.sourceInputId);
     }
-    branch->setElementConstant(data.snap.constant);
+    if (!branch->isActive()) {
+        branch->setElementConstant(data.snap.constant);
+    }
     branch->setBranchType(data.snap.type);
     branch->setName(data.snap.name);
 }

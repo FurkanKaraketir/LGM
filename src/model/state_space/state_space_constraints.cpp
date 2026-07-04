@@ -143,9 +143,6 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
         if (!twig) {
             continue;
         }
-        if (twig->isActive() && twig->branchType() == BranchType::A) {
-            continue;
-        }
         if (skipTwigFlowContinuity(*twig, twoPorts, branches)) {
             continue;
         }
@@ -221,6 +218,15 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
             const QString nodeAcross = to->acrossVariable();
             if (!nodeAcross.isEmpty() && nodeAcross != QStringLiteral("0") && nodeAcross != input) {
                 ctx.recordReplacement(nodeAcross, inputExpr, ctx.result.compatibilityEquations);
+            }
+        } else if (!from->isGround() && !to->isGround()) {
+            // ponytail: floating across source (Ps1 between P1–P6): u = P_from − P_to
+            const QString vFrom = from->acrossVariable();
+            const QString vTo = to->acrossVariable();
+            if (!vFrom.isEmpty() && vFrom != QStringLiteral("0") && vFrom != input &&
+                !vTo.isEmpty() && vTo != QStringLiteral("0") && vTo != input) {
+                ctx.recordReplacement(vFrom, add(inputExpr, ss::symOf(vTo)),
+                                      ctx.result.compatibilityEquations);
             }
         }
     }

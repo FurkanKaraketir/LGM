@@ -287,22 +287,9 @@ void AnalyzeWindow::refreshOutputVariablesList() {
         return;
     }
     const QSignalBlocker blocker(m_outputVariablesList);
+    m_scene->pruneStaleOutputVariables();
     const std::vector<lg::GraphOutputVariable> choices = m_scene->availableOutputVariables();
-    QStringList selected = m_scene->outputVariables();
-    QStringList validSelected;
-    validSelected.reserve(selected.size());
-    for (const QString& symbol : selected) {
-        const bool stillAvailable = std::any_of(
-            choices.begin(), choices.end(),
-            [&](const lg::GraphOutputVariable& choice) { return choice.symbol == symbol; });
-        if (stillAvailable) {
-            validSelected.push_back(symbol);
-        }
-    }
-    if (validSelected != selected) {
-        m_scene->setOutputVariables(validSelected);
-        selected = validSelected;
-    }
+    const QStringList selected = m_scene->outputVariables();
     m_outputVariablesList->clear();
     for (const lg::GraphOutputVariable& choice : choices) {
         auto* item = new QListWidgetItem(choice.label, m_outputVariablesList);

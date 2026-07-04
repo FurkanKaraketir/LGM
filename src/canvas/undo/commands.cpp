@@ -188,8 +188,9 @@ private:
 
 class SetNodeAcrossVariableCommand : public QUndoCommand {
 public:
-    SetNodeAcrossVariableCommand(NodeItem* node, const QString& oldSymbol, const QString& newSymbol)
-        : m_node(node), m_old(oldSymbol), m_new(newSymbol) {
+    SetNodeAcrossVariableCommand(GraphScene* scene, NodeItem* node, const QString& oldSymbol,
+                                 const QString& newSymbol)
+        : m_scene(scene), m_node(node), m_old(oldSymbol), m_new(newSymbol) {
         setText("Change node across variable");
     }
 
@@ -210,11 +211,20 @@ public:
 
 private:
     void apply(const QString& symbol) {
-        if (itemAlive(m_node)) {
-            m_node->setAcrossVariable(symbol);
+        if (!itemAlive(m_node)) {
+            return;
+        }
+        const QString previous = m_node->acrossVariable();
+        if (previous == symbol) {
+            return;
+        }
+        m_node->setAcrossVariable(symbol);
+        if (m_scene) {
+            m_scene->renameOutputVariableSymbol(previous, symbol);
         }
     }
 
+    GraphScene* m_scene = nullptr;
     NodeItem* m_node;
     QString m_old;
     QString m_new;
@@ -826,7 +836,7 @@ void GraphScene::pushSetNodeAcrossVariable(NodeItem* node, const QString& symbol
     if (!node || node->isGround() || node->acrossVariable() == symbol) {
         return;
     }
-    m_undoStack.push(new SetNodeAcrossVariableCommand(node, node->acrossVariable(), symbol));
+    m_undoStack.push(new SetNodeAcrossVariableCommand(this, node, node->acrossVariable(), symbol));
 }
 
 void GraphScene::pushSetNodeGround(NodeItem* node, bool ground) {

@@ -678,6 +678,10 @@ public:
 
     void setOutputVariables(const QStringList& symbols) { m_outputVariables = symbols; }
 
+    void pruneStaleOutputVariables();
+
+    void renameOutputVariableSymbol(const QString& from, const QString& to);
+
     std::vector<lg::GraphOutputVariable> availableOutputVariables() const;
 
     void clearDocument();

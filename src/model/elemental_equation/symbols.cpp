@@ -30,6 +30,15 @@ QString branchThroughSymbol(const BranchItem& branch) {
     if (branch.isActive() && branch.branchType() == BranchType::T) {
         return branchSourceInputSymbol(branch);
     }
+    if (branch.isActive() && branch.branchType() == BranchType::A) {
+        const QString name = branch.name().trimmed();
+        const QString input = branchSourceInputSymbol(branch);
+        if (name != input && isValidVariableSymbol(name) && !isAutoThroughName(name) &&
+            !isAutoPassiveThroughName(name)) {
+            return name;
+        }
+        return throughNameFromConstant(input, branchNumericId(branch), branchSystemType(branch));
+    }
     return branchSymbolBase(branch);
 }
 
