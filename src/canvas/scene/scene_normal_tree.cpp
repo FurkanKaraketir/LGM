@@ -271,6 +271,10 @@ void GraphScene::applyNormalTreeHighlight(const lg::NormalTreeResult& result) {
 }
 
 lg::NormalTreeEnumerationResult GraphScene::findAllNormalTrees() {
+    if (m_mode == Mode::SelectNormalTree) {
+        leaveManualNormalTreeMode(false);
+    }
+
     std::vector<NodeItem*> nodes;
     std::vector<BranchItem*> branches;
     std::vector<TwoPortItem*> twoPorts;
@@ -317,6 +321,9 @@ lg::NormalTreeResult GraphScene::findNormalTree() {
 }
 
 bool GraphScene::showDiscoveredNormalTree(int index) {
+    if (m_mode == Mode::SelectNormalTree) {
+        leaveManualNormalTreeMode(false);
+    }
     if (index < 0 || index >= static_cast<int>(m_discoveredNormalTrees.size())) {
         return false;
     }
@@ -388,7 +395,26 @@ BranchItem* GraphScene::branchBySerialId(int serialId) const {
     return nullptr;
 }
 
+std::vector<int> GraphScene::canvasTreeBranchSerialIds() const {
+    std::vector<int> ids;
+    for (QGraphicsItem* item : items()) {
+        if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+            if (branch->normalTreeRoleKnown() && branch->inNormalTree() && branch->serialId() > 0) {
+                ids.push_back(branch->serialId());
+            }
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    return ids;
+}
+
 std::vector<int> GraphScene::currentTreeBranchSerialIds() const {
+    if (m_mode == Mode::SelectNormalTree || m_normalTreeHighlightActive) {
+        const std::vector<int> canvasIds = canvasTreeBranchSerialIds();
+        if (!canvasIds.empty()) {
+            return canvasIds;
+        }
+    }
     std::vector<int> ids;
     if (!m_normalTreeHighlightActive ||
         m_lastNormalTreeResult.status != lg::NormalTreeResult::Status::Ok) {
@@ -402,6 +428,13 @@ std::vector<int> GraphScene::currentTreeBranchSerialIds() const {
     }
     std::sort(ids.begin(), ids.end());
     return ids;
+}
+
+bool GraphScene::canSaveCurrentNormalTree() const {
+    if (m_mode == Mode::SelectNormalTree || m_normalTreeHighlightActive) {
+        return !canvasTreeBranchSerialIds().empty();
+    }
+    return false;
 }
 
 void GraphScene::syncActiveSavedNormalTreeIndex() {
@@ -458,11 +491,10 @@ QString GraphScene::savedNormalTreeListLabel(int index) const {
 }
 
 bool GraphScene::addSavedNormalTree(const QString& name) {
-    if (!m_normalTreeHighlightActive ||
-        m_lastNormalTreeResult.status != lg::NormalTreeResult::Status::Ok) {
-        return false;
+    std::vector<int> ids;
+    if (m_mode == Mode::SelectNormalTree || m_normalTreeHighlightActive) {
+        ids = canvasTreeBranchSerialIds();
     }
-    const std::vector<int> ids = currentTreeBranchSerialIds();
     if (ids.empty()) {
         return false;
     }
@@ -510,6 +542,9 @@ bool GraphScene::applySavedNormalTree(int index) {
     if (index < 0 || index >= static_cast<int>(m_savedNormalTrees.size())) {
         return false;
     }
+    if (m_mode == Mode::SelectNormalTree) {
+        leaveManualNormalTreeMode(false);
+    }
     const SavedNormalTree& saved = m_savedNormalTrees[static_cast<size_t>(index)];
 
     std::vector<BranchItem*> treeBranches;
@@ -523,12 +558,26 @@ bool GraphScene::applySavedNormalTree(int index) {
         return false;
     }
 
-    const lg::NormalTreeResult result = commitNormalTreeSelection(treeBranches);
-    if (result.status != lg::NormalTreeResult::Status::Ok) {
-        return false;
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    std::vector<TwoPortItem*> twoPorts;
+    collectGraphItems(nodes, branches, twoPorts);
+
+    const lg::NormalTreeResult result =
+        lg::validateManualNormalTree(nodes, branches, twoPorts, treeBranches);
+
+    const std::unordered_set<BranchItem*> inTree(treeBranches.begin(), treeBranches.end());
+    for (BranchItem* branch : branches) {
+        if (branch) {
+            branch->setNormalTreeRole(inTree.count(branch) != 0, true);
+        }
     }
+    m_normalTreeHighlightActive = true;
+    m_lastNormalTreeResult = result;
+    m_lastStateSpaceResult = {};
     m_normalTreeManual = true;
     m_activeSavedNormalTreeIndex = index;
+    emit normalTreeHighlightChanged();
     emit savedNormalTreesChanged();
     return true;
 }
@@ -585,7 +634,14 @@ lg::StateSpaceResult GraphScene::computeStateSpaceRep() {
         m_lastNormalTreeResult.status != lg::NormalTreeResult::Status::Ok) {
         lg::StateSpaceResult result;
         result.status = lg::StateSpaceResult::Status::NeedNormalTree;
-        result.message = QStringLiteral("Find a valid normal tree first.");
+        if (m_normalTreeHighlightActive) {
+            result.message =
+                m_lastNormalTreeResult.message.isEmpty()
+                    ? QStringLiteral("The applied normal tree is not valid.")
+                    : m_lastNormalTreeResult.message;
+        } else {
+            result.message = QStringLiteral("Find a valid normal tree first.");
+        }
         m_lastStateSpaceResult = result;
         return result;
     }

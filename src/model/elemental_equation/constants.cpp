@@ -33,6 +33,13 @@ bool parseElementConstant(const QString& text, SymEngine::RCP<const SymEngine::B
     if (trimmed.isEmpty()) {
         return false;
     }
+    // ponytail: SymEngine parse() treats I, E, pi, … as math constants; element params are symbols
+    static const QRegularExpression identifier(
+        QStringLiteral("^[A-Za-z_][A-Za-z0-9_]*$"));
+    if (identifier.match(trimmed).hasMatch()) {
+        out = SymEngine::symbol(trimmed.toStdString());
+        return true;
+    }
     try {
         out = SymEngine::parse(trimmed.toStdString());
         return true;
@@ -246,5 +253,18 @@ QString systemTypeLabel(SystemType systemType) {
     }
     return QStringLiteral("Mechanical (Translational)");
 }
+
+namespace {
+
+void parseElementConstantSelfCheck() {
+    SymEngine::RCP<const SymEngine::Basic> expr;
+    assert(parseElementConstant(QStringLiteral("I"), expr));
+    assert(SymEngine::is_a<SymEngine::Symbol>(*expr));
+    assert(SymEngine::down_cast<const SymEngine::Symbol&>(*expr).get_name() == "I");
+}
+
+const bool kParseElementConstantSelfCheck = (parseElementConstantSelfCheck(), true);
+
+}  // namespace
 
 }  // namespace lg

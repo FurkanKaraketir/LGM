@@ -1,11 +1,79 @@
 #include "canvas.h"
+#include "document/document_detail.h"
 
 #include <QSet>
 #include <algorithm>
 #include <vector>
 
+namespace {
+
+GraphScene::NodeSnapshot nodeSnapshotFrom(const NodeItem* node) {
+    GraphScene::NodeSnapshot snap;
+    snap.pos = node->scenePos();
+    snap.name = node->name();
+    snap.ground = node->isGround();
+    snap.across = node->isGround() ? QStringLiteral("0") : node->acrossVariable();
+    snap.systemType = node->systemType();
+    return snap;
+}
+
+GraphScene::BranchSnapshot branchSnapshotFrom(const BranchItem* branch) {
+    GraphScene::BranchSnapshot snap;
+    snap.from = branch->from()->scenePos();
+    snap.to = branch->to()->scenePos();
+    snap.index = branch->index();
+    snap.name = branch->name();
+    snap.active = branch->isActive();
+    snap.type = branch->branchType();
+    snap.constant = branch->elementConstant();
+    snap.bow = branch->bow();
+    snap.serialId = branch->serialId();
+    snap.sourceInputId = branch->sourceInputId();
+    return snap;
+}
+
+GraphScene::TwoPortSnapshot snapshotFromTwoPort(const TwoPortItem* twoPort) {
+    GraphScene::TwoPortSnapshot snap;
+    snap.key = {twoPort->center(), twoPort->kind(), twoPort->modulus(), twoPort->name()};
+    snap.v1 = nodeSnapshotFrom(twoPort->v1());
+    snap.v2 = nodeSnapshotFrom(twoPort->v2());
+    snap.g1 = nodeSnapshotFrom(twoPort->g1());
+    snap.g2 = nodeSnapshotFrom(twoPort->g2());
+    snap.leftBranch = branchSnapshotFrom(twoPort->leftBranch());
+    snap.rightBranch = branchSnapshotFrom(twoPort->rightBranch());
+    snap.sharedRef = twoPort->hasSharedReference();
+    return snap;
+}
+
+}  // namespace
+
+void GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
+    NodeItem* v1 = getOrCreateNodeAt(this, data.v1);
+    NodeItem* v2 = getOrCreateNodeAt(this, data.v2);
+    NodeItem* g1 = getOrCreateNodeAt(this, data.g1);
+    NodeItem* g2 = data.sharedRef ? g1 : getOrCreateNodeAt(this, data.g2);
+    if (!v1 || !v2 || !g1 || !g2) {
+        return;
+    }
+    if (TwoPortItem* twoPort = createTwoPortFromPorts(v1, v2, g1, g2, data.key.kind, data.key.modulus,
+                                                      data.key.name)) {
+        const auto apply = [&](BranchItem* branch, const BranchSnapshot& snap) {
+            BranchLoadData load;
+            load.snap = snap;
+            load.serialId = snap.serialId;
+            load.sourceInputId = snap.sourceInputId;
+            applyLoadedBranchData(this, branch, load);
+            if (snap.serialId >= m_nextBranchId) {
+                m_nextBranchId = snap.serialId + 1;
+            }
+        };
+        apply(twoPort->leftBranch(), data.leftBranch);
+        apply(twoPort->rightBranch(), data.rightBranch);
+    }
+}
+
 void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,
-                                    std::vector<TwoPortKey>& twoPorts) const {
+                                    std::vector<TwoPortSnapshot>& twoPorts) const {
     nodes.clear();
     branches.clear();
     twoPorts.clear();
@@ -43,8 +111,7 @@ void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vecto
     }
 
     for (TwoPortItem* twoPort : twoPortsToDelete) {
-        twoPorts.push_back(
-            {snap(twoPort->center()), twoPort->kind(), twoPort->modulus(), twoPort->name()});
+        twoPorts.push_back(snapshotFromTwoPort(twoPort));
     }
 
     for (NodeItem* node : nodesToDelete) {
@@ -83,12 +150,12 @@ void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vecto
 
 void GraphScene::executeDelete(const std::vector<NodeSnapshot>& nodes,
                                const std::vector<BranchSnapshot>& branches,
-                               const std::vector<TwoPortKey>& twoPorts) {
+                               const std::vector<TwoPortSnapshot>& twoPorts) {
     clearBranchPending();
     clearSelection();
 
-    for (const TwoPortKey& key : twoPorts) {
-        if (TwoPortItem* item = twoPortAtCenter(key.center)) {
+    for (const TwoPortSnapshot& snap : twoPorts) {
+        if (TwoPortItem* item = twoPortAtCenter(snap.key.center)) {
             purgeTwoPort(item);
         }
     }
@@ -131,10 +198,12 @@ void GraphScene::executeDelete(const std::vector<NodeSnapshot>& nodes,
 
 void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
                                const std::vector<BranchSnapshot>& branches,
-                               const std::vector<TwoPortKey>& twoPorts) {
-    for (const TwoPortKey& key : twoPorts) {
-        createTwoPort(key.center, key.kind, key.modulus, key.name);
+                               const std::vector<TwoPortSnapshot>& twoPorts) {
+    m_suppressGraphChange = true;
+    for (const TwoPortSnapshot& snap : twoPorts) {
+        restoreTwoPortSnapshot(snap);
     }
+    m_suppressGraphChange = false;
 
     for (const NodeSnapshot& snap : nodes) {
         if (NodeItem* node = createNode(snap.pos)) {
@@ -176,4 +245,5 @@ void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
             }
         }
     }
+    notifyGraphChanged();
 }

@@ -141,7 +141,7 @@ Each candidate is ranked (fewer same-span conflicts first, then more A-type and 
 
 - All active A-type sources in tree (no cycle)
 - Transformer: exactly one port in tree
-- Zero **same-span conflicts** (port branch + parallel user branch both in tree)
+- Zero **same-span conflicts** for **transformers** (transformer port branch + parallel user branch both in tree on the same span); gyrators are not scored by this rule
 - Connected spanning tree of correct size
 
 **Find Normal Tree** returns the best tree from enumeration.
@@ -223,7 +223,7 @@ Map each normal-tree state symbol to its storage branch.
 
 ### Phase B — Elemental equations
 
-Constitutive laws in node-across form (not synthetic `*_a` symbols).
+Constitutive laws in node-across form (not synthetic `*_a` symbols). Tree twigs on a port span: external non-storage branches are skipped unless they are **D-type** — dissipators in the tree on a port span still contribute elementals.
 
 **Motor** — constitutive summary:
 
@@ -263,6 +263,10 @@ For each remaining twig: cut the graph, sum signed through-flows, solve for the 
 ```
 port_flow = −(sum of parallel branch flows)
 ```
+
+**Cascaded transformers (shared ref):** when co-tree port bonds share only a **reference node** but sit on **different spans**, continuity applies **KCL at the shared ground** — flows incident on that ref are summed, not treated as same-span parallels.
+
+**D-type co-tree twig on port span:** before recording the port flow replacement, any **D-type tree twig** on the same span that was skipped for cut-set continuity may be solved from the junction equation and recorded first.
 
 **Motor:**
 
@@ -327,7 +331,7 @@ Substitute replacements into elementals; solve each storage elemental for its `s
 
 Eliminate branch flows and node across symbols. Resolve any coupled `state_dot` terms; refine until only states and inputs remain.
 
-When leftover algebraic unknowns are **mutually coupled** (common in multi-input circuits, where a node effort and a branch current each depend on the other), they are gathered and solved together as one linear subsystem. A guard also blocks eliminations that would make a state depend on its own `_dot`.
+When leftover algebraic unknowns are **mutually coupled** (common in multi-input circuits, where a node effort and a branch current each depend on the other), they are gathered and solved together as one linear subsystem. A guard blocks eliminations that would make a state depend on its own `_dot`. A second guard rejects eliminations that introduce **other states'** `x_dot` when the target state's own elemental already defines its dot.
 
 **Motor — final** (no coupling; both decouple immediately):
 
@@ -371,7 +375,7 @@ Optional. In **Analyze**, check **`T_J through`**, **`i_L through`**, **`T_B thr
 
 For each selected observable the app:
 
-1. Builds an expression from graph relations and the resolved replacement map.
+1. Seeds an expression — **primary state** symbols seed directly; otherwise from graph relations and the resolved replacement map.
 2. Eliminates non-state symbols.
 3. Checks linearity in `{x, u, u̇}`.
 4. Adds scalar output equations and LaTeX `y = C x + D u [+ F u̇]`.
@@ -439,7 +443,7 @@ Skip this phase by leaving all output checkboxes cleared — only the state matr
 
 ## Debug output
 
-Run **Compute State Space** from a terminal to see `[state_space]` log lines (`begin`, `continuity`, `replacements_resolved`, `state_dot`, `subsystem_solve`, `matrix_form`, `output_equation`, `output_matrix_form`, …).
+Run **Compute State Space** from a terminal to see `[state_space]` log lines (`begin`, `continuity`, `replacements_resolved`, `state_dot`, `subsystem_solve`, `matrix_form`, `output_equation`, `output_matrix_form`, …). All log lines are also mirrored to **stderr** — useful on Windows where the GUI has no built-in console.
 
 Normal-tree search emits **no** debug tags.
 

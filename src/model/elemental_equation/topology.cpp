@@ -109,6 +109,31 @@ SymEngine::RCP<const SymEngine::Basic> signedParallelPortSpanFlowSum(
     return sum;
 }
 
+const NodeItem* portGroundNode(const BranchItem& port) {
+    if (port.to() && port.to()->isGround()) {
+        return port.to();
+    }
+    if (port.from() && port.from()->isGround()) {
+        return port.from();
+    }
+    return nullptr;
+}
+
+bool sharesGroundJunction(const BranchItem* a, const BranchItem* b) {
+    if (!a || !b || a == b) {
+        return false;
+    }
+    if (!isTwoPortInternalBranch(*a) || !isTwoPortInternalBranch(*b)) {
+        return false;
+    }
+    if (sharesEndpoints(a, b)) {
+        return false;
+    }
+    const NodeItem* groundA = portGroundNode(*a);
+    const NodeItem* groundB = portGroundNode(*b);
+    return groundA && groundB && groundA == groundB;
+}
+
 namespace {
 
 int internalPortCountOnSpan(const BranchItem* ref, const std::vector<BranchItem*>& branches) {
@@ -142,17 +167,42 @@ bool includeInSpanJunction(const BranchItem* member, const BranchItem& port,
     return true;
 }
 
+bool isIncidentOnNode(const BranchItem& branch, const NodeItem* node) {
+    return node && (branch.from() == node || branch.to() == node);
+}
+
+SymEngine::RCP<const SymEngine::Basic> signedFlowIntoGround(const BranchItem& branch,
+                                                              const NodeItem* ground) {
+    const SymEngine::RCP<const SymEngine::Basic> flow =
+        SymEngine::symbol(branchThroughSymbol(branch).toStdString());
+    if (branch.to() == ground) {
+        return flow;
+    }
+    if (branch.from() == ground) {
+        return SymEngine::neg(flow);
+    }
+    return SymEngine::integer(0);
+}
+
 }  // namespace
 
 SymEngine::RCP<const SymEngine::Basic> signedSpanJunctionFlowSum(
     const BranchItem& port, const std::vector<BranchItem*>& branches,
     const std::vector<TwoPortItem*>& twoPorts, bool excludePort) {
     SymEngine::RCP<const SymEngine::Basic> sum = SymEngine::integer(0);
+    const NodeItem* ground = portGroundNode(port);
     for (BranchItem* branch : branches) {
-        if (!includeInSpanJunction(branch, port, branches, twoPorts, excludePort)) {
+        if (!branch || (excludePort && branch == &port)) {
             continue;
         }
-        sum = SymEngine::add(sum, signedParallelFlowExpr(port, *branch));
+        if (includeInSpanJunction(branch, port, branches, twoPorts, excludePort)) {
+            sum = SymEngine::add(sum, signedParallelFlowExpr(port, *branch));
+            continue;
+        }
+        // ponytail: cascaded two-ports share ref node only — KCL at ref, not same-span parallels
+        if (ground && isIncidentOnNode(*branch, ground)) {
+            sum = SymEngine::add(sum, signedFlowIntoGround(*branch, ground));
+        }
     }
     return sum;
 }

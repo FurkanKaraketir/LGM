@@ -190,7 +190,9 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
 
     for (NodeItem* node : {item->v1(), item->v2(), item->g1(), item->g2()}) {
         if (node) {
-            node->setTwoPort(nullptr);
+            if (node->twoPort() == item) {
+                node->setTwoPort(nullptr);
+            }
             node->setSelected(false);
         }
     }
@@ -233,10 +235,19 @@ void GraphScene::purgeTwoPort(TwoPortItem* item) {
         }
     }
     destroyTwoPort(item);
+    QSet<TwoPortItem*> survivors;
     for (NodeItem* node : portNodes) {
-        if (node->scene() == this) {
-            destroyNode(node);
+        if (node->scene() != this) {
+            continue;
         }
+        if (TwoPortItem* other = twoPortForNode(node)) {
+            survivors.insert(other);
+            continue;
+        }
+        destroyNode(node);
+    }
+    for (TwoPortItem* twoPort : survivors) {
+        twoPort->refresh();
     }
 }
 

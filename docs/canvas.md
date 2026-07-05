@@ -27,11 +27,19 @@ The canvas is the main drawing surface (`GraphScene` + `GraphView` in `src/canva
 | Delete selection | `Del` / `Backspace` |
 | Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
 | Flip branch direction | `F` (selected branch) |
-| Combine nodes | `M` (two selected nodes at same position) |
+| Combine nodes | `M` (two selected nodes at same position; see below) |
 | Toggle two-port kind | `T` (transformer ↔ gyrator) |
 | Select all | `Ctrl+A` |
 
 Branches are directed (`from → to`). Multiple branches between the same node pair fan out perpendicular to the chord; each branch bows to the **left** of that direction.
+
+### Combine nodes (`M`)
+
+A **standalone reference (ground) node** may merge into a **two-port reference** when both nodes are ground and share the same **energy domain**. Other two-port node merges remain blocked. Merging references shows a distinct confirmation (reference joins the kept two-port’s reference; branches on the removed node attach to the kept node).
+
+### Delete and undo
+
+Deleting a two-port captures a full **TwoPortSnapshot** (attachment nodes, both port branches, shared-ref flag, branch parameters) so undo/redo restores complete topology — not just the two-port identity. Purging a two-port preserves nodes still used by a **cascaded** sibling two-port on the same reference.
 
 ## Docks and panels
 
@@ -68,9 +76,10 @@ In `src/canvas/items/geometry.cpp`:
 |------|------|
 | `canvas.h` | Scene, items, modes, analysis hooks |
 | `items/` | Node, branch, two-port geometry and paint |
-| `scene/scene_lifecycle.cpp` | Create/destroy nodes, branches, two-ports |
-| `scene/scene_merge.cpp` | Combine nodes, merge undo |
-| `scene/scene_normal_tree.cpp` | Normal tree UI, state-space trigger |
+| `scene/scene_lifecycle.cpp` | Create/destroy nodes, branches, two-ports; preserves shared nodes when purging cascaded two-ports |
+| `scene/scene_merge.cpp` | Combine nodes (including ground ↔ two-port ref), merge undo |
+| `scene/scene_normal_tree.cpp` | Normal tree UI, saved trees, canvas twig IDs, state-space trigger (see [analysis.md](analysis.md)) |
+| `canvas_scene_delete.cpp` | Delete capture/restore with `TwoPortSnapshot` |
 | `document/` | `.lgm` load/save |
 | `undo/commands.cpp` | Undo stack commands |
 | `canvas_scene_input.cpp` | Mouse/keyboard interaction |

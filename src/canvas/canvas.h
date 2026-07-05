@@ -491,6 +491,26 @@ public:
 
     };
 
+    struct TwoPortSnapshot {
+
+        TwoPortKey key;
+
+        NodeSnapshot v1;
+
+        NodeSnapshot v2;
+
+        NodeSnapshot g1;
+
+        NodeSnapshot g2;
+
+        BranchSnapshot leftBranch;
+
+        BranchSnapshot rightBranch;
+
+        bool sharedRef = false;
+
+    };
+
 
 
     void destroyBranchAt(const BranchKey& key);
@@ -594,15 +614,17 @@ public:
 
     void captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,
 
-                            std::vector<TwoPortKey>& twoPorts) const;
+                            std::vector<TwoPortSnapshot>& twoPorts) const;
 
     void executeDelete(const std::vector<NodeSnapshot>& nodes, const std::vector<BranchSnapshot>& branches,
 
-                       const std::vector<TwoPortKey>& twoPorts);
+                       const std::vector<TwoPortSnapshot>& twoPorts);
 
     void restoreDelete(const std::vector<NodeSnapshot>& nodes, const std::vector<BranchSnapshot>& branches,
 
-                       const std::vector<TwoPortKey>& twoPorts);
+                       const std::vector<TwoPortSnapshot>& twoPorts);
+
+    void restoreTwoPortSnapshot(const TwoPortSnapshot& data);
 
 
 
@@ -656,6 +678,8 @@ public:
     const std::vector<SavedNormalTree>& savedNormalTrees() const { return m_savedNormalTrees; }
 
     int activeSavedNormalTreeIndex() const { return m_activeSavedNormalTreeIndex; }
+
+    bool canSaveCurrentNormalTree() const;
 
     bool addSavedNormalTree(const QString& name);
 
@@ -790,6 +814,8 @@ private:
     int m_activeSavedNormalTreeIndex = -1;
 
     BranchItem* branchBySerialId(int serialId) const;
+
+    std::vector<int> canvasTreeBranchSerialIds() const;
 
     std::vector<int> currentTreeBranchSerialIds() const;
 

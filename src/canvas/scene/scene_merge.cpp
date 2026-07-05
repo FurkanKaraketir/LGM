@@ -109,6 +109,26 @@ bool GraphScene::canMergeNodes(const NodeItem* a, const NodeItem* b, QString* re
     if (tpB && twoPortRole(tpB, b) <= 2 && !tpA) {
         return true;
     }
+    if ((tpA && !tpB && twoPortRole(tpA, a) >= 3) || (tpB && !tpA && twoPortRole(tpB, b) >= 3)) {
+        const TwoPortItem* tp = tpA ? tpA : tpB;
+        const NodeItem* refNode = tpA ? a : b;
+        const NodeItem* standalone = tpA ? b : a;
+        if (!standalone->twoPort()) {
+            if (!refNode->isGround() || !standalone->isGround()) {
+                if (reason) {
+                    *reason = tr("Only reference (ground) nodes may be combined with a two-port reference.");
+                }
+                return false;
+            }
+            if (refNode->systemType() != standalone->systemType()) {
+                if (reason) {
+                    *reason = tr("Reference nodes must be in the same energy domain to combine.");
+                }
+                return false;
+            }
+            return true;
+        }
+    }
     if (tpA || tpB) {
         if (reason) {
             *reason = tr("This two-port node cannot be removed by combining.");

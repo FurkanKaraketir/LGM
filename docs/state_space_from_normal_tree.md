@@ -145,7 +145,7 @@ Each candidate is ranked by [`TreeScore::betterThan`](../src/model/normal_tree/b
 
 - All active A-type sources in tree (no cycle)
 - Transformer: exactly one port in tree
-- Zero **same-span conflicts** (port branch + parallel user branch both in tree)
+- Zero **same-span conflicts** for **transformers** (transformer port branch + parallel user branch both in tree on the same span); gyrators are not scored by this rule
 - Connected spanning tree of correct size
 
 [`computeNormalTree`](../src/model/normal_tree/normal_tree.cpp) returns the best tree from enumeration (`all.trees.front()` after sort).
@@ -219,7 +219,7 @@ flowchart TD
 
 **Important:** [`recordConstraint`](../src/model/state_space/state_space_constraints.cpp) never overwrites a symbol already set by continuity or compatibility. Two-port **flow** relations (`i1 = −T2/TF`) are **not** duplicated into `replacements` — they remain in the elemental set only, avoiding conflicts such as overwriting `i1 = i_L`.
 
-Each phase below lists **what**, **where in code**, and **Motor.lgm** log output. Logs are emitted by [`ss::ssLog`](../src/model/state_space_sym.cpp) to Qt debug output (`[state_space] …`).
+Each phase below lists **what**, **where in code**, and **Motor.lgm** log output. Logs are emitted by [`ss::ssLog`](../src/model/state_space_sym.cpp) to Qt debug output (`[state_space] …`) and mirrored to **stderr** when the app is run from a terminal ([`app_log.cpp`](../src/ui/app_log.cpp)).
 
 ### Phase A — Validate and map states
 
@@ -240,6 +240,8 @@ Maps each `tree.stateVariables` entry to its storage branch via [`ss::isStateBra
 **What:** Constitutive laws using [`branchNodeAcrossExpr`](../src/model/elemental_equation/symbols.cpp) — node-across differences from [`branchAcrossVariableText`](../src/model/elemental_equation/naming.cpp), not synthetic `*_a` symbols.
 
 **Where:** passive branch loop (`build_elementals`), then two-port elementals (`two_port_elementals`).
+
+Tree twigs on a port span: external non-storage branches are skipped unless they are **D-type** — dissipators in the tree on a port span still contribute elementals ([`state_space_constraints.cpp`](../src/model/state_space/state_space_constraints.cpp)).
 
 **Motor.lgm** — human-readable (`elemental_text`):
 
@@ -288,6 +290,10 @@ For each remaining twig: partition graph at a cut, sum signed through-flows, sol
 ```
 port_flow = −(sum of parallel branch flows)
 ```
+
+**Cascaded transformers (shared ref):** when co-tree port bonds share only a **reference node** but sit on **different spans**, [`signedSpanJunctionFlowSum`](../src/model/elemental_equation/topology.cpp) applies **KCL at the shared ground** — flows incident on that ref are summed, not treated as same-span parallels ([`portGroundNode`](../src/model/elemental_equation/topology.cpp), [`sharesGroundJunction`](../src/model/elemental_equation/topology.cpp)).
+
+**D-type co-tree twig on port span:** before recording the port flow replacement, any **D-type tree twig** on the same span that was skipped for cut-set continuity may be solved from `port_flow + spanSum = 0` and recorded first.
 
 **Motor.lgm** — logged at `[state_space] continuity` (after cut-sets + port parallel):
 
@@ -378,7 +384,7 @@ Eliminates branch flows and **node across** symbols from `stateDots` using algeb
 
 **Coupled algebraic subsystem solve** ([`solveLinearSubsystem`](../src/model/state_space_sym.cpp), [`expandCoupledAlgebraicUnknowns`](../src/model/state_space_sym.cpp)): when leftover algebraic unknowns (node-across / branch flows) survive single-symbol elimination because they are *mutually* coupled — as in multi-input circuits where a node effort and a resistor current each depend on the other — the leftover set is expanded across relations that touch it and solved as one linear system (up to 4 passes, logged `subsystem_solve` / `subsystem_solved`).
 
-A guard also blocks any elimination whose solved form would **recycle a state's own `_dot`** (e.g. `pump.lgm` `Q_L1`/`P1`), preventing a `Q_dot = f(Q_dot)` cycle.
+A guard also blocks any elimination whose solved form would **recycle a state's own `_dot`** (e.g. `pump.lgm` `Q_L1`/`P1`), preventing a `Q_dot = f(Q_dot)` cycle. A second guard rejects eliminations that introduce **other states'** `x_dot` when the target state's own elemental already defines its dot (multi-domain graphs where own through-flow fixes the state derivative).
 
 **Motor.lgm** — after first elimination pass (`pre_coupling` / `state_dot`), `coupling` reports *all decoupled* (no subsystem solve needed):
 
@@ -436,7 +442,7 @@ For this walkthrough, select textbook motor outputs: **`T_J`**, **`i_L`**, **`T_
 
 [`ssAssembleOutputs`](../src/model/state_space/state_space_matrix.cpp) processes each selected symbol:
 
-1. **Seed** an expression — from resolved replacements, branch elementals, or constitutive relations ([`seedOutputExpr`](../src/model/state_space/state_space_matrix.cpp)).
+1. **Seed** an expression — if the symbol is a **primary state**, seed `symOf(out)` directly; otherwise from resolved replacements, branch elementals, or constitutive relations ([`seedOutputExpr`](../src/model/state_space/state_space_matrix.cpp)).
 2. **Filter** relations that would eliminate the output prematurely.
 3. **Reduce** using the same elimination machinery as state-dot derivation (`ssReduceExpressions`, no coupling resolve).
 4. **Substitute** dependent dots, values, and state dots.
@@ -512,7 +518,7 @@ If no outputs are selected, Phase J is skipped and the **State Space** dock show
 
 ## Diagnostic log map
 
-Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) with Qt debug output enabled (e.g. run from a terminal, or set `QT_LOGGING_RULES=*.debug=true`). Tags are printed as `[state_space] <tag> - <detail>`.
+Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) from a terminal, or set `QT_LOGGING_RULES=*.debug=true`. Tags are printed as `[state_space] <tag> - <detail>`. On all platforms, every log line is also mirrored to **stderr** via [`app_log.cpp`](../src/ui/app_log.cpp) — useful on Windows where the GUI has no console.
 
 | Log tag | Phase | Meaning |
 |---------|-------|---------|
@@ -571,11 +577,11 @@ Normal-tree search emits **no** debug tags.
 | [`src/model/state_space/state_space_constraints.cpp`](../src/model/state_space/state_space_constraints.cpp) | Elementals, continuity, compatibility |
 | [`src/model/state_space/state_space_states.cpp`](../src/model/state_space/state_space_states.cpp) | State-dot derivation and elimination passes |
 | [`src/model/state_space_graph.cpp`](../src/model/state_space_graph.cpp) | Cut-sets, state-branch helpers, output variable choices |
-| [`src/model/elemental_equation/`](../src/model/elemental_equation/) | `branchNodeAcrossExpr`, symbols, port-span helpers |
+| [`src/model/elemental_equation/`](../src/model/elemental_equation/) | `branchNodeAcrossExpr`, symbols, port-span helpers; `topology.cpp`: `portGroundNode`, `sharesGroundJunction`, cascaded-ref KCL |
 | [`src/model/state_space_eliminate.cpp`](../src/model/state_space_eliminate.cpp) | Elimination and coupling resolve |
 | [`src/model/state_space_sym.cpp`](../src/model/state_space_sym.cpp) | `resolveReplacements`, linear solve, `ssLog` |
 | [`src/model/state_space/state_space_matrix.cpp`](../src/model/state_space/state_space_matrix.cpp) | State matrix (A, B, E) and output matrix (C, D, F) assembly |
 | [`src/model/state_space_latex.cpp`](../src/model/state_space_latex.cpp) | LaTeX matrix formatting |
-| [`src/canvas/scene/scene_normal_tree.cpp`](../src/canvas/scene/scene_normal_tree.cpp) | UI: find normal tree, compute state space |
+| [`src/canvas/scene/scene_normal_tree.cpp`](../src/canvas/scene/scene_normal_tree.cpp) | UI: find normal tree, saved trees, compute state space |
 
 </tool_call>

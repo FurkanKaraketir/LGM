@@ -595,7 +595,7 @@ private:
     GraphScene* m_scene;
     std::vector<GraphScene::NodeSnapshot> m_nodes;
     std::vector<GraphScene::BranchSnapshot> m_branches;
-    std::vector<GraphScene::TwoPortKey> m_twoPorts;
+    std::vector<GraphScene::TwoPortSnapshot> m_twoPorts;
 };
 
 class MoveNodeCommand : public QUndoCommand {
@@ -992,8 +992,16 @@ bool GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged,
                           .arg(remove->name(), tpB->name(), keep->name(), tpA->name());
         }
     } else if (tp) {
-        warning = tr("Branches on \"%1\" will attach to \"%2\" (%3).\n\nContinue?")
-                      .arg(remove->name(), keep->name(), tp->name());
+        const bool refMerge = (tpA && !tpB && (a == tpA->g1() || a == tpA->g2())) ||
+                              (tpB && !tpA && (b == tpB->g1() || b == tpB->g2()));
+        if (refMerge) {
+            warning = tr("Reference \"%1\" will join \"%2\" (%3's reference).\n"
+                         "Branches on \"%1\" attach to the kept node.\n\nContinue?")
+                          .arg(remove->name(), keep->name(), tp->name());
+        } else {
+            warning = tr("Branches on \"%1\" will attach to \"%2\" (%3).\n\nContinue?")
+                          .arg(remove->name(), keep->name(), tp->name());
+        }
     } else {
         warning = tr("Branches on \"%1\" will move to \"%2\" and \"%1\" will be deleted.\n\nContinue?")
                       .arg(remove->name(), keep->name());

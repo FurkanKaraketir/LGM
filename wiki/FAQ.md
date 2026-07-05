@@ -24,7 +24,7 @@ First configure needs network access to fetch SymEngine and JKQtPlotter via CMak
 
 | Code | Meaning |
 |------|---------|
-| `NeedNormalTree` | Run **Find Normal Tree** or apply a manual tree before **Compute State Space** |
+| `NeedNormalTree` | No normal tree committed, or the highlighted/applied tree failed validation (check the Analyze status line for the validation message) |
 | `NotConnected` | Graph is not one connected component |
 | `ForcedCycle` | A cycle prevents a valid spanning tree |
 | `Incomplete` | Tree selection could not be completed |
@@ -40,7 +40,11 @@ LGM --analyze Examples/Motor.lgm
 LGM --analyze mymodel.lgm OmegaJ i_L
 ```
 
-Optional arguments after the `.lgm` path are output variable names. Exit code is non-zero on failure. Useful for scripting and quick checks without opening the GUI.
+Optional arguments after the `.lgm` path are output variable names. Exit code is non-zero on failure. Useful for scripting and quick checks without opening the GUI. Log output (including `[state_space]` tags) is mirrored to **stderr** when run from a terminal.
+
+## Element constants like `I` or `M`
+
+Plain identifier names in the **Properties** constant field (`I`, `M`, `R_leak`, …) are parsed as symbolic parameters, not SymEngine built-ins (so `I` is inertia, not the imaginary unit). Numeric expressions still parse as numbers.
 
 ## Where is the documentation synced from?
 

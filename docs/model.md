@@ -33,6 +33,8 @@ Passive elements are **A**, **T**, or **D** (`BranchType`):
 
 Element constants (`R`, `L`, `J`, …) can **infer** type when the branch is still default A-type (e.g. `R` → D, `L` → T).
 
+**Plain identifiers** (`R`, `L`, `I`, `M`, `R_leak`, …) parse as SymEngine **symbols**, not built-in math constants — so `I` is inertia, not the imaginary unit, and names like `E` or `pi` are not silently reinterpreted (`parseElementConstant` in `constants.cpp`).
+
 Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr`, `elementalEquationText` in `naming.cpp` and `constants.cpp`).
 
 ## Two-port elements
@@ -44,6 +46,10 @@ Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr`
 
 Each two-port has two port branches attached to graph nodes, a modulus constant, and transformer/gyrator-specific constitutive laws. Only **one** transformer port branch may lie on the normal tree; gyrator causality requires **both** port branches in the tree or **both** in the co-tree.
 
+**Cascaded transformers** — when two port bonds sit on **different spans** but share only a **reference (ground) node**, they are not treated as parallel on the same span. Continuity applies **KCL at the shared ref** (`portGroundNode`, `sharesGroundJunction`, `signedSpanJunctionFlowSum` in `topology.cpp`).
+
+**Same-span conflict** in normal-tree scoring applies when **both port branches of a transformer** are in the tree alongside a parallel user branch on that span — gyrators are not penalized by this rule (`scoreTree` in `normal_tree/build.cpp`).
+
 See `TwoPortsBasics.txt` in the repo root for theory.
 
 ## Nodes
@@ -54,8 +60,8 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 
 | Path | Role |
 |------|------|
-| `elemental_equation.h` | Public API; symbols, types, elemental laws, port-span helpers |
-| `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` |
+| `elemental_equation.h` | Public API; symbols, types, elemental laws, port-span helpers (`portGroundNode`, `sharesGroundJunction`) |
+| `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` (cascaded-ref KCL in `signedSpanJunctionFlowSum`) |
 | `normal_tree.h` | Normal-tree result types and public API |
 | `normal_tree/` | `build` (search), `enumerate`, `normal_tree` (API glue) |
 | `state_space.h` | Result types (`matrixForm`, `outputMatrixForm`, …) and `computeStateSpace` entry |

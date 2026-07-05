@@ -28,9 +28,11 @@ Branches bow to the left of the directed edge (`from → to`). Multiple branches
 ## Analysis
 
 - **Find Normal Tree** — automatic tree selection and highlight (green tree twigs, gray co-tree links).
-- **Select Normal Tree** — click branches to build a manual tree, then apply.
-- **Compute State Space** — derives state equations (`ẋ = Ax + Bu`) from the committed normal tree; check **output variables** first to also get `y = Cx + Du`.
+- **Select Normal Tree** — click branches to build a manual tree, then apply. Use **Save** in Analyze to name and store the current twig set for later comparison.
+- **Compute State Space** — derives state equations (`ẋ = Ax + Bu`) from a **valid** committed normal tree; check **output variables** first to also get `y = Cx + Du`. If the highlighted tree fails validation, the Analyze status shows the reason — see the Analysis documentation on GitHub for details.
 - **Export MATLAB® Script** — after a successful computation, save state-space matrices as a `.m` file for MATLAB®.
+
+For debug output, run the app from a terminal; `[state_space]` lines appear on **stderr** as well as in the log panel.
 
 See **Help → Guides → State-Space Derivation** for the in-app algorithm walkthrough. Source-level detail with file links: [docs/state_space_from_normal_tree.md](../docs/state_space_from_normal_tree.md) on GitHub.
 

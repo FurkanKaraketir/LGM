@@ -46,7 +46,8 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
             continue;
         }
         if (ctx.treeSet.count(branch) != 0 && isExternalBranchOnPortSpan(*branch, branches) &&
-            !isPortSpanStorageBranch(*branch, branches)) {
+            !isPortSpanStorageBranch(*branch, branches) &&
+            effectivePassiveBranchType(*branch) != BranchType::D) {
             continue;
         }
         const ss::RCP<const SymEngine::Basic> k = branchElementConstantExpr(*branch);
@@ -270,6 +271,25 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
                 signedSpanJunctionFlowSum(*port, branches, twoPorts, true);
             if (eq(*spanSum, *integer(0))) {
                 continue;
+            }
+            const ss::RCP<const SymEngine::Basic> portFlowSym = ss::symOf(portFlow);
+            for (BranchItem* twig : tree.treeBranches) {
+                if (!twig || !skipTwigFlowContinuity(*twig, twoPorts, branches) ||
+                    effectivePassiveBranchType(*twig) != BranchType::D ||
+                    !sharesEndpoints(twig, port)) {
+                    continue;
+                }
+                const QString twigFlowSymbol = branchThroughSymbol(*twig);
+                if (twigFlowSymbol.isEmpty() || ctx.replacements.count(twigFlowSymbol) != 0) {
+                    continue;
+                }
+                const ss::RCP<const SymEngine::Basic> twigFlow = ss::symOf(twigFlowSymbol);
+                const std::optional<ss::RCP<const SymEngine::Basic>> twigSolved =
+                    ss::solveLinearFor(add(portFlowSym, spanSum), twigFlow);
+                if (!twigSolved) {
+                    continue;
+                }
+                ctx.recordReplacement(twigFlowSymbol, *twigSolved, ctx.result.continuityEquations);
             }
             ctx.recordReplacement(portFlow, neg(spanSum), ctx.result.continuityEquations);
         }

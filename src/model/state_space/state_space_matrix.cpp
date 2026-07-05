@@ -238,6 +238,9 @@ bool ssAssembleOutputs(
         if (it != resolved.end()) {
             return expand(it->second);
         }
+        if (ctx.isPrimaryState(out)) {
+            return expand(ss::symOf(out));
+        }
         if (const std::optional<ss::RCP<const SymEngine::Basic>> branchExpr =
                 branchExprForOutputSymbol(out)) {
             return expand(*branchExpr);

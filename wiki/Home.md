@@ -6,7 +6,7 @@ A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branc
 
 ## Download
 
-**Latest:** [v0.2.5](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.5)
+**Latest:** [v0.2.7](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.7)
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|
@@ -22,7 +22,7 @@ All builds are on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/relea
 2. [Canvas-editor](Canvas-editor) — tools, shortcuts, docks, `.lgm` files
 3. [Graph-model](Graph-model) — domains, A/T/D types, two-ports
 4. [Analysis](Analysis) — normal trees, state-space derivation, MATLAB® export
-5. [Examples](Examples) — sample motor, RLC, transformer, and gyrator graphs
+5. [Examples](Examples) — sample motor, pump–accumulator, RLC, transformer cascade, and gyrator graphs
 
 ## Theory
 

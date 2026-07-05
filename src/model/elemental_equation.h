@@ -108,6 +108,11 @@ SymEngine::RCP<const SymEngine::Basic> signedSpanJunctionFlowSum(
     const BranchItem& port, const std::vector<BranchItem*>& branches,
     const std::vector<TwoPortItem*>& twoPorts, bool excludePort = true);
 
+const NodeItem* portGroundNode(const BranchItem& port);
+
+// Co-tree port bonds meeting at the same ref node but on different spans (cascaded two-ports).
+bool sharesGroundJunction(const BranchItem* a, const BranchItem* b);
+
 bool omitFromContinuityCut(const BranchItem* branch,
                            const std::vector<BranchItem*>& branches,
                            const std::vector<TwoPortItem*>& twoPorts);

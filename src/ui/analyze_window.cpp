@@ -261,9 +261,12 @@ AnalyzeWindow::AnalyzeWindow(GraphScene* scene, GraphView* view, QWidget* parent
     connect(m_scene, &GraphScene::discoveredNormalTreesChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeValidationChanged, this,
             &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::manualNormalTreeValidationChanged, this,
+            &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::manualNormalTreeAccepted, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::manualNormalTreeRejected, this, &AnalyzeWindow::refreshNormalTreeSection);
     connect(m_scene, &GraphScene::modeChanged, this, &AnalyzeWindow::refreshNormalTreeSection);
+    connect(m_scene, &GraphScene::modeChanged, this, &AnalyzeWindow::refreshSavedTreesList);
     connect(m_scene, &GraphScene::savedNormalTreesChanged, this, &AnalyzeWindow::refreshSavedTreesList);
 
     refreshNormalTreeSection();
@@ -356,9 +359,7 @@ void AnalyzeWindow::refreshSavedTreesList() {
         m_savedTreesList->setCurrentRow(m_scene->activeSavedNormalTreeIndex());
     }
 
-    const bool hasActiveTree =
-        m_scene->normalTreeHighlightActive() &&
-        m_scene->lastNormalTreeResult().status == lg::NormalTreeResult::Status::Ok;
+    const bool hasActiveTree = m_scene->canSaveCurrentNormalTree();
     m_saveTreeBtn->setEnabled(hasActiveTree);
 
     const bool hasSelection = m_savedTreesList->currentRow() >= 0;
@@ -402,15 +403,33 @@ void AnalyzeWindow::refreshNormalTreeSection() {
     const QString savedName =
         savedIndex >= 0 ? m_scene->savedNormalTrees()[static_cast<size_t>(savedIndex)].name : QString();
 
+    const QString sourceLabel =
+        savedName.isEmpty() ? source : tr("%1 (saved: %2)").arg(source, savedName);
+
+    if (normalTree.status != lg::NormalTreeResult::Status::Ok) {
+        int inTreeCount = 0;
+        for (QGraphicsItem* item : m_scene->items()) {
+            if (auto* branch = dynamic_cast<BranchItem*>(item)) {
+                if (branch->normalTreeRoleKnown() && branch->inNormalTree()) {
+                    ++inTreeCount;
+                }
+            }
+        }
+        m_normalTreeStatus->setText(
+            tr("%1 — %2 tree branches. %3")
+                .arg(sourceLabel)
+                .arg(inTreeCount)
+                .arg(normalTree.message.isEmpty() ? tr("Selection is invalid.")
+                                                  : normalTree.message));
+        return;
+    }
+
     QStringList stateVarText;
     for (const lg::NormalTreeResult::StateVariable& state : normalTree.stateVariables) {
         stateVarText.push_back(state.symbol);
     }
     const QString stateVarSummary =
         stateVarText.isEmpty() ? tr("none") : stateVarText.join(QStringLiteral(", "));
-
-    const QString sourceLabel =
-        savedName.isEmpty() ? source : tr("%1 (saved: %2)").arg(source, savedName);
 
     m_normalTreeStatus->setText(
         tr("%1 — %2 tree branches, system order %3.\nState variables: %4")
@@ -484,7 +503,7 @@ void AnalyzeWindow::runSaveCurrentTree() {
     }
     if (!m_scene->addSavedNormalTree(name)) {
         QMessageBox::warning(this, tr("Save Normal Tree"),
-                             tr("Find or select a valid normal tree first."));
+                             tr("Select tree branches on the graph first."));
         return;
     }
     refreshNormalTreeSection();

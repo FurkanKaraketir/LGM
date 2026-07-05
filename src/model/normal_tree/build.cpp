@@ -122,7 +122,8 @@ TreeScore scoreTree(const std::vector<BranchItem*>& tree,
         }
         BranchItem* left = item->leftBranch();
         BranchItem* right = item->rightBranch();
-        if (left && right && inTree.count(left) != 0 && inTree.count(right) != 0) {
+        if (item->kind() == TwoPortKind::Transformer && left && right &&
+            inTree.count(left) != 0 && inTree.count(right) != 0) {
             ++score.sameSpanTreeConflicts;
         }
         for (BranchItem* port : {left, right}) {

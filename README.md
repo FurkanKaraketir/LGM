@@ -6,7 +6,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 
 ![LGM electrical example](src/assets/screenshot_electrical_example.png)
 
-**Download:** [v0.2.6](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.6) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
+**Download:** [v0.2.7](https://github.com/FurkanKaraketir/LGM/releases/tag/v0.2.7) — Windows installer or portable zip, macOS `.dmg` or portable zip, Linux AppImage.
 
 **Documentation:** [GitHub Wiki](https://github.com/FurkanKaraketir/LGM/wiki) — user guides, theory, and developer reference (synced from `docs/`).
 
@@ -17,7 +17,7 @@ The app targets coursework-style system dynamics (mechanical, electrical, fluid,
 | [Canvas editor](docs/canvas.md) | CAD-style graph drawing, selection, undo/redo, `.lgm` files |
 | [Graph model](docs/model.md) | Branch types (A/T/D), domains, elemental equations, two-ports |
 | [Analysis](docs/analysis.md) | Normal-tree search, manual tree selection, state-space derivation, MATLAB® export |
-| [Examples](Examples/README.md) | Sample `.lgm` graphs (motor, RLC, transformer cascade) |
+| [Examples](Examples/README.md) | Sample `.lgm` graphs (motor, pump–accumulator, RLC, transformer cascade) |
 
 In-app guides: **Help → Guides** (Quick Start, Multiple Normal Tree Finding, State-Space Derivation).
 
@@ -56,7 +56,7 @@ Machine-specific Qt/vcpkg paths are in the `windows-mingw` preset in `CMakePrese
 
 ## Releases and updates
 
-Tagged releases (`v0.2.6` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Tagged releases (`v0.2.7` is the latest) are built for Windows, macOS, and Linux via GitHub Actions and published on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 | Platform | Installer | Portable |
 |----------|-----------|----------|

@@ -38,6 +38,12 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
     }
 
     const QString line = formatLogLine(type, message);
+    // ponytail: GUI has no console on Windows — mirror every line to stderr for CLI/terminal runs
+    const QByteArray bytes = line.toUtf8();
+    std::fwrite(bytes.constData(), 1, static_cast<size_t>(bytes.size()), stderr);
+    std::fputc('\n', stderr);
+    std::fflush(stderr);
+
     QMetaObject::invokeMethod(&AppLog::instance(), "pushLine", Qt::QueuedConnection,
                               Q_ARG(QString, line));
 

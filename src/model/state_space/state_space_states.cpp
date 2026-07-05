@@ -379,6 +379,16 @@ bool ssDeriveStateDots(StateSpaceContext& ctx,
                 if (!eq(*coeffBefore, *coeffAfter)) {
                     return false;
                 }
+                // ponytail: own flow already defines this state dot — don't fold in other x_dot (PumpAccumulator f_M/Vm)
+                for (const ComputedState& state : ctx.computedStates) {
+                    if (state.symbol == targetName) {
+                        continue;
+                    }
+                    if (!eq(*ss::linearCoeffRCP(solved, ss::dotSym(state.symbol)),
+                            *integer(0))) {
+                        return false;
+                    }
+                }
             }
             // ponytail: block any elim whose solved form recycles own Q_dot (pump.lgm Q_L1/P1)
             if (!eq(*ss::linearCoeffRCP(solved, ownDot), *integer(0)) &&
