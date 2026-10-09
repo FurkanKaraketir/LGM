@@ -114,7 +114,9 @@ src/
 
 ## Background reading
 
-Theory and algorithms follow Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)).
+Theory and graph assembly follow Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)).
+
+Symbolic elimination of assembled linear constraints (Phase H) follows Geddes, K. O.; Czapor, S. R.; & Labahn, G. (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 *Linear Equations and Gaussian Elimination* ([Springer](https://link.springer.com/book/10.1007/b102438)).
 
 Course handouts in the repo root (not part of the build):
 
@@ -122,3 +124,5 @@ Course handouts in the repo root (not part of the build):
 - `TwoPortsBasics.txt` — transformers, gyrators, multi-domain graphs
 
 Algorithm detail (developer reference with source links): [docs/state_space_from_normal_tree.md](docs/state_space_from_normal_tree.md). In-app guides: **Help → Guides → Multiple Normal Tree Finding** (enumeration) and **State-Space Derivation** (logic only, no file links).
+
+Technical analysis (originality, heuristics, literature): [docs/publication/README.md](docs/publication/README.md).

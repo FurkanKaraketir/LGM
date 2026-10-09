@@ -1,0 +1,5 @@
+﻿normal_tree_order=1
+state=i_L
+status=0
+message=State order 1, 2 continuity, 1 compatibility, 1 inputs.
+state_eq=i_L_dot = -Vs1(t)/L - R*i_L/L

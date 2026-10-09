@@ -1,0 +1,11 @@
+﻿normal_tree_order=2
+state=OmegaJ
+state=i_L
+status=0
+message=State order 2, 5 continuity, 1 compatibility, 1 inputs.
+state_eq=OmegaJ_dot = -B*OmegaJ/J + TF*i_L/J
+state_eq=i_L_dot = Vs1(t)/L - R*i_L/L - TF*OmegaJ/L
+output_eq=T_J through = -B*OmegaJ + TF*i_L
+output_eq=i_L through = i_L
+output_eq=T_B through = B*OmegaJ
+output_matrix=$\left[\begin{array}{c}T_J through \\ i_L through \\ T_B through\end{array}\right] = \left[\begin{array}{cc}-B & TF \\ 0 & 1 \\ B & 0\end{array}\right] \left[\begin{array}{c}OmegaJ \\ i_L\end{array}\right] + \left[\begin{array}{c}0 \\ 0 \\ 0\end{array}\right] \left[\begin{array}{c}Vs1(t)\end{array}\right]$

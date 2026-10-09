@@ -45,4 +45,4 @@ All builds are on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/relea
 - [License (GPL v3)](https://github.com/FurkanKaraketir/LGM/blob/main/COPYING)
 - [FAQ](FAQ)
 
-Background: Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)).
+Background: Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)). Symbolic elimination: Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 ([Springer](https://link.springer.com/book/10.1007/b102438)).

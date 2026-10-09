@@ -538,8 +538,9 @@ void MainWindow::buildMenuBar() {
                "<p>%3</p>"
                "<p>%4</p>"
                "<p>%5</p>"
-               "<p>Copyright &copy; %6 Furkan Karaketir</p>"
-               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%7</a></p>")
+               "<p>%6</p>"
+               "<p>Copyright &copy; %7 Furkan Karaketir</p>"
+               "<p><a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">%8</a></p>")
                 .arg(tr("Linear graph modeling and state-space analysis."),
                      tr("Version %1").arg(QApplication::applicationVersion()),
                      tr("This program is free software; you can redistribute it and/or modify "
@@ -553,6 +554,14 @@ void MainWindow::buildMenuBar() {
                         "112&ndash;121. "
                         "<a href=\"https://doi.org/10.13140/RG.2.2.29940.96647\">"
                         "doi:10.13140/RG.2.2.29940.96647</a>."),
+                     tr("Symbolic elimination of assembled linear constraints follows Geddes, "
+                        "K. O.; Czapor, S. R.; &amp; Labahn, G. (1992). "
+                        "<i>Algorithms for Computer Algebra</i>, "
+                        "Ch.&nbsp;9 &sect;9.2 "
+                        "<i>Linear Equations and Gaussian Elimination</i> "
+                        "(Kluwer). "
+                        "<a href=\"https://link.springer.com/book/10.1007/b102438\">"
+                        "Springer</a>."),
                      app::mathWorksTrademarkNotice(),
                      QString::number(QDate::currentDate().year()),
                      tr("GNU General Public License v3.0")));

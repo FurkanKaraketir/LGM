@@ -1,6 +1,6 @@
 # Motor.lgm: End-to-End Analysis Walkthrough
 
-What the app computes for **Examples/Motor.lgm**: find a normal tree, derive state equations, and assemble **A**, **B**, **C**, and **D** matrices. Algorithm walkthrough only — no source paths. For file-level references see `docs/state_space_from_normal_tree.md` in the repository.
+What the app computes for **Examples/Motor.lgm**: find a normal tree, derive state equations, and assemble **A**, **B**, **C**, and **D** matrices. Algorithm walkthrough only — no source paths. For file-level references see `docs/state_space_from_normal_tree.md` in the repository. Citations: **Help → About** (Altun et al., 2002 — graph assembly; Geddes, Czapor & Labahn, 1992, Ch. 9 §9.2 — symbolic elimination).
 
 **Notation:** the example file names the transformer modulus **`TF`**. MIT textbook notation for the same back-EMF / torque constant often writes **`Ka`** — they play the same role in the equations below.
 
@@ -330,6 +330,8 @@ Substitute replacements into elementals; solve each storage elemental for its `s
 ### Phase H — Elimination and coupling
 
 Eliminate branch flows and node across symbols. Resolve any coupled `state_dot` terms; refine until only states and inputs remain.
+
+**Theory reference:** Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 *Linear Equations and Gaussian Elimination* — iterative solve-and-substitute for single unknowns; Gaussian elimination with back substitution on coupled algebraic blocks. See **Help → About**.
 
 When leftover algebraic unknowns are **mutually coupled** (common in multi-input circuits, where a node effort and a branch current each depend on the other), they are gathered and solved together as one linear subsystem. A guard blocks eliminations that would make a state depend on its own `_dot`. A second guard rejects eliminations that introduce **other states'** `x_dot` when the target state's own elemental already defines its dot.
 

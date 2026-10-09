@@ -1,0 +1,7 @@
+﻿normal_tree_order=2
+state=C5_across
+state=i_L3
+status=0
+message=State order 2, 4 continuity, 1 compatibility, 2 inputs.
+state_eq=C5_across_dot = -Is2(t)/(C5*(1 + C4/C5)) + C4*Vs1_dot(t)/(C5*(1 + C4/C5)) - C5_across/(R1*C5*(1 + C4/C5))
+state_eq=i_L3_dot = Vs1(t)/(L3*(1 + L7/L3)) - L7*Is2_dot(t)/(L3*(1 + L7/L3)) - R2*i_L3/(L3*(1 + L7/L3))

@@ -1,0 +1,9 @@
+﻿normal_tree_order=3
+state=Q_L_f
+state=i_L
+state=Vm
+status=0
+message=State order 3, 10 continuity, 1 compatibility, 2 inputs.
+state_eq=Q_L_f_dot = Fs2(t)/(A*L_f) - R_f*Q_L_f/L_f - i_L/(K_a*K_b*L_f)
+state_eq=i_L_dot = Vs1(t)/L - R*i_L/L + Q_L_f/(L*K_a*K_b)
+state_eq=Vm_dot = Fs2(t)/M + A*Q_L_f*R_leak/M - A**2*Vm*R_leak/M

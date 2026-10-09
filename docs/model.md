@@ -67,7 +67,7 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 | `state_space.h` | Result types (`matrixForm`, `outputMatrixForm`, …) and `computeStateSpace` entry |
 | `state_space/` | `state_space` (orchestrator), `constraints`, `reflect`, `states`, `matrix` (A/B/E and C/D/F) |
 | `state_space_graph.cpp` | Graph walks (cut-sets, storage branches) |
-| `state_space_sym.cpp` | SymEngine linear solve, replacement chaining |
+| `state_space_sym.cpp` | SymEngine linear solve, replacement chaining (Geddes et al., 1992, Ch. 9 §9.2) |
 | `state_space_eliminate.cpp` | Symbol elimination and coupling resolve |
 | `state_space_latex.cpp` | LaTeX matrix form |
 

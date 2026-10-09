@@ -9,6 +9,8 @@ Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or dr
 | [Gyrator.lgm](Gyrator.lgm) | Hydraulic actuator: fluid pressure source, `R`, compliance, gyrator modulus `1/A`, and parallel mechanical `m`–`k`–`b`. Cross-domain coupling — both gyrator port branches must be in the normal tree or both in the co-tree. |
 | [TransformerCascade.lgm](TransformerCascade.lgm) | Multi-section graph with cascaded transformers and mixed mechanical/electrical elements (higher complexity). |
 | [PumpAccumulator.lgm](PumpAccumulator.lgm) | Multi-domain pump–accumulator model: fluid, electrical, and mechanical sections with cascaded transformers; good stress test after Motor.lgm. |
+| [FloatingSource.lgm](FloatingSource.lgm) | Minimal electrical graph: floating voltage source `Vs1` between two non-ground nodes (`Va`, `Vb`) with `R` and `L` loads to ground. Exercises the floating-source compatibility heuristic. |
+| [MultiNormalTree.lgm](MultiNormalTree.lgm) | Grounded `Vs1` with `R1`/`R2`/`C` mesh yielding multiple valid normal trees; use **Find All Normal Trees** to compare `TreeScore` tie-breaking. |
 
 ## Tips
 

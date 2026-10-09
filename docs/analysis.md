@@ -48,7 +48,7 @@ Pipeline (`lg::computeStateSpace` in `src/model/state_space/state_space.cpp`):
 5. **Compatibility** — active A-type source bindings (`V_node = u`)
 6. **Two-port** across constraints (flows stay in elementals + continuity)
 7. Solve for `state_dot` from storage elementals
-8. Eliminate remaining branch/node symbols (guards block recycling a state's own `_dot` and folding foreign `x_dot` when the target state's elemental already defines its dot)
+8. Eliminate remaining branch/node symbols (guards block recycling a state's own `_dot` and folding foreign `x_dot` when the target state's elemental already defines its dot); coupled blocks use Gaussian elimination per Geddes, Czapor & Labahn (1992), Ch. 9 §9.2
 9. Emit state equations and LaTeX `ẋ = A x + B u [+ E u̇]`
 10. For each **output variable** selected in the Analyze panel, emit scalar output equations and LaTeX `y = C x + D u [+ F u̇]` (primary **state** symbols seed directly, giving identity **C** rows when a state is selected as output)
 
@@ -83,6 +83,8 @@ Also available in the repository (with source links): [docs/state_space_from_nor
 
 - `LinearGrpahModelingBasics.txt` — normal trees and state-equation procedure
 - `TwoPortsBasics.txt` — two-port trees and multi-domain graphs
+- Altun et al. (2002) — graph assembly (normal tree, elementals, continuity, compatibility); see **Help → About**
+- Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 — symbolic elimination and Gaussian elimination on coupled linear subsystems; see **Help → About**
 
 ## Example workflow
 

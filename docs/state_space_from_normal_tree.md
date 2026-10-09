@@ -4,6 +4,8 @@ This document is the **GitHub / developer reference** (with links into the sourc
 
 This traces **what the current implementation computes** for [`Examples/Motor.lgm`](../Examples/Motor.lgm): find a normal tree, derive state equations, and assemble **A**, **B**, **C**, and **D** matrices. The goal is algorithmic transparency, not error diagnosis.
 
+**References:** graph assembly — Altun, Balkan & Platin (2002) ([doi](https://doi.org/10.13140/RG.2.2.29940.96647)); symbolic elimination — Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 ([Springer](https://link.springer.com/book/10.1007/b102438)). In-app: **Help → About**.
+
 **Notation:** the example file names the transformer modulus **`TF`**. MIT textbook notation for the same back-EMF / torque constant often writes **`Ka`** — they play the same role in the equations below.
 
 ---
@@ -380,6 +382,8 @@ Elimination applies `T_B = B·OmegaJ` (algebraic) and substitutes `V2 = -R·i_L 
 
 **Where:** [`state_space_eliminate.cpp`](../src/model/state_space_eliminate.cpp) — `eliminateBranchSymbolsInto`, `eliminateSymbolsInto`, `resolveStateDotCoupling`, `refine_pass`, `final_sub`.
 
+**Theory reference:** Standard symbolic elimination on the linear relations assembled in Phases B–F — Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, **Ch. 9 §9.2 *Linear Equations and Gaussian Elimination*** ([Springer](https://link.springer.com/book/10.1007/b102438); see [literature_review.md](publication/literature_review.md) §1.4). LGM applies §9.2 in two ways: iterative solve-and-substitute (`solveLinearFor`, `eliminateSymbolsInto`) for single unknowns, and full Gaussian elimination with back substitution (`solveLinearSystem`) on coupled leftovers. Altun (2002) specifies which equations to build.
+
 Eliminates branch flows and **node across** symbols from `stateDots` using algebraics, constraint relations, and guarded substitution (`acceptStateDotSubstitution`). Coupling resolve may run twice; up to four refine passes follow.
 
 **Coupled algebraic subsystem solve** ([`solveLinearSubsystem`](../src/model/state_space_sym.cpp), [`expandCoupledAlgebraicUnknowns`](../src/model/state_space_sym.cpp)): when leftover algebraic unknowns (node-across / branch flows) survive single-symbol elimination because they are *mutually* coupled — as in multi-input circuits where a node effort and a resistor current each depend on the other — the leftover set is expanded across relations that touch it and solved as one linear system (up to 4 passes, logged `subsystem_solve` / `subsystem_solved`).
@@ -568,6 +572,17 @@ Normal-tree search emits **no** debug tags.
 
 ---
 
+## References
+
+| Topic | Citation |
+|-------|----------|
+| Normal tree, elementals, continuity, compatibility | Altun, K.; Balkan, R. T.; & Platin, B. E. (2002). *Extraction of state variable representations of dynamic systems employing linear graph theory.* [doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647) |
+| Symbolic elimination (Phase H) | Geddes, K. O.; Czapor, S. R.; & Labahn, G. (1992). *Algorithms for Computer Algebra*, Ch. 9 §9.2 *Linear Equations and Gaussian Elimination*. Kluwer. [Springer](https://link.springer.com/book/10.1007/b102438) |
+
+Full bibliography: [publication/literature_review.md](publication/literature_review.md).
+
+---
+
 ## Source file index
 
 | File | Role |
@@ -579,7 +594,7 @@ Normal-tree search emits **no** debug tags.
 | [`src/model/state_space_graph.cpp`](../src/model/state_space_graph.cpp) | Cut-sets, state-branch helpers, output variable choices |
 | [`src/model/elemental_equation/`](../src/model/elemental_equation/) | `branchNodeAcrossExpr`, symbols, port-span helpers; `topology.cpp`: `portGroundNode`, `sharesGroundJunction`, cascaded-ref KCL |
 | [`src/model/state_space_eliminate.cpp`](../src/model/state_space_eliminate.cpp) | Elimination and coupling resolve |
-| [`src/model/state_space_sym.cpp`](../src/model/state_space_sym.cpp) | `resolveReplacements`, linear solve, `ssLog` |
+| [`src/model/state_space_sym.cpp`](../src/model/state_space_sym.cpp) | `resolveReplacements`, linear solve (Geddes et al., 1992, Ch. 9 §9.2), `ssLog` |
 | [`src/model/state_space/state_space_matrix.cpp`](../src/model/state_space/state_space_matrix.cpp) | State matrix (A, B, E) and output matrix (C, D, F) assembly |
 | [`src/model/state_space_latex.cpp`](../src/model/state_space_latex.cpp) | LaTeX matrix formatting |
 | [`src/canvas/scene/scene_normal_tree.cpp`](../src/canvas/scene/scene_normal_tree.cpp) | UI: find normal tree, saved trees, compute state space |
