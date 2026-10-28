@@ -61,7 +61,6 @@ struct BuildAttempt {
     std::vector<BranchItem*> treeBranches;
 };
 
-bool isInertiaConstant(const BranchItem& branch);
 int connectedComponents(int n, const std::vector<Edge>& edges);
 void applyTransformerChoice(TwoPortItem* item, bool rightInTree,
                             const std::vector<BranchItem*>& branches,

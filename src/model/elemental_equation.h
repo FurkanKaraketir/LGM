@@ -26,9 +26,6 @@ SymEngine::RCP<const SymEngine::Basic> elementalConstantCoeff(SystemType systemT
 
 QString elementalEquationText(BranchType type, SystemType systemType, bool passive, const QString& constantText);
 
-// Prefix heuristic for storage-branch detection (does not set branch type).
-std::optional<BranchType> inferPassiveBranchType(const QString& constant, SystemType systemType);
-
 BranchType effectivePassiveBranchType(const BranchItem& branch);
 
 SystemType branchSystemType(const BranchItem& branch);
@@ -70,8 +67,6 @@ QString branchAcrossSymbol(const BranchItem& branch);
 // Synthetic name when across is a node difference (e.g. C5_across for V1−V2 on C5).
 QString syntheticAcrossSymbolName(const BranchItem& branch);
 
-bool usesSyntheticAcrossSymbol(const BranchItem& branch);
-
 std::optional<SymEngine::RCP<const SymEngine::Basic>> branchAcrossExpression(
     const BranchItem& branch);
 
@@ -86,10 +81,6 @@ bool sharesEndpoints(const BranchItem* a, const BranchItem* b);
 bool isExternalBranchOnPortSpan(const BranchItem& branch,
                                 const std::vector<BranchItem*>& branches);
 
-// A-type storage (M, J, C, …) on a coupler edge — still a state when in the normal tree.
-bool isPortSpanStorageBranch(const BranchItem& branch,
-                             const std::vector<BranchItem*>& branches);
-
 // User element on a two-port port span (e.g. inertia on the coupler edge).
 BranchItem* externalBranchParallelToPort(const BranchItem* port,
                                            const std::vector<BranchItem*>& branches,
@@ -99,31 +90,6 @@ BranchItem* externalBranchParallelToPort(const BranchItem* port,
 std::vector<BranchItem*> branchesParallelToPort(
     const BranchItem* port, const std::vector<BranchItem*>& branches,
     const std::vector<TwoPortItem*>& twoPorts);
-
-SymEngine::RCP<const SymEngine::Basic> signedParallelPortSpanFlowSum(
-    const BranchItem& port, const std::vector<BranchItem*>& parallels);
-
-// Sum signed through-flows on the port span (KCL), optionally excluding the port itself.
-SymEngine::RCP<const SymEngine::Basic> signedSpanJunctionFlowSum(
-    const BranchItem& port, const std::vector<BranchItem*>& branches,
-    const std::vector<TwoPortItem*>& twoPorts, bool excludePort = true);
-
-const NodeItem* portGroundNode(const BranchItem& port);
-
-// Co-tree port bonds meeting at the same ref node but on different spans (cascaded two-ports).
-bool sharesGroundJunction(const BranchItem* a, const BranchItem* b);
-
-bool omitFromContinuityCut(const BranchItem* branch,
-                           const std::vector<BranchItem*>& branches,
-                           const std::vector<TwoPortItem*>& twoPorts);
-
-// User or port-span twig: elemental + transformer rules replace the cut-sum balance.
-bool skipTwigFlowContinuity(const BranchItem& twig,
-                            const std::vector<TwoPortItem*>& twoPorts,
-                            const std::vector<BranchItem*>& branches);
-
-SymEngine::RCP<const SymEngine::Basic> signedParallelFlowExpr(const BranchItem& fromRef,
-                                                                const BranchItem& parallel);
 
 SymEngine::RCP<const SymEngine::Basic> twoPortModulusExpr(const TwoPortItem& twoPort);
 

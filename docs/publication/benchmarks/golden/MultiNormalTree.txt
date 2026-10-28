@@ -2,4 +2,4 @@
 state=C_across
 status=0
 message=State order 1, 3 continuity, 1 compatibility, 1 inputs.
-state_eq=C_across_dot = -C_across/(C*R2) + R1*C_across/(C*R2**2*(1 + R1/R2))
+state_eq=C_across_dot = -C_across/(C*R1 + C*R2)

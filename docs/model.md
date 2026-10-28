@@ -46,7 +46,7 @@ Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr`
 
 Each two-port has two port branches attached to graph nodes, a modulus constant, and transformer/gyrator-specific constitutive laws. Only **one** transformer port branch may lie on the normal tree; gyrator causality requires **both** port branches in the tree or **both** in the co-tree.
 
-**Cascaded transformers** — when two port bonds sit on **different spans** but share only a **reference (ground) node**, they are not treated as parallel on the same span. Continuity applies **KCL at the shared ref** (`portGroundNode`, `sharesGroundJunction`, `signedSpanJunctionFlowSum` in `topology.cpp`).
+**Cascaded and stacked two-ports** — port branches are ordinary graph branches, so KCL at every node (shared reference nodes included) covers them without special cases; see Phase E in [state_space_from_normal_tree.md](state_space_from_normal_tree.md).
 
 **Same-span conflict** in normal-tree scoring applies when **both port branches of a transformer** are in the tree alongside a parallel user branch on that span — gyrators are not penalized by this rule (`scoreTree` in `normal_tree/build.cpp`).
 
@@ -60,15 +60,14 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 
 | Path | Role |
 |------|------|
-| `elemental_equation.h` | Public API; symbols, types, elemental laws, port-span helpers (`portGroundNode`, `sharesGroundJunction`) |
-| `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` (cascaded-ref KCL in `signedSpanJunctionFlowSum`) |
+| `elemental_equation.h` | Public API; symbols, types, elemental laws, port-span helpers for tree scoring |
+| `elemental_equation/` | `constants`, `naming`, `symbols`, `topology` (port-span helpers, two-port law text) |
 | `normal_tree.h` | Normal-tree result types and public API |
 | `normal_tree/` | `build` (search), `enumerate`, `normal_tree` (API glue) |
 | `state_space.h` | Result types (`matrixForm`, `outputMatrixForm`, …) and `computeStateSpace` entry |
-| `state_space/` | `state_space` (orchestrator), `constraints`, `reflect`, `states`, `matrix` (A/B/E and C/D/F) |
-| `state_space_graph.cpp` | Graph walks (cut-sets, storage branches) |
-| `state_space_sym.cpp` | SymEngine linear solve, replacement chaining (Geddes et al., 1992, Ch. 9 §9.2) |
-| `state_space_eliminate.cpp` | Symbol elimination and coupling resolve |
+| `state_space/` | `state_space` (orchestrator), `constraints` (elementals, display equations), `states` (linear system and solve), `matrix` (A/B/E and C/D/F) |
+| `state_space_graph.cpp` | Graph walks (cut-sets), output variable choices |
+| `state_space_sym.cpp` | SymEngine linear solve `solveLinearTargets` (Geddes et al., 1992, Ch. 9 §9.2) |
 | `state_space_latex.cpp` | LaTeX matrix form |
 
 Symbolic math uses [SymEngine](https://github.com/symengine/symengine) with Boost.Multiprecision integers.

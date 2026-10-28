@@ -53,15 +53,12 @@ StateSpaceResult computeStateSpaceImpl(const NormalTreeResult& tree,
     if (!ssBuildConstraints(ctx)) {
         return ctx.result;
     }
-    if (!ssReflectAndBind(ctx)) {
-        return ctx.result;
-    }
     std::unordered_map<QString, ss::RCP<const ss::Basic>> stateDots;
     if (!ssDeriveStateDots(ctx, stateDots)) {
         return ctx.result;
     }
     ssAssembleMatrix(ctx, stateDots);
-    if (!ssAssembleOutputs(ctx, stateDots)) {
+    if (!ssAssembleOutputs(ctx)) {
         return ctx.result;
     }
     ctx.result.status = StateSpaceResult::Status::Ok;

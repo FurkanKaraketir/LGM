@@ -117,69 +117,6 @@ SymEngine::RCP<const SymEngine::Basic> elementalConstantCoeff(SystemType systemT
     return elementalConstantInNumerator(systemType, type) ? k : SymEngine::div(SymEngine::integer(1), k);
 }
 
-std::optional<BranchType> inferPassiveBranchType(const QString& constant, SystemType systemType) {
-    const QString k = constant.trimmed();
-    if (k.isEmpty() || k == QStringLiteral("1")) {
-        return std::nullopt;
-    }
-    const QChar c = k.at(0).toUpper();
-    switch (systemType) {
-    case SystemType::Electrical:
-        if (c == QLatin1Char('R')) {
-            return BranchType::D;
-        }
-        if (c == QLatin1Char('L')) {
-            return BranchType::T;
-        }
-        if (c == QLatin1Char('C')) {
-            return BranchType::A;
-        }
-        break;
-    case SystemType::Mechanical:
-        if (c == QLatin1Char('M')) {
-            return BranchType::A;
-        }
-        if (c == QLatin1Char('K')) {
-            return BranchType::T;
-        }
-        if (c == QLatin1Char('B')) {
-            return BranchType::D;
-        }
-        break;
-    case SystemType::MechanicalRotational:
-        if (c == QLatin1Char('J')) {
-            return BranchType::A;
-        }
-        if (c == QLatin1Char('K')) {
-            return BranchType::T;
-        }
-        if (c == QLatin1Char('B')) {
-            return BranchType::D;
-        }
-        break;
-    case SystemType::Fluid:
-        if (c == QLatin1Char('R')) {
-            return BranchType::D;
-        }
-        if (c == QLatin1Char('I')) {
-            return BranchType::T;
-        }
-        if (c == QLatin1Char('C')) {
-            return BranchType::A;
-        }
-        break;
-    case SystemType::Heat:
-        if (c == QLatin1Char('C')) {
-            return BranchType::A;
-        }
-        if (c == QLatin1Char('R')) {
-            return BranchType::D;
-        }
-        break;
-    }
-    return std::nullopt;
-}
-
 BranchType effectivePassiveBranchType(const BranchItem& branch) {
     return branch.branchType();
 }

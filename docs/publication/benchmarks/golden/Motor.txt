@@ -2,7 +2,7 @@
 state=OmegaJ
 state=i_L
 status=0
-message=State order 2, 5 continuity, 1 compatibility, 1 inputs.
+message=State order 2, 4 continuity, 1 compatibility, 1 inputs.
 state_eq=OmegaJ_dot = -B*OmegaJ/J + TF*i_L/J
 state_eq=i_L_dot = Vs1(t)/L - R*i_L/L - TF*OmegaJ/L
 output_eq=T_J through = -B*OmegaJ + TF*i_L

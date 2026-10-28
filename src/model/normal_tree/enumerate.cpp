@@ -146,125 +146,37 @@ void collectTreesForPortAssignments(
 
 void extractStateVariables(NormalTreeResult& result, const std::vector<BranchItem*>& branches,
                            const std::vector<TwoPortItem*>& twoPorts) {
+    (void)twoPorts;
     result.stateVariables.clear();
     const std::unordered_set<BranchItem*> inTree(result.treeBranches.begin(),
                                                   result.treeBranches.end());
     std::unordered_set<QString> seenSymbols;
-
-    auto appendState = [&](NormalTreeResult::StateVariable::Kind kind, const QString& symbol) {
+    const auto isPassiveElement = [](const BranchItem* branch) {
+        return branch && !branch->isActive() && !isTwoPortInternalBranch(*branch);
+    };
+    const auto appendState = [&](NormalTreeResult::StateVariable::Kind kind, QString symbol,
+                                 BranchItem* branch, const QString& fallback) {
         if (symbol.isEmpty() || seenSymbols.count(symbol) != 0) {
-            return;
+            symbol = fallback;
         }
         seenSymbols.insert(symbol);
-        NormalTreeResult::StateVariable state;
-        state.kind = kind;
-        state.symbol = symbol;
-        result.stateVariables.push_back(std::move(state));
+        result.stateVariables.push_back({kind, symbol, branch});
     };
 
+    // Normal-tree rule: across of A-type twigs and through of T-type links. Dependent storage
+    // (A-type links, T-type twigs) is already excluded by the tree, so no state is dropped here.
     for (BranchItem* branch : result.treeBranches) {
-        if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
-            continue;
-        }
-        if (isPortSpanStorageBranch(*branch, branches)) {
-            appendState(NormalTreeResult::StateVariable::Kind::Across,
-                        branchAcrossSymbol(*branch));
-            continue;
-        }
-        if (effectivePassiveBranchType(*branch) == BranchType::A) {
-            appendState(NormalTreeResult::StateVariable::Kind::Across,
-                        branchAcrossSymbol(*branch));
+        if (isPassiveElement(branch) && effectivePassiveBranchType(*branch) == BranchType::A) {
+            appendState(NormalTreeResult::StateVariable::Kind::Across, branchAcrossSymbol(*branch),
+                        branch, branchThroughSymbol(*branch) + QStringLiteral("_across"));
         }
     }
-
     for (BranchItem* branch : branches) {
-        if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
-            continue;
-        }
-        if (inTree.count(branch) != 0) {
-            continue;
-        }
-        if (effectivePassiveBranchType(*branch) != BranchType::T) {
-            continue;
-        }
-        appendState(NormalTreeResult::StateVariable::Kind::Through, branchThroughSymbol(*branch));
-    }
-
-    auto dropSymbol = [&](const QString& symbol) {
-        seenSymbols.erase(symbol);
-        auto it = std::remove_if(result.stateVariables.begin(), result.stateVariables.end(),
-                                 [&](const NormalTreeResult::StateVariable& state) {
-                                     return state.symbol == symbol;
-                                 });
-        result.stateVariables.erase(it, result.stateVariables.end());
-    };
-
-    bool massInTree = false;
-    QString treeMassAcross;
-    for (BranchItem* branch : result.treeBranches) {
-        if (!branch || branch->isActive()) {
-            continue;
-        }
-        const QString constant = branch->elementConstant().trimmed();
-        if (constant.isEmpty() || constant.at(0).toUpper() != QLatin1Char('M')) {
-            continue;
-        }
-        massInTree = true;
-        treeMassAcross = branchAcrossSymbol(*branch);
-        break;
-    }
-
-    if (massInTree) {
-        QStringList dropOmegas;
-        for (const NormalTreeResult::StateVariable& state : result.stateVariables) {
-            if (state.kind == NormalTreeResult::StateVariable::Kind::Across &&
-                state.symbol.startsWith(QStringLiteral("Omega"))) {
-                dropOmegas.push_back(state.symbol);
-            }
-        }
-        for (const QString& symbol : dropOmegas) {
-            dropSymbol(symbol);
-        }
-        if (!treeMassAcross.isEmpty()) {
-            dropSymbol(treeMassAcross);
-            appendState(NormalTreeResult::StateVariable::Kind::Across, treeMassAcross);
-        }
-    } else {
-        dropSymbol(QStringLiteral("v1"));
-        QString treeInertiaAcross;
-        for (BranchItem* branch : result.treeBranches) {
-            if (!branch || isTwoPortInternalBranch(*branch) || !isInertiaConstant(*branch)) {
-                continue;
-            }
-            treeInertiaAcross = branchAcrossSymbol(*branch);
-            break;
-        }
-        if (!treeInertiaAcross.isEmpty()) {
-            QStringList dropOmegas;
-            for (const NormalTreeResult::StateVariable& state : result.stateVariables) {
-                if (state.kind == NormalTreeResult::StateVariable::Kind::Across &&
-                    state.symbol.startsWith(QStringLiteral("Omega")) &&
-                    state.symbol != treeInertiaAcross) {
-                    dropOmegas.push_back(state.symbol);
-                }
-            }
-            for (const QString& symbol : dropOmegas) {
-                dropSymbol(symbol);
-            }
-            if (seenSymbols.count(treeInertiaAcross) == 0) {
-                appendState(NormalTreeResult::StateVariable::Kind::Across, treeInertiaAcross);
-            }
-        } else {
-            for (BranchItem* branch : branches) {
-                if (!branch || branch->isActive() || inTree.count(branch) != 0 ||
-                    isTwoPortInternalBranch(*branch) ||
-                    !isPortSpanStorageBranch(*branch, branches) || !isInertiaConstant(*branch)) {
-                    continue;
-                }
-                appendState(NormalTreeResult::StateVariable::Kind::Across,
-                            branchAcrossSymbol(*branch));
-                break;
-            }
+        if (isPassiveElement(branch) && inTree.count(branch) == 0 &&
+            effectivePassiveBranchType(*branch) == BranchType::T) {
+            appendState(NormalTreeResult::StateVariable::Kind::Through,
+                        branchThroughSymbol(*branch), branch,
+                        branchThroughSymbol(*branch) + QStringLiteral("_link"));
         }
     }
 }

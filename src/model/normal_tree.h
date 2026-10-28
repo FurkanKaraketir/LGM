@@ -17,6 +17,7 @@ struct NormalTreeResult {
 
         Kind kind = Kind::Across;
         QString symbol;
+        BranchItem* branch = nullptr;
     };
 
     Status status = Status::Incomplete;

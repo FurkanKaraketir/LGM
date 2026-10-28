@@ -1,7 +1,7 @@
 ﻿normal_tree_order=2
-state=f_k
 state=v1
+state=f_k
 status=0
-message=State order 2, 5 continuity, 1 compatibility, 1 inputs.
-state_eq=f_k_dot = k*v1
+message=State order 2, 3 continuity, 1 compatibility, 1 inputs.
 state_eq=v1_dot = -f_k/m - A*Ps1(t)/m - b*v1/m - A**2*R*v1/m
+state_eq=f_k_dot = k*v1

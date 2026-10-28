@@ -73,11 +73,6 @@ QString branchAcrossSymbol(const BranchItem& branch) {
     return syntheticAcrossSymbolName(branch);
 }
 
-bool usesSyntheticAcrossSymbol(const BranchItem& branch) {
-    const QString text = branchAcrossVariableText(branch).trimmed();
-    return !text.isEmpty() && text != QStringLiteral("0") && !isValidVariableSymbol(text);
-}
-
 std::optional<SymEngine::RCP<const SymEngine::Basic>> branchAcrossExpression(
     const BranchItem& branch) {
     const QString text = branchAcrossVariableText(branch).trimmed();

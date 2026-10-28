@@ -2,6 +2,6 @@
 state=Omega2
 state=f_K
 status=0
-message=State order 2, 5 continuity, 0 compatibility, 1 inputs.
-state_eq=Omega2_dot = -f_K/(I_2*TF_3)
+message=State order 2, 4 continuity, 0 compatibility, 1 inputs.
+state_eq=Omega2_dot = -f_K/(I_2*TF_3 + I_1*TF_2**2*TF_3 + M_1*TF_2**2*TF_3*TF_1**2) + Fs1(t)*TF_2*TF_1/(I_2 + I_1*TF_2**2 + M_1*TF_2**2*TF_1**2)
 state_eq=f_K_dot = K*Omega2/TF_3

@@ -78,11 +78,8 @@ add_executable(LGM WIN32
     src/model/state_space/state_space.cpp
     src/model/state_space/state_space_context.cpp
     src/model/state_space/state_space_constraints.cpp
-    src/model/state_space/state_space_reflect.cpp
     src/model/state_space/state_space_states.cpp
-    src/model/state_space/state_space_reduce.cpp
     src/model/state_space/state_space_matrix.cpp
-    src/model/state_space_eliminate.cpp
     src/model/state_space_graph.cpp
     src/model/state_space_latex.cpp
     src/model/state_space_matlab.cpp

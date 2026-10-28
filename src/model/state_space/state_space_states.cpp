@@ -1,5 +1,4 @@
 #include "state_space_context.h"
-#include "state_space_reduce.h"
 
 #include "canvas.h"
 #include "elemental_equation.h"
@@ -10,600 +9,216 @@
 #include <symengine/subs.h>
 
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace lg {
 
-#include <symengine/subs.h>
-#include <functional>
+namespace {
+
+using SymEngine::add;
+using SymEngine::expand;
+using SymEngine::integer;
+using SymEngine::mul;
+using SymEngine::sub;
+using SymEngine::subs;
+
+ss::RCP<const ss::Basic> nodePotential(const NodeItem& node) {
+    return node.isGround() ? ss::RCP<const ss::Basic>(integer(0)) : ss::symOf(node.acrossVariable());
+}
+
+ss::RCP<const ss::Basic> branchNodeDifference(const BranchItem& branch) {
+    return sub(nodePotential(*branch.from()), nodePotential(*branch.to()));
+}
+
+}  // namespace
 
 bool ssDeriveStateDots(StateSpaceContext& ctx,
                        std::unordered_map<QString, ss::RCP<const ss::Basic>>& stateDots) {
-    using SymEngine::add;
-    using SymEngine::div;
-    using SymEngine::eq;
-    using SymEngine::expand;
-    using SymEngine::integer;
-    using SymEngine::mul;
-    using SymEngine::neg;
-    using SymEngine::sub;
-    using SymEngine::subs;
-    const auto& tree = ctx.tree;
-    const auto& nodes = ctx.nodes;
-    const auto& branches = ctx.branches;
-    const auto& twoPorts = ctx.twoPorts;
-    ss::ssLog(QStringLiteral("substitute_elementals"));
-    std::vector<ss::RCP<const SymEngine::Basic>> rawElementals;
-    rawElementals.reserve(ctx.elementalEquations.size());
-    for (const BranchElemental& elemental : ctx.elementalEquations) {
-        rawElementals.push_back(expand(elemental.expr));
-    }
+    static const bool kSolverChecked = (ss::solveLinearTargetsSelfCheck(), true);
+    (void)kSolverChecked;
+    auto fail = [&](StateSpaceResult::Status status, const QString& message) {
+        ctx.result.status = status;
+        ctx.result.message = message;
+        ss::ssLog(QStringLiteral("error"), message);
+        return false;
+    };
 
-    const SymEngine::map_basic_basic valueSubMap =
-        ss::substitutionMap(ss::resolveReplacements(ctx.replacements));
-    const SymEngine::map_basic_basic subMap = ss::extendedSubstitutionMap(ctx.replacements, ctx.timedSymbols);
-    std::vector<ss::RCP<const SymEngine::Basic>> reducedElementals;
-    reducedElementals.reserve(ctx.elementalEquations.size());
-    for (const BranchElemental& elemental : ctx.elementalEquations) {
-        reducedElementals.push_back(expand(subs(elemental.expr, subMap)));
-    }
-
-    ss::ssLog(QStringLiteral("ctx.replacements"), QString::number(ctx.replacements.size()));
-    {
-        QStringList replLines;
-        for (const auto& [name, expr] : ss::resolveReplacements(ctx.replacements)) {
-            replLines.push_back(QStringLiteral("%1 = %2").arg(name, ss::exprText(expr)));
+    // Time-varying symbols are node potentials, branch flows, states and inputs; any other
+    // symbol (R, C, TF, ...) is a parameter.
+    std::vector<QString> timed;
+    std::unordered_set<QString> timedSet;
+    auto addTimed = [&](const QString& name) {
+        if (timedSet.insert(name).second) {
+            timed.push_back(name);
         }
-        ss::ssLog(QStringLiteral("ctx.replacements_resolved"), replLines.join(QStringLiteral("; ")));
-    }
-    if (!ctx.result.elementalEquations.isEmpty()) {
-        ss::ssLog(QStringLiteral("elemental_text"), ctx.result.elementalEquations.join(QStringLiteral("; ")));
-    }
-    ss::ssLogExprs(QStringLiteral("elemental"), rawElementals);
-    ss::ssLogExprs(QStringLiteral("reduced_elemental"), reducedElementals);
-
-    ss::ssLog(QStringLiteral("match_state_dots"));
-    std::unordered_set<BranchItem*> stateMatchedBranches;
-    std::vector<ss::RCP<const SymEngine::Basic>> algebraics;
-    std::vector<ss::RCP<const SymEngine::Basic>> matchedAlgebraics;
-    for (const BranchElemental& elemental : ctx.elementalEquations) {
-        const ss::RCP<const SymEngine::Basic> reduced = expand(subs(elemental.expr, valueSubMap));
-        if (!elemental.branch) {
-            algebraics.push_back(reduced);
+    };
+    std::vector<BranchItem*> connected;
+    for (NodeItem* node : ctx.nodes) {
+        if (!node || node->isGround()) {
             continue;
         }
-        bool matched = false;
-        const QString elementalStateSymbol =
-            elemental.branch
-                ? ss::storageStateSymbol(*elemental.branch,
-                                         ctx.treeSet.count(elemental.branch) != 0)
-                : QString();
-        for (const ComputedState& state : ctx.computedStates) {
-            if (state.branch != elemental.branch &&
-                (elementalStateSymbol.isEmpty() || state.symbol != elementalStateSymbol)) {
-                continue;
-            }
-            const ss::RCP<const SymEngine::Basic> dot = ss::dotSym(state.symbol);
-            const ss::RCP<const SymEngine::Basic> matchReduced =
-                ss::rewriteForSyntheticAcrossStateDot(reduced, *state.branch, state.symbol,
-                                                      valueSubMap, ctx.timedSymbols);
-            const std::optional<ss::RCP<const SymEngine::Basic>> solved =
-                ss::solveLinearFor(matchReduced, dot);
-            if (!solved) {
-                continue;
-            }
-            if (stateDots.count(state.symbol) != 0) {
-                ss::ssLog(QStringLiteral("warn"),
-                          QStringLiteral("duplicate %1 from %2, keeping first")
-                              .arg(ss::dotName(state.symbol), elemental.branch->name()));
-                matched = true;
-                break;
-            }
-            stateDots[state.symbol] = *solved;
-            stateMatchedBranches.insert(elemental.branch);
-            ss::ssLog(QStringLiteral("matched"),
-                      QStringLiteral("%1 from branch %2: 0 = %3")
-                          .arg(ss::dotName(state.symbol), elemental.branch->name(),
-                               ss::exprText(reduced)));
-            matched = true;
-            break;
+        if (!isValidVariableSymbol(node->acrossVariable())) {
+            return fail(StateSpaceResult::Status::GraphError,
+                        QStringLiteral("Node %1 needs a valid across variable.").arg(node->name()));
         }
-        if (!matched) {
-            algebraics.push_back(reduced);
-        } else {
-            matchedAlgebraics.push_back(reduced);
-        }
+        addTimed(node->acrossVariable().trimmed());
     }
-
-    if (stateDots.size() != ctx.computedStates.size()) {
-        QStringList missing;
-        for (const ComputedState& state : ctx.computedStates) {
-            if (stateDots.count(state.symbol) == 0) {
-                const QString branchName =
-                    state.branch ? state.branch->name() : QStringLiteral("?");
-                missing.push_back(QStringLiteral("%1 (%2)").arg(state.symbol, branchName));
-            }
+    for (BranchItem* branch : ctx.branches) {
+        if (!branch || !branch->from() || !branch->to() || branch->from() == branch->to()) {
+            continue;
         }
-        ss::ssLog(QStringLiteral("error"),
-                  QStringLiteral("missing state dots: %1").arg(missing.join(QStringLiteral(", "))));
-        ss::ssLogExprs(QStringLiteral("algebraic"), algebraics);
-        ctx.result.status = StateSpaceResult::Status::SymbolicError;
-        ctx.result.message = QStringLiteral("Could not derive all state equations.");
-        return false;
+        if (!isValidVariableSymbol(branchThroughSymbol(*branch))) {
+            return fail(StateSpaceResult::Status::GraphError,
+                        QStringLiteral("Branch %1 needs a valid through variable.").arg(branch->name()));
+        }
+        connected.push_back(branch);
+        addTimed(branchThroughSymbol(*branch));
     }
-
+    std::unordered_set<QString> knowns;
+    std::vector<ss::RCP<const ss::Basic>> knownSyms;
     for (const ComputedState& state : ctx.computedStates) {
-        ss::ssLog(QStringLiteral("state_dot_initial"),
-                  QStringLiteral("%1 = %2")
-                      .arg(ss::dotName(state.symbol), ss::exprText(stateDots.at(state.symbol))));
-    }
-
-    const auto isStateSymbol = [&](const QString& symbolName) {
-        for (const ComputedState& state : ctx.computedStates) {
-            if (state.symbol == symbolName) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto isInputLike = [&](const QString& symbolName) {
-        if (std::find(ctx.result.inputs.begin(), ctx.result.inputs.end(), symbolName) != ctx.result.inputs.end()) {
-            return true;
-        }
-        for (const QString& input : ctx.result.inputs) {
-            if (symbolName == ss::dotName(input)) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto isStateDotLike = [&](const QString& symbolName) {
-        if (!symbolName.endsWith(QStringLiteral("_dot"))) {
-            return false;
-        }
-        return isStateSymbol(symbolName.left(symbolName.size() - 4));
-    };
-    const auto canEliminateBranchSymbol = [&](const QString& candidate) {
-        return !candidate.isEmpty() && candidate != QStringLiteral("0") &&
-               isValidVariableSymbol(candidate) && !isStateSymbol(candidate) &&
-               !isInputLike(candidate) && !isStateDotLike(candidate);
-    };
-
-    const std::vector<QString> nodeAcrossSymbols = ss::collectNodeAcrossSymbols(nodes);
-    const std::vector<ss::RCP<const SymEngine::Basic>> constraintEqs =
-        ss::constraintRelations(ctx.replacements);
-    ss::ssLog(QStringLiteral("constraint_eqs"), QString::number(constraintEqs.size()));
-    ss::ssLogExprs(QStringLiteral("constraint"), constraintEqs);
-    const auto dependentDotMap =
-        ss::dependentDotSubstitutionMap(ctx.replacements, ctx.timedSymbols, isStateSymbol);
-
-    std::unordered_map<QString, BranchItem*> stateBranchBySymbol;
-    for (const ComputedState& state : ctx.computedStates) {
-        stateBranchBySymbol[state.symbol] = state.branch;
-    }
-
-    const std::vector<ss::RCP<const SymEngine::Basic>> inputPathRelations =
-        [&]() {
-            ReductionBuildInput buildInput{algebraics, matchedAlgebraics, reducedElementals,
-                                           stateMatchedBranches};
-            const ReductionRelations rels = buildReductionRelations(ctx, buildInput);
-            return rels.primaryWithFlow();
-        }();
-    std::unordered_set<QString> inputCarriers;
-    if (!ctx.result.inputs.isEmpty()) {
-        std::vector<QString> carrierCandidates;
-        carrierCandidates.reserve(nodeAcrossSymbols.size() + branches.size() * 2);
-        carrierCandidates.insert(carrierCandidates.end(), nodeAcrossSymbols.begin(),
-                                 nodeAcrossSymbols.end());
-        for (BranchItem* branch : branches) {
-            if (!branch) {
-                continue;
-            }
-            for (const QString& symbol :
-                 {branchThroughSymbol(*branch), branchAcrossSymbol(*branch)}) {
-                if (!symbol.isEmpty()) {
-                    carrierCandidates.push_back(symbol);
-                }
-            }
-        }
-        const auto markInputCarriers = [&](const ss::RCP<const SymEngine::Basic>& relation) {
-            for (const QString& input : ctx.result.inputs) {
-                if (eq(*ss::linearCoeffRCP(relation, ss::symOf(input)), *integer(0))) {
-                    continue;
-                }
-                for (const QString& symbol : carrierCandidates) {
-                    if (symbol == input) {
-                        continue;
-                    }
-                    if (!eq(*ss::linearCoeffRCP(relation, ss::symOf(symbol)), *integer(0))) {
-                        inputCarriers.insert(symbol);
-                    }
-                }
-            }
-        };
-        for (const ss::RCP<const SymEngine::Basic>& relation : constraintEqs) {
-            markInputCarriers(relation);
-        }
-        for (const ss::RCP<const SymEngine::Basic>& relation : inputPathRelations) {
-            markInputCarriers(relation);
-        }
-    }
-    const auto solvedTouchesInputPath = [&](const ss::RCP<const SymEngine::Basic>& solved) {
-        for (const QString& input : ctx.result.inputs) {
-            if (!eq(*ss::linearCoeffRCP(solved, ss::symOf(input)), *integer(0))) {
-                return true;
-            }
-        }
-        for (const QString& carrier : inputCarriers) {
-            if (!eq(*ss::linearCoeffRCP(solved, ss::symOf(carrier)), *integer(0))) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto inputPathAlternativeExists =
-        [&](const ss::RCP<const SymEngine::Basic>& primarySym) {
-            for (const ss::RCP<const SymEngine::Basic>& relation : inputPathRelations) {
-                const std::optional<ss::RCP<const SymEngine::Basic>> alternative =
-                    ss::solveLinearFor(relation, primarySym);
-                if (alternative && solvedTouchesInputPath(*alternative)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-    const auto rejectTautologicalNodeElim = [&](const QString& targetName,
-                                                const ss::RCP<const SymEngine::Basic>& targetExpr,
-                                                const ss::RCP<const SymEngine::Basic>& primarySym,
-                                                const ss::RCP<const SymEngine::Basic>& solved) {
-        const auto it = stateBranchBySymbol.find(targetName);
-        if (it != stateBranchBySymbol.end() && it->second) {
-            const QString across = ss::branchTautologyAcrossSymbol(*it->second);
-            if (!across.isEmpty()) {
-                bool primaryIsAcrossNode = false;
-                const QString acrossText = branchAcrossVariableText(*it->second).trimmed();
-                const int dash = acrossText.indexOf(QStringLiteral(" - "));
-                if (dash > 0) {
-                    const QString hiName = acrossText.left(dash).trimmed();
-                    const QString loName = acrossText.mid(dash + 3).trimmed();
-                    if (isValidVariableSymbol(hiName) &&
-                        eq(*primarySym, *ss::symOf(hiName))) {
-                        primaryIsAcrossNode = true;
-                    }
-                    if (isValidVariableSymbol(loName) &&
-                        eq(*primarySym, *ss::symOf(loName))) {
-                        primaryIsAcrossNode = true;
-                    }
-                } else if (isValidVariableSymbol(acrossText) &&
-                           eq(*primarySym, *ss::symOf(acrossText))) {
-                    primaryIsAcrossNode = true;
-                }
-                // ponytail: branch flows (i_R1) may legitimately depend on state; block node-V only
-                if (primaryIsAcrossNode &&
-                    !eq(*ss::linearCoeffRCP(solved, ss::symOf(across)), *integer(0))) {
-                    return false;
-                }
-            }
-        }
-        return !ss::substitutionIsCircular(targetExpr, primarySym, solved);
-    };
-    const auto rejectPortAliasInverse = [&](const ss::RCP<const SymEngine::Basic>& primarySym,
-                                            const ss::RCP<const SymEngine::Basic>& solved) {
-        for (const auto& [portFlow, externalFlow] : ctx.replacements) {
-            if (!eq(*externalFlow, *primarySym)) {
-                continue;
-            }
-            const std::optional<ss::RCP<const SymEngine::Basic>> portSym = ss::trySymOf(portFlow);
-            if (portSym && eq(*solved, **portSym)) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto coTreeStateOwnAcrossName = [&](const BranchItem& branch) -> QString {
-        const QString acrossText = branchAcrossVariableText(branch).trimmed();
-        const int dash = acrossText.indexOf(QStringLiteral(" - "));
-        if (dash > 0) {
-            const QString hiName = acrossText.left(dash).trimmed();
-            if (isValidVariableSymbol(hiName)) {
-                return hiName;
-            }
-            const QString loName = acrossText.mid(dash + 3).trimmed();
-            if (isValidVariableSymbol(loName)) {
-                return loName;
-            }
-        } else if (isValidVariableSymbol(acrossText)) {
-            return acrossText;
-        }
-        return {};
-    };
-    const auto rejectCoTreeTShuntSubst = [&](const QString& targetName,
-                                             const ss::RCP<const SymEngine::Basic>& primarySym,
-                                             const ss::RCP<const SymEngine::Basic>& solved) {
-        const auto stateIt = stateBranchBySymbol.find(targetName);
-        if (stateIt == stateBranchBySymbol.end() || !stateIt->second) {
-            return false;
-        }
-        BranchItem* branch = stateIt->second;
-        if (effectivePassiveBranchType(*branch) != BranchType::T ||
-            ctx.treeSet.count(branch) != 0) {
-            return false;
-        }
-        const QString ownAcross = coTreeStateOwnAcrossName(*branch);
-        if (ownAcross.isEmpty()) {
-            return false;
-        }
-        const ss::RCP<const SymEngine::Basic> ownAcrossSym = ss::symOf(ownAcross);
-        // ponytail: block V3->V4 ping-pong only; allow R2 shunt V4->V3 then L7 reduced elim + coupling
-        for (const QString& node : nodeAcrossSymbols) {
-            if (node == ownAcross) {
-                continue;
-            }
-            if (eq(*primarySym, *ss::symOf(node)) &&
-                !eq(*ss::linearCoeffRCP(solved, ownAcrossSym), *integer(0))) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const auto acceptStateDotSubstitution = [&](const QString& targetName,
-                                                  const ss::RCP<const SymEngine::Basic>& targetExpr,
-                                                  const ss::RCP<const SymEngine::Basic>& primarySym,
-                                                  const ss::RCP<const SymEngine::Basic>& solved) {
-        if (rejectPortAliasInverse(primarySym, solved)) {
-            return false;
-        }
-        if (rejectCoTreeTShuntSubst(targetName, primarySym, solved)) {
-            return false;
-        }
-        if (!rejectTautologicalNodeElim(targetName, targetExpr, primarySym, solved)) {
-            return false;
-        }
-        const ss::RCP<const SymEngine::Basic> next =
-            expand(subs(targetExpr, {{primarySym, solved}}));
-        if (eq(*next, *ss::dotSym(targetName))) {
-            return false;
-        }
-        const auto stateIt = stateBranchBySymbol.find(targetName);
-        if (stateIt != stateBranchBySymbol.end() && stateIt->second) {
-            const ss::RCP<const SymEngine::Basic> ownDot = ss::dotSym(targetName);
-            const QString stateFlow = branchThroughSymbol(*stateIt->second);
-            const std::optional<ss::RCP<const SymEngine::Basic>> stateFlowSym =
-                ss::trySymOf(stateFlow);
-            if (stateFlowSym && eq(*primarySym, **stateFlowSym)) {
-                const ss::RCP<const SymEngine::Basic> coeffBefore =
-                    ss::linearCoeffRCP(targetExpr, ownDot);
-                const ss::RCP<const SymEngine::Basic> coeffAfter =
-                    ss::linearCoeffRCP(next, ownDot);
-                if (!eq(*coeffBefore, *coeffAfter)) {
-                    return false;
-                }
-                // ponytail: own flow already defines this state dot — don't fold in other x_dot (PumpAccumulator f_M/Vm)
-                for (const ComputedState& state : ctx.computedStates) {
-                    if (state.symbol == targetName) {
-                        continue;
-                    }
-                    if (!eq(*ss::linearCoeffRCP(solved, ss::dotSym(state.symbol)),
-                            *integer(0))) {
-                        return false;
-                    }
-                }
-            }
-            // ponytail: block any elim whose solved form recycles own Q_dot (pump.lgm Q_L1/P1)
-            if (!eq(*ss::linearCoeffRCP(solved, ownDot), *integer(0)) &&
-                !eq(*ss::linearCoeffRCP(next, ownDot), *integer(0))) {
-                return false;
-            }
-        }
-        for (const QString& input : ctx.result.inputs) {
-            const ss::RCP<const SymEngine::Basic> inputSym = ss::symOf(input);
-            const bool hadInput =
-                !eq(*ss::linearCoeffRCP(targetExpr, inputSym), *integer(0));
-            const bool hasInput = !eq(*ss::linearCoeffRCP(next, inputSym), *integer(0));
-            if (hadInput && !hasInput) {
-                return false;
-            }
-            const ss::RCP<const SymEngine::Basic> inputDotSym = ss::symOf(ss::dotName(input));
-            const bool hadInputDot =
-                !eq(*ss::linearCoeffRCP(targetExpr, inputDotSym), *integer(0));
-            const bool hasInputDot =
-                !eq(*ss::linearCoeffRCP(next, inputDotSym), *integer(0));
-            if (hadInputDot && !hasInputDot) {
-                return false;
-            }
-        }
-        const auto it = stateBranchBySymbol.find(targetName);
-        if (it == stateBranchBySymbol.end() || !it->second) {
-            return true;
-        }
-        const QString flow = branchThroughSymbol(*it->second);
-        if (flow.isEmpty() || flow == targetName) {
-            return true;
-        }
-        const std::optional<ss::RCP<const SymEngine::Basic>> flowSymOpt = ss::trySymOf(flow);
-        if (flowSymOpt && eq(*primarySym, **flowSymOpt) && !inputCarriers.empty() &&
-            !solvedTouchesInputPath(solved) && inputPathAlternativeExists(primarySym)) {
-            return false;
-        }
-        if (eq(*ss::linearCoeffRCP(next, ss::symOf(flow)), *integer(0))) {
-            return true;
-        }
-        for (const QString& input : ctx.result.inputs) {
-            if (!eq(*ss::linearCoeffRCP(next, ss::symOf(input)), *integer(0))) {
-                return true;
-            }
-            if (!eq(*ss::linearCoeffRCP(next, ss::symOf(ss::dotName(input))), *integer(0))) {
-                return true;
-            }
-        }
-        std::vector<ss::RCP<const SymEngine::Basic>> otherStates;
-        otherStates.reserve(ctx.computedStates.size());
-        for (const ComputedState& state : ctx.computedStates) {
-            if (state.symbol != targetName) {
-                otherStates.push_back(ss::symOf(state.symbol));
-            }
-        }
-        const ss::RCP<const SymEngine::Basic> remainder = ss::linearRemainder(next, otherStates);
-        const ss::RCP<const SymEngine::Basic> flowSym = ss::symOf(flow);
-        if (!eq(*ss::linearCoeffRCP(remainder, flowSym), *integer(0)) &&
-            eq(*ss::linearRemainder(remainder, {flowSym}), *integer(0))) {
-            // Allow folding a continuity/compatibility alias (e.g. T4=-T_I2 on inertia branch).
-            const std::unordered_map<QString, ss::RCP<const SymEngine::Basic>> resolvedRepl =
-                ss::resolveReplacements(ctx.replacements);
-            for (const auto& [name, expr] : resolvedRepl) {
-                const std::optional<ss::RCP<const SymEngine::Basic>> nameSym = ss::trySymOf(name);
-                if (nameSym && eq(*primarySym, **nameSym) && eq(*solved, *expr)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        return true;
-    };
-
-    ctx.reductionRelations = buildReductionRelations(
-        ctx, ReductionBuildInput{algebraics, matchedAlgebraics, reducedElementals,
-                                 stateMatchedBranches});
-
-    std::vector<QString> stateSymbols;
-    stateSymbols.reserve(ctx.computedStates.size());
-    for (const ComputedState& state : ctx.computedStates) {
-        stateSymbols.push_back(state.symbol);
-    }
-
-    const ReductionSubs subMaps{valueSubMap, dependentDotMap};
-    const ReductionOptions reduceOpts{acceptStateDotSubstitution, true, QStringLiteral("")};
-    ssReduceExpressions(ctx, stateDots, *ctx.reductionRelations, subMaps, nodeAcrossSymbols,
-                        canEliminateBranchSymbol, reduceOpts, stateSymbols);
-
-    std::vector<ss::RCP<const SymEngine::Basic>> stateInputVars;
-    stateInputVars.reserve(stateSymbols.size() + 2 * static_cast<size_t>(ctx.result.inputs.size()));
-    for (const QString& symbolName : stateSymbols) {
-        stateInputVars.push_back(ss::symOf(symbolName));
+        addTimed(state.symbol);
+        knowns.insert(state.symbol);
+        knownSyms.push_back(ss::symOf(state.symbol));
     }
     for (const QString& input : ctx.result.inputs) {
-        stateInputVars.push_back(ss::symOf(input));
-        stateInputVars.push_back(ss::symOf(ss::dotName(input)));
-    }
-
-    std::unordered_set<QString> elementConstants;
-    for (BranchItem* branch : branches) {
-        if (!branch) {
-            continue;
-        }
-        const QString constant = branch->elementConstant().trimmed();
-        if (isValidVariableSymbol(constant)) {
-            elementConstants.insert(constant);
+        addTimed(input);
+        for (const QString& name : {input, ss::dotName(input)}) {
+            knowns.insert(name);
+            knownSyms.push_back(ss::symOf(name));
         }
     }
-    std::unordered_set<QString> algebraicVariables;
-    for (const QString& nodeAcross : nodeAcrossSymbols) {
-        if (canEliminateBranchSymbol(nodeAcross)) {
-            algebraicVariables.insert(nodeAcross);
-        }
-    }
-    for (BranchItem* branch : branches) {
-        if (!branch) {
-            continue;
-        }
-        for (const QString& symbol :
-             {branchThroughSymbol(*branch), branchAcrossSymbol(*branch)}) {
-            if (canEliminateBranchSymbol(symbol)) {
-                algebraicVariables.insert(symbol);
+    SymEngine::map_basic_basic dotMap;
+    std::unordered_set<QString> unknowns;
+    for (const QString& name : timed) {
+        dotMap[ss::symOf(name)] = ss::dotSym(name);
+        for (const QString& variable : {name, ss::dotName(name)}) {
+            if (knowns.count(variable) == 0) {
+                unknowns.insert(variable);
             }
         }
     }
-    for (const auto& [name, expr] : ctx.replacements) {
-        (void)expr;
-        if (canEliminateBranchSymbol(name)) {
-            algebraicVariables.insert(name);
+
+    // Algebraic constraints hold at every instant, so their time derivatives hold too; that
+    // derivative level is what couples dependent storage (A-type links, T-type twigs).
+    std::vector<ss::RCP<const ss::Basic>> algebraic;
+    for (NodeItem* node : ctx.nodes) {
+        ss::RCP<const ss::Basic> leaving = integer(0);
+        for (BranchItem* branch : connected) {
+            if (branch->from() == node) {
+                leaving = add(leaving, ss::symOf(branchThroughSymbol(*branch)));
+            } else if (branch->to() == node) {
+                leaving = sub(leaving, ss::symOf(branchThroughSymbol(*branch)));
+            }
+        }
+        algebraic.push_back(leaving);
+    }
+    for (BranchItem* branch : connected) {
+        if (branch->isActive() && branch->branchType() == BranchType::A) {
+            algebraic.push_back(
+                sub(branchNodeDifference(*branch), ss::symOf(branchSourceInputSymbol(*branch))));
         }
     }
+    for (const NormalTreeResult::StateVariable& state : ctx.tree.stateVariables) {
+        const bool across = state.kind == NormalTreeResult::StateVariable::Kind::Across;
+        algebraic.push_back(sub(ss::symOf(state.symbol),
+                                across ? branchNodeDifference(*state.branch)
+                                       : ss::symOf(branchThroughSymbol(*state.branch))));
+    }
+    std::vector<ss::RCP<const ss::Basic>> equations;
+    for (const BranchElemental& elemental : ctx.elementalEquations) {
+        const bool dynamic = elemental.branch &&
+                             effectivePassiveBranchType(*elemental.branch) != BranchType::D;
+        (dynamic ? equations : algebraic).push_back(elemental.expr);
+    }
+    for (const ss::RCP<const ss::Basic>& equation : algebraic) {
+        equations.push_back(expand(equation));
+        equations.push_back(expand(subs(equation, dotMap)));
+    }
 
-    const auto isAlgebraicUnknown = [&](const QString& sym) {
-        return canEliminateBranchSymbol(sym) && algebraicVariables.count(sym) != 0 &&
-               elementConstants.count(sym) == 0;
-    };
+    std::vector<QString> targets;
+    for (const ComputedState& state : ctx.computedStates) {
+        targets.push_back(ss::dotName(state.symbol));
+    }
+    for (const QString& out : ctx.requestedOutputs) {
+        if (knowns.count(out) != 0) {
+            continue;
+        }
+        if (unknowns.count(out) == 0) {
+            const auto owner = std::find_if(connected.begin(), connected.end(), [&](BranchItem* branch) {
+                return branchAcrossSymbol(*branch) == out;
+            });
+            if (owner == connected.end() || !isValidVariableSymbol(out)) {
+                return fail(StateSpaceResult::Status::Unsupported,
+                            QStringLiteral("Output %1 is not a variable of this graph.").arg(out));
+            }
+            unknowns.insert(out);
+            equations.push_back(sub(ss::symOf(out), branchNodeDifference(**owner)));
+        }
+        targets.push_back(out);
+    }
 
-    const std::vector<ss::RCP<const SymEngine::Basic>> subsystemRelations =
-        ctx.reductionRelations->reducedWithFlow();
-    for (size_t pass = 0; pass < 4; ++pass) {
-        std::unordered_set<QString> leftoverUnknowns;
-        for (const auto& [stateName, expr] : stateDots) {
-            (void)stateName;
-            std::unordered_set<QString> symbols;
-            ss::collectExprSymbols(expr, symbols);
-            for (const QString& sym : symbols) {
-                if (isAlgebraicUnknown(sym)) {
-                    leftoverUnknowns.insert(sym);
+    ss::ssLog(QStringLiteral("solve"), QStringLiteral("equations=%1 unknowns=%2 targets=%3")
+                                           .arg(equations.size())
+                                           .arg(unknowns.size())
+                                           .arg(targets.size()));
+    const ss::LinearSolveResult solved = ss::solveLinearTargets(equations, unknowns, targets);
+    if (solved.inconsistent) {
+        return fail(StateSpaceResult::Status::SymbolicError,
+                    QStringLiteral("The graph equations are inconsistent: the sources or the "
+                                   "chosen states are not independent."));
+    }
+
+    // Each result as sum(coeff * known), every coefficient collapsed to one fraction.
+    auto tidy = [&](const QString& name) -> std::optional<ss::RCP<const ss::Basic>> {
+        const auto it = solved.values.find(name);
+        if (it == solved.values.end() ||
+            !ss::isIdenticallyZero(ss::linearRemainder(it->second, knownSyms))) {
+            return std::nullopt;
+        }
+        ss::RCP<const ss::Basic> sum = integer(0);
+        for (const ss::RCP<const ss::Basic>& known : knownSyms) {
+            const ss::RCP<const ss::Basic> coeff = ss::linearCoeffRCP(it->second, known);
+            if (!ss::isIdenticallyZero(coeff)) {
+                const ss::RCP<const ss::Basic> simple = ss::simplifyRational(coeff);
+                for (const ss::RCP<const ss::Basic>& part :
+                     SymEngine::is_a<SymEngine::Add>(*simple) ? simple->get_args()
+                                                              : SymEngine::vec_basic{simple}) {
+                    sum = add(sum, mul(part, known));
                 }
             }
         }
-        if (leftoverUnknowns.empty()) {
-            break;
-        }
-        leftoverUnknowns =
-            ss::expandCoupledAlgebraicUnknowns(leftoverUnknowns, subsystemRelations,
-                                               isAlgebraicUnknown);
-        std::vector<QString> unknownList(leftoverUnknowns.begin(), leftoverUnknowns.end());
-        std::sort(unknownList.begin(), unknownList.end());
-        ss::ssLog(QStringLiteral("subsystem_solve"),
-                  QStringLiteral("pass %1 unknowns=%2")
-                      .arg(pass)
-                      .arg(QStringList(unknownList.begin(), unknownList.end())
-                               .join(QStringLiteral(", "))));
-        const std::optional<std::unordered_map<QString, ss::RCP<const SymEngine::Basic>>> solved =
-            ss::solveLinearSubsystem(subsystemRelations, unknownList, stateInputVars);
-        if (!solved) {
-            ss::ssLog(QStringLiteral("subsystem_solve"), QStringLiteral("failed"));
-            break;
-        }
-        SymEngine::map_basic_basic subMap;
-        for (const QString& name : unknownList) {
-            subMap[ss::symOf(name)] = solved->at(name);
-        }
-        bool changed = false;
-        for (auto& [name, expr] : stateDots) {
-            (void)name;
-            const ss::RCP<const SymEngine::Basic> next = expand(subs(expr, subMap));
-            if (!eq(*next, *expr)) {
-                expr = next;
-                changed = true;
-            }
-        }
-        ss::ssLog(QStringLiteral("subsystem_solved"),
-                  QStringLiteral("pass %1 substituted %2 unknowns")
-                      .arg(pass)
-                      .arg(solved->size()));
-        if (!changed) {
-            break;
-        }
-    }
-
+        return sum;
+    };
     for (const ComputedState& state : ctx.computedStates) {
-        const ss::RCP<const SymEngine::Basic> remainder =
-            ss::linearRemainder(stateDots.at(state.symbol), stateInputVars);
-        if (!eq(*remainder, *integer(0))) {
-            ctx.result.status = StateSpaceResult::Status::SymbolicError;
-            ctx.result.message = QStringLiteral("State equation for %1 has unresolved terms: %2.")
-                                 .arg(ss::dotName(state.symbol), ss::exprText(remainder));
-            ss::ssLog(QStringLiteral("error"), ctx.result.message);
-            ss::ssLog(QStringLiteral("state_dot_full"),
-                      QStringLiteral("%1 = %2")
-                          .arg(ss::dotName(state.symbol), ss::exprText(stateDots.at(state.symbol))));
-            return false;
+        const std::optional<ss::RCP<const ss::Basic>> value = tidy(ss::dotName(state.symbol));
+        if (!value) {
+            return fail(StateSpaceResult::Status::SymbolicError,
+                        QStringLiteral("%1 is not determined by the states and inputs; check the "
+                                       "normal tree.")
+                            .arg(ss::dotName(state.symbol)));
         }
+        stateDots[state.symbol] = *value;
+        ctx.result.stateEquations.push_back(
+            QStringLiteral("%1 = %2")
+                .arg(ss::dotName(state.symbol),
+                     ss::displayExprText(*value, ctx.result.inputs, ctx.result.inputLabels)));
+        ss::ssLog(QStringLiteral("state_equation"), ctx.result.stateEquations.back());
     }
-
-    ss::ssLog(QStringLiteral("ok"), QStringLiteral("order=%1").arg(ctx.computedStates.size()));
-
-    for (const ComputedState& state : ctx.computedStates) {
-        const QString lhs = ss::dotName(state.symbol);
-        const QString rhs = ss::displayExprText(stateDots.at(state.symbol), ctx.result.inputs,
-                                                ctx.result.inputLabels);
-        ctx.result.stateEquations.push_back(QStringLiteral("%1 = %2").arg(lhs, rhs));
-        ss::ssLog(QStringLiteral("state_equation"), QStringLiteral("%1 = %2").arg(lhs, rhs));
+    for (const QString& out : ctx.requestedOutputs) {
+        if (knowns.count(out) != 0) {
+            ctx.outputExprs[out] = ss::symOf(out);
+            continue;
+        }
+        const std::optional<ss::RCP<const ss::Basic>> value = tidy(out);
+        if (!value) {
+            return fail(StateSpaceResult::Status::SymbolicError,
+                        QStringLiteral("Output %1 is not determined by the states and inputs.")
+                            .arg(out));
+        }
+        ctx.outputExprs[out] = *value;
     }
     return true;
 }

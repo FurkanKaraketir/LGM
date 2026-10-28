@@ -45,11 +45,6 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
         if (!branch || branch->isActive() || isTwoPortInternalBranch(*branch)) {
             continue;
         }
-        if (ctx.treeSet.count(branch) != 0 && isExternalBranchOnPortSpan(*branch, branches) &&
-            !isPortSpanStorageBranch(*branch, branches) &&
-            effectivePassiveBranchType(*branch) != BranchType::D) {
-            continue;
-        }
         const ss::RCP<const SymEngine::Basic> k = branchElementConstantExpr(*branch);
         const SystemType systemType = lg::branchSystemType(*branch);
         const BranchType type = effectivePassiveBranchType(*branch);
@@ -144,43 +139,29 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
         if (!twig) {
             continue;
         }
-        if (skipTwigFlowContinuity(*twig, twoPorts, branches)) {
-            continue;
-        }
         NodeItem* root = twig->from();
         if (!root || !twig->to()) {
             ctx.result.status = StateSpaceResult::Status::GraphError;
             ctx.result.message = QStringLiteral("A tree branch has missing endpoints.");
             return false;
         }
+        // Fundamental cut set of the twig: every branch crossing it, port bonds included.
         const std::unordered_set<NodeItem*> side =
             ss::reachableTreeNodes(root, tree.treeBranches, twig);
         ss::RCP<const SymEngine::Basic> cutSum = integer(0);
         for (BranchItem* branch : branches) {
-            if (!branch || branch == twig) {
+            if (!branch || branch == twig || !branch->from() || !branch->to()) {
                 continue;
             }
-            NodeItem* from = branch->from();
-            NodeItem* to = branch->to();
-            if (!from || !to) {
-                continue;
-            }
-            const bool fromIn = side.count(from) != 0;
-            const bool toIn = side.count(to) != 0;
-            if (fromIn == toIn) {
-                continue;
-            }
-            if (omitFromContinuityCut(branch, branches, twoPorts)) {
-                continue;
-            }
-            if (fromIn) {
-                cutSum = add(cutSum, ss::signedThrough(branch, from, to));
-            } else {
-                cutSum = add(cutSum, ss::signedThrough(branch, to, from));
+            const bool fromIn = side.count(branch->from()) != 0;
+            const bool toIn = side.count(branch->to()) != 0;
+            if (fromIn != toIn) {
+                cutSum = add(cutSum, fromIn ? ss::signedThrough(branch, branch->from(), branch->to())
+                                            : ss::signedThrough(branch, branch->to(), branch->from()));
             }
         }
-        const ss::RCP<const SymEngine::Basic> twigFlow = ss::symOf(branchThroughSymbol(*twig));
         const QString twigFlowSymbol = branchThroughSymbol(*twig);
+        const ss::RCP<const SymEngine::Basic> twigFlow = ss::symOf(twigFlowSymbol);
         const std::optional<ss::RCP<const SymEngine::Basic>> solved =
             ss::solveLinearFor(add(twigFlow, cutSum), twigFlow);
         if (!solved) {
@@ -190,286 +171,33 @@ bool ssBuildConstraints(StateSpaceContext& ctx) {
             ss::ssLog(QStringLiteral("error"), ctx.result.message);
             return false;
         }
-        ctx.recordReplacement(twigFlowSymbol, *solved, ctx.result.continuityEquations);
-        ss::ssLog(QStringLiteral("continuity_twig"),
-                  QStringLiteral("%1 = %2").arg(twigFlowSymbol, ss::exprText(*solved)));
+        ctx.addEquationText(ctx.result.continuityEquations, twigFlowSymbol, *solved);
     }
 
     ss::ssLog(QStringLiteral("compatibility"));
     for (BranchItem* branch : branches) {
-        if (!branch || !branch->isActive() || branch->branchType() != BranchType::A) {
+        if (!branch || !branch->isActive() || branch->branchType() != BranchType::A ||
+            ctx.treeSet.count(branch) == 0 || !branch->from() || !branch->to()) {
             continue;
         }
-        if (ctx.treeSet.count(branch) == 0) {
-            continue;
-        }
-        NodeItem* from = branch->from();
-        NodeItem* to = branch->to();
-        if (!from || !to) {
-            continue;
-        }
-        const QString input = branchSourceInputSymbol(*branch);
-        const ss::RCP<const SymEngine::Basic> inputExpr = ss::symOf(input);
-        if (to->isGround() && !from->isGround()) {
-            const QString nodeAcross = from->acrossVariable();
-            if (!nodeAcross.isEmpty() && nodeAcross != QStringLiteral("0") && nodeAcross != input) {
-                ctx.recordReplacement(nodeAcross, inputExpr, ctx.result.compatibilityEquations);
-            }
-        } else if (from->isGround() && !to->isGround()) {
-            const QString nodeAcross = to->acrossVariable();
-            if (!nodeAcross.isEmpty() && nodeAcross != QStringLiteral("0") && nodeAcross != input) {
-                ctx.recordReplacement(nodeAcross, inputExpr, ctx.result.compatibilityEquations);
-            }
-        } else if (!from->isGround() && !to->isGround()) {
-            // ponytail: floating across source (Ps1 between P1–P6): u = P_from − P_to
-            const QString vFrom = from->acrossVariable();
-            const QString vTo = to->acrossVariable();
-            if (!vFrom.isEmpty() && vFrom != QStringLiteral("0") && vFrom != input &&
-                !vTo.isEmpty() && vTo != QStringLiteral("0") && vTo != input) {
-                ctx.recordReplacement(vFrom, add(inputExpr, ss::symOf(vTo)),
-                                      ctx.result.compatibilityEquations);
-            }
+        // Same convention as every branch: u = across(from) - across(to).
+        const ss::RCP<const SymEngine::Basic> input = ss::symOf(branchSourceInputSymbol(*branch));
+        const NodeItem* from = branch->from();
+        const NodeItem* to = branch->to();
+        if (!from->isGround()) {
+            const ss::RCP<const SymEngine::Basic> other =
+                to->isGround() ? ss::RCP<const SymEngine::Basic>(integer(0)) : ss::symOf(to->acrossVariable());
+            ctx.addEquationText(ctx.result.compatibilityEquations, from->acrossVariable(),
+                                add(input, other));
+        } else if (!to->isGround()) {
+            ctx.addEquationText(ctx.result.compatibilityEquations, to->acrossVariable(), neg(input));
         }
     }
-
-    const auto isPrimaryState = [&](const QString& symbolName) {
-        return std::any_of(ctx.computedStates.begin(), ctx.computedStates.end(),
-                           [&](const ComputedState& state) { return state.symbol == symbolName; });
-    };
-    ss::ssLog(QStringLiteral("port_continuity"));
-    for (TwoPortItem* twoPort : twoPorts) {
-        if (!twoPort) {
-            continue;
-        }
-        for (BranchItem* port : {twoPort->leftBranch(), twoPort->rightBranch()}) {
-            if (!port) {
-                continue;
-            }
-            const QString portFlow = branchThroughSymbol(*port);
-            if (portFlow.isEmpty() || isPrimaryState(portFlow) ||
-                ctx.replacements.count(portFlow) != 0) {
-                continue;
-            }
-            // ponytail: stacked transformers share one junction bond; sibling port already
-            // recorded the same KCL (e.g. T4=-(T5+T_I2) vs T5=-(T4+T_I2)).
-            bool siblingPortRecorded = false;
-            for (BranchItem* sibling : branches) {
-                if (!sibling || sibling == port || !isTwoPortInternalBranch(*sibling) ||
-                    !sharesEndpoints(port, sibling)) {
-                    continue;
-                }
-                const QString siblingFlow = branchThroughSymbol(*sibling);
-                if (!siblingFlow.isEmpty() && ctx.replacements.count(siblingFlow) != 0) {
-                    siblingPortRecorded = true;
-                    break;
-                }
-            }
-            if (siblingPortRecorded) {
-                continue;
-            }
-            const ss::RCP<const SymEngine::Basic> spanSum =
-                signedSpanJunctionFlowSum(*port, branches, twoPorts, true);
-            if (eq(*spanSum, *integer(0))) {
-                continue;
-            }
-            const ss::RCP<const SymEngine::Basic> portFlowSym = ss::symOf(portFlow);
-            for (BranchItem* twig : tree.treeBranches) {
-                if (!twig || !skipTwigFlowContinuity(*twig, twoPorts, branches) ||
-                    effectivePassiveBranchType(*twig) != BranchType::D ||
-                    !sharesEndpoints(twig, port)) {
-                    continue;
-                }
-                const QString twigFlowSymbol = branchThroughSymbol(*twig);
-                if (twigFlowSymbol.isEmpty() || ctx.replacements.count(twigFlowSymbol) != 0) {
-                    continue;
-                }
-                const ss::RCP<const SymEngine::Basic> twigFlow = ss::symOf(twigFlowSymbol);
-                const std::optional<ss::RCP<const SymEngine::Basic>> twigSolved =
-                    ss::solveLinearFor(add(portFlowSym, spanSum), twigFlow);
-                if (!twigSolved) {
-                    continue;
-                }
-                ctx.recordReplacement(twigFlowSymbol, *twigSolved, ctx.result.continuityEquations);
-            }
-            ctx.recordReplacement(portFlow, neg(spanSum), ctx.result.continuityEquations);
-        }
-    }
-    if (!ctx.result.continuityEquations.isEmpty()) {
-        ss::ssLog(QStringLiteral("continuity"), ctx.result.continuityEquations.join(QStringLiteral("; ")));
-    }
-    if (!ctx.result.compatibilityEquations.isEmpty()) {
-        ss::ssLog(QStringLiteral("compatibility_eqs"),
-                  ctx.result.compatibilityEquations.join(QStringLiteral("; ")));
-    }
-    ss::ssLog(QStringLiteral("two_port_across_bind"));
-    auto bindTwoPortAcross = [&](const QString& dependent,
-                                 const ss::RCP<const SymEngine::Basic>& expr, bool towardState = false) {
-        if (dependent.isEmpty() || !isValidVariableSymbol(dependent) || isPrimaryState(dependent)) {
-            return;
-        }
-        const SymEngine::map_basic_basic bindMap =
-            ss::substitutionMap(ss::resolveReplacements(ctx.replacements));
-        ctx.recordConstraint(dependent, expand(subs(expr, bindMap)), towardState);
-    };
-    auto bindTwoPortAcrossPair = [&](const QString& leftName,
-                                     const ss::RCP<const SymEngine::Basic>& leftExpr,
-                                     const QString& rightName,
-                                     const ss::RCP<const SymEngine::Basic>& rightExpr) {
-        if (leftName.isEmpty() || rightName.isEmpty()) {
-            return;
-        }
-        if (isPrimaryState(leftName)) {
-            bindTwoPortAcross(rightName, rightExpr, true);
-        } else if (isPrimaryState(rightName)) {
-            bindTwoPortAcross(leftName, leftExpr, true);
-        } else if (!isPrimaryState(leftName)) {
-            bindTwoPortAcross(leftName, leftExpr);
-        }
-    };
-
-    for (TwoPortItem* twoPort : twoPorts) {
-        if (!twoPort) {
-            continue;
-        }
-        BranchItem* left = twoPort->leftBranch();
-        BranchItem* right = twoPort->rightBranch();
-        if (!left || !right) {
-            continue;
-        }
-        const ss::RCP<const SymEngine::Basic> k = twoPortModulusExpr(*twoPort);
-        const QString leftAcrossName = branchAcrossSymbol(*left);
-        const QString rightAcrossName = branchAcrossSymbol(*right);
-        const ss::RCP<const SymEngine::Basic> leftAcross = ss::symOf(leftAcrossName);
-        const ss::RCP<const SymEngine::Basic> rightAcross = ss::symOf(rightAcrossName);
-        if (twoPort->kind() == TwoPortKind::Transformer) {
-            // ponytail: port flows live in elementals + continuity; across-only avoids clobbering i1=i_L etc.
-            bindTwoPortAcrossPair(leftAcrossName, mul(k, rightAcross), rightAcrossName,
-                                  div(leftAcross, k));
-        } else {
-            bindTwoPortAcrossPair(leftAcrossName, mul(k, ss::symOf(branchThroughSymbol(*right))),
-                                  rightAcrossName, div(leftAcross, k));
-        }
-    }
-    // ponytail: cascade may bind the far port first; propagate resolved across aliases toward states.
-    for (size_t pass = 0; pass < twoPorts.size() + 1; ++pass) {
-        bool changed = false;
-        const std::unordered_map<QString, ss::RCP<const SymEngine::Basic>> resolved =
-            ss::resolveReplacements(ctx.replacements);
-        for (TwoPortItem* twoPort : twoPorts) {
-            if (!twoPort || twoPort->kind() != TwoPortKind::Transformer) {
-                continue;
-            }
-            BranchItem* left = twoPort->leftBranch();
-            BranchItem* right = twoPort->rightBranch();
-            if (!left || !right) {
-                continue;
-            }
-            const ss::RCP<const SymEngine::Basic> k = twoPortModulusExpr(*twoPort);
-            const QString leftAcrossName = branchAcrossSymbol(*left);
-            const QString rightAcrossName = branchAcrossSymbol(*right);
-            const auto leftIt = resolved.find(leftAcrossName);
-            const auto rightIt = resolved.find(rightAcrossName);
-            if (leftIt != resolved.end() && !isPrimaryState(rightAcrossName)) {
-                const ss::RCP<const SymEngine::Basic> next = expand(div(leftIt->second, k));
-                if (!ctx.replacements.count(rightAcrossName) ||
-                    !eq(*ctx.replacements.at(rightAcrossName), *next)) {
-                    bindTwoPortAcross(rightAcrossName, next, true);
-                    changed = true;
-                }
-            } else if (rightIt != resolved.end() && !isPrimaryState(leftAcrossName)) {
-                const ss::RCP<const SymEngine::Basic> next = expand(mul(rightIt->second, k));
-                if (!ctx.replacements.count(leftAcrossName) ||
-                    !eq(*ctx.replacements.at(leftAcrossName), *next)) {
-                    bindTwoPortAcross(leftAcrossName, next, true);
-                    changed = true;
-                }
-            }
-        }
-        if (!changed) {
-            break;
-        }
-    }
-
-    ss::ssLog(QStringLiteral("port_span_junction"));
-    for (BranchItem* branch : branches) {
-        if (!branch || ctx.treeSet.count(branch) == 0) {
-            continue;
-        }
-        if (effectivePassiveBranchType(*branch) != BranchType::A) {
-            continue;
-        }
-        if (!isPortSpanStorageBranch(*branch, branches)) {
-            continue;
-        }
-        BranchItem* coTreePort = nullptr;
-        for (TwoPortItem* twoPort : twoPorts) {
-            if (!twoPort) {
-                continue;
-            }
-            for (BranchItem* port : {twoPort->leftBranch(), twoPort->rightBranch()}) {
-                if (!port || port == branch || ctx.treeSet.count(port) != 0) {
-                    continue;
-                }
-                if (!sharesEndpoints(branch, port)) {
-                    continue;
-                }
-                coTreePort = port;
-                break;
-            }
-            if (coTreePort) {
-                break;
-            }
-        }
-        if (!coTreePort) {
-            continue;
-        }
-        const std::vector<BranchItem*> parallels =
-            branchesParallelToPort(coTreePort, branches, twoPorts);
-        ss::RCP<const SymEngine::Basic> parallelSum = integer(0);
-        for (BranchItem* parallel : parallels) {
-            if (!parallel || parallel == branch) {
-                continue;
-            }
-            parallelSum =
-                add(parallelSum, signedParallelFlowExpr(*coTreePort, *parallel));
-        }
-        const QString storageFlowName = branchThroughSymbol(*branch);
-        ss::RCP<const SymEngine::Basic> portExpr;
-        bool havePortExpr = false;
-        TwoPortItem* owningTwoPort = nullptr;
-        for (TwoPortItem* twoPort : twoPorts) {
-            if (!twoPort) {
-                continue;
-            }
-            if (coTreePort == twoPort->leftBranch() || coTreePort == twoPort->rightBranch()) {
-                owningTwoPort = twoPort;
-                break;
-            }
-        }
-        if (owningTwoPort && owningTwoPort->kind() == TwoPortKind::Transformer) {
-            BranchItem* left = owningTwoPort->leftBranch();
-            BranchItem* right = owningTwoPort->rightBranch();
-            const ss::RCP<const SymEngine::Basic> k = twoPortModulusExpr(*owningTwoPort);
-            if (coTreePort == right && left) {
-                portExpr = neg(mul(k, ss::symOf(branchThroughSymbol(*left))));
-                havePortExpr = true;
-            } else if (coTreePort == left && right) {
-                portExpr = div(neg(ss::symOf(branchThroughSymbol(*right))), k);
-                havePortExpr = true;
-            }
-        }
-        if (!havePortExpr) {
-            const QString portFlowName = branchThroughSymbol(*coTreePort);
-            const std::unordered_map<QString, ss::RCP<const SymEngine::Basic>> resolved =
-                ss::resolveReplacements(ctx.replacements);
-            const auto it = resolved.find(portFlowName);
-            portExpr = it != resolved.end() ? it->second : ss::symOf(portFlowName);
-        }
-        const ss::RCP<const SymEngine::Basic> junctionExpr = sub(neg(portExpr), parallelSum);
-        if (!eq(*junctionExpr, *ss::symOf(storageFlowName))) {
-            ctx.recordReplacement(storageFlowName, junctionExpr, ctx.result.continuityEquations);
-        }
-    }
+    ss::ssLog(QStringLiteral("elemental_text"),
+              ctx.result.elementalEquations.join(QStringLiteral("; ")));
+    ss::ssLog(QStringLiteral("continuity"), ctx.result.continuityEquations.join(QStringLiteral("; ")));
+    ss::ssLog(QStringLiteral("compatibility_eqs"),
+              ctx.result.compatibilityEquations.join(QStringLiteral("; ")));
     return true;
 }
 

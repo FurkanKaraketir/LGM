@@ -137,29 +137,24 @@ For Motor, no equal-weight swap produces another valid tree. Enumeration typical
 
 ### Step 5 — Scoring and validation
 
-Each candidate is ranked (fewer same-span conflicts first, then more A-type and D-type in tree, fewer T-type in tree). Validation checks:
+Each candidate is ranked by `TreeScore::betterThan` (lower conflict count first, then more A-type and D-type in tree, fewer T-type in tree). Equal scores fall back to the twigs' serial ids, so the first tree never depends on memory layout. `validateManualNormalTree` checks:
 
-- All active A-type sources in tree (no cycle)
-- Transformer: exactly one port in tree
+- All active A-type sources in tree (no cycle); no active T-type source in tree
+- Transformer: exactly one port in tree; gyrator: zero or both
 - Zero **same-span conflicts** for **transformers** (transformer port branch + parallel user branch both in tree on the same span); gyrators are not scored by this rule
 - Connected spanning tree of correct size
+- **Normal:** for the tree's own two-port assignment, as many passive A-type and as few passive T-type twigs as the greedy (Kruskal) tree. The greedy tree is optimal for both counts at once, so a manual selection that misses either is rejected.
 
 **Find Normal Tree** returns the best tree from enumeration.
 
 ### Step 6 — State variable extraction
 
-MIT rules:
+`extractStateVariables` applies the MIT rule and nothing else:
 
-**Across states (tree twigs):**
+- Passive branch **in tree**, type **A** → its across variable (`OmegaJ` from `T_J` via node v₂)
+- Passive branch **in co-tree**, type **T** → its through variable (`i_L`)
 
-- Passive branch in tree, effective type **A** → across symbol (`OmegaJ` from `T_J` via node v₂)
-- Port-span storage (`T_J` parallel to transformer port `T2`) → across symbol
-
-**Through states (co-tree links):**
-
-- Passive branch not in tree, effective type **T** → through symbol (`i_L`)
-
-**Rotational inertia cleanup** (no mass `M` in tree): drop stray `v1`; keep the tree inertia across (`OmegaJ`); drop other `Omega*` symbols.
+Sources and two-port port branches never carry a state. Dependent storage — A-type links and T-type twigs, such as an inertia rigidly coupled to another one through a transformer — is already excluded by the tree, so no state is dropped afterwards and the result does not depend on how nodes are named. Each state records its storage branch for Part 2.
 
 ### Normal tree result (Motor)
 
@@ -188,50 +183,49 @@ Two-port transformers add across and through constraints (modulus `TF` in Motor.
 
 ---
 
-## Part 2 — State-space derivation (phases A–J)
+## Part 2 — State-space derivation (phases A–H)
 
-After a normal tree is committed, the app derives the state-space model.
+After a normal tree is committed, `computeStateSpaceImpl` derives the state-space model. Entry: `GraphScene::computeStateSpaceRep` → `lg::computeStateSpace`.
 
 ```mermaid
 flowchart TD
-    normalTree[NormalTreeResult] --> mapStates[Map state symbols to branches]
-    mapStates --> elementals[Build elemental equations]
+    normalTree[NormalTreeResult] --> mapStates[Map states to their storage branches]
+    mapStates --> elementals[Elemental and two-port equations]
     elementals --> inputs[Identify inputs]
-    inputs --> cuts[Tree twig cut-sets]
-    cuts --> compat[Compatibility active-A only]
-    compat --> portCont[Port-span parallel junctions]
-    portCont --> twoPortAcross[Two-port across bindings]
-    twoPortAcross --> portSpan[Port-span inertia junctions]
-    portSpan --> massSpring[Mass-spring reflect optional]
-    massSpring --> replacements[Resolved replacements]
-    replacements --> stateDots[Solve state_dot from elementals]
-    stateDots --> eliminate[Eliminate branch and node symbols]
-    eliminate --> coupling[Resolve coupling and refine]
-    coupling --> stateMatrix[Build state matrix A B E]
-    stateMatrix --> outputMatrix[Build output matrix C D F if selected]
+    inputs --> display[Cut-set and compatibility equations for display]
+    display --> assemble[Assemble the linear graph equations and their time derivatives]
+    assemble --> solve[Gaussian elimination for state derivatives and outputs]
+    solve --> stateMatrix[Extract A B E and LaTeX]
+    stateMatrix --> outputMatrix[Extract C D F if outputs selected]
 ```
 
-**Important:** across bindings never overwrite continuity or compatibility. Two-port **flow** laws (`i1 = −T2/TF`) are **not** copied into the replacement map — that would overwrite cuts like `i1 = i_L`.
+Each phase below lists **what**, **where in code**, and **Motor.lgm** log output. Logs are emitted by `ss::ssLog` to Qt debug output (`[state_space] …`) and mirrored to **stderr** when the app is run from a terminal (`app_log.cpp`).
 
 ### Phase A — Validate and map states
 
-Map each normal-tree state symbol to its storage branch.
+**Where:** `StateSpaceContext::initStates`. Each normal-tree state already carries its storage branch.
 
-**Motor:** `OmegaJ ↔ T_J`, `i_L ↔ i_L`.
+**Motor.lgm:** `OmegaJ ↔ T_J`, `i_L ↔ i_L`.
+
+```
+[state_space] begin - states=[OmegaJ, i_L] tree_branches=4
+```
 
 ---
 
 ### Phase B — Elemental equations
 
-Constitutive laws in node-across form (not synthetic `*_a` symbols). Tree twigs on a port span: external non-storage branches are skipped unless they are **D-type** — dissipators in the tree on a port span still contribute elementals.
+**What:** Constitutive laws using `branchNodeAcrossExpr` — node-across differences from `branchAcrossVariableText` — for every passive branch, plus the two-port laws.
 
-**Motor** — constitutive summary:
+**Where:** passive branch loop (`build_elementals`), then two-port elementals (`two_port_elementals`) in `state_space_constraints.cpp`.
+
+**Motor.lgm** — human-readable (`elemental_text`):
 
 ```
 T_J = J*OmegaJ_dot; T_B = B*OmegaJ; V2 - V3 = L*i_L_dot; i_R = (V1 - V2)/R; V3 = TF*OmegaJ; i1 = -T2/TF
 ```
 
-Symbolic form before substitution:
+Symbolic form (`0 = …`):
 
 ```
 0 = T_J - J*OmegaJ_dot
@@ -246,118 +240,80 @@ Symbolic form before substitution:
 
 ### Phase C — Inputs
 
-A-type active branch **in tree** → effort input. T-type active **in co-tree** → flow input.
+**Where:** loop over active branches after elementals; logs `inputs`.
 
-**Motor:** `Vs1`.
+A-type active branch **in tree** → effort input. T-type active branch **in co-tree** → flow input.
 
----
-
-### Phase D — Continuity
-
-**Tree twig cut-sets** (active A source twigs now also get a cut for their own through-flow; port-span twigs get a junction instead):
-
-For each remaining twig: cut the graph, sum signed through-flows, solve for the twig flow.
-
-**Port-span parallel junction** (co-tree port with parallel user branches):
-
-```
-port_flow = −(sum of parallel branch flows)
-```
-
-**Cascaded transformers (shared ref):** when co-tree port bonds share only a **reference node** but sit on **different spans**, continuity applies **KCL at the shared ground** — flows incident on that ref are summed, not treated as same-span parallels.
-
-**D-type co-tree twig on port span:** before recording the port flow replacement, any **D-type tree twig** on the same span that was skipped for cut-set continuity may be solved from the junction equation and recorded first.
-
-**Motor:**
-
-```
-i_Vs1 = -i_L
-i1 = i_L
-i_R = i_L
-T2 = -(T_B + T_J)
-```
-
-The source flow `i_Vs1` is unused downstream here, but recording it lets floating-source and multi-input graphs solve.
+**Motor.lgm:** `Vs1`.
 
 ---
 
-### Phase E — Compatibility
+### Phase D — Continuity and compatibility (display)
 
-One equation per active A-type source in the tree. Source to ground → driven node across = input symbol. **Floating source** between two non-ground nodes → `v_from = u + v_to` (the input equals the across difference `u = v_from − v_to`). No KVL on co-tree links.
+**Continuity:** for each twig, its fundamental cut-set equation solved for the twig flow. Every branch crossing the cut counts, port bonds included.
 
-**Motor** (`Vs1` grounded): `V1 = Vs1`.
+**Compatibility:** one equation per active A-type source in the tree, with the convention every branch uses, `u = v_from − v_to`:
 
----
+- source node → ground: `v_from = u`
+- ground → source node: `v_to = −u`
+- floating source: `v_from = u + v_to`
 
-### Phase F — Two-port across and port-span inertia
+These lists are shown in the UI (`continuity`, `compatibility_eqs` logs). The derivation in Phase E works on the full graph equations directly, so nothing here filters or orders it.
 
-| Rule | Effect |
-|------|--------|
-| Transformer **across** | `V3 = TF*OmegaJ` |
-| Port-span A storage (`T_J`) | `T_J = -T_B + TF*i_L` (uses reflected port current) |
-| Existing replacements | Never overwritten by two-port flow aliases |
-
-**Motor — resolved replacements** (`R_across`, `L_across` are branch-across synthetic symbols; `i_Vs1` is the source flow):
+**Motor.lgm:**
 
 ```
-R_across = -V2 + Vs1
-L_across = V2 - TF*OmegaJ
-T_J = -T_B + TF*i_L
-V3 = TF*OmegaJ
-T2 = -TF*i_L
-V1 = Vs1
-i1 = i_L
-i_R = i_L
-i_Vs1 = -i_L
+continuity        i_Vs1 = -i_L; i1 = i_L; T_J = -(T2 + T_B); i_R = i_L
+compatibility     V1 = Vs1
 ```
 
 ---
 
-### Phase G — Derive `state_dot`
+### Phase E — Assemble the linear system
 
-Substitute replacements into elementals; solve each storage elemental for its `state_dot`.
+**Where:** `ssDeriveStateDots`.
 
-**Motor:**
+**Unknowns:** every node across variable, every branch through variable, and the time derivative of each. **Knowns:** the states `x`, the inputs `u` and their derivatives `u̇`. Element constants and moduli are parameters.
 
-| Stage | `OmegaJ_dot` | `i_L_dot` |
-|-------|--------------|-----------|
-| After T_J row reduction | `0 = -T_B - J·OmegaJ_dot + TF·i_L` | — |
-| Initial solve | `(−T_B + TF·i_L) / J` | `V2/L − TF·OmegaJ/L` |
-| After elimination | `−B·OmegaJ/J + TF·i_L/J` | `Vs1/L − R·i_L/L − TF·OmegaJ/L` |
+**Equations:**
+
+1. KCL at every node, reference nodes included. Port branches are ordinary branches, so cascaded and stacked two-ports need no special case.
+2. Each active A-type source: `v_from − v_to = u`.
+3. D-type elementals and two-port laws (Phase B).
+4. State definitions: `x = v_from − v_to` of its A-type twig, or `x = f` of its T-type link.
+5. The time derivative of every equation in 1–4 — they hold at every instant.
+6. A-type and T-type elementals (`f = C·v̇`, `ḟ = v/L`, …).
+
+Level 5 is what couples **dependent storage**. An A-type link's flow is its constant times the derivative of an across difference that states and inputs already fix (`C4` in Electrical, `M_1` and `I_1` in TransformerCascade). A T-type twig's across is its constant times the derivative of a flow that states and inputs already fix (`L7` in Electrical). This is also where input derivatives, and so the **E** matrix, come from.
 
 ---
 
-### Phase H — Elimination and coupling
+### Phase F — Solve for state derivatives and outputs
 
-Eliminate branch flows and node across symbols. Resolve any coupled `state_dot` terms; refine until only states and inputs remain.
+**Where:** `solveLinearTargets` — Gaussian elimination with back substitution (Geddes, Czapor & Labahn, 1992, *Algorithms for Computer Algebra*, Ch. 9 §9.2).
 
-**Theory reference:** Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 *Linear Equations and Gaussian Elimination* — iterative solve-and-substitute for single unknowns; Gaussian elimination with back substitution on coupled algebraic blocks. See **Help → About**.
+1. Pivot on non-target unknowns first, preferring numeric pivots in short equations; then on the targets (`x_dot` for every state, and every selected output).
+2. Coefficients are tested as rational functions (`isIdenticallyZero`), so `a/(a+b) + b/(a+b) − 1` counts as zero.
+3. A leftover equation with no unknowns that is not identically zero means the sources or the chosen states are not independent → error. A target that still depends on a free unknown is *not determined* → error naming it.
+4. Each result is collected as `Σ coefficient · (x, u, u̇)` with each coefficient reduced to one fraction.
 
-When leftover algebraic unknowns are **mutually coupled** (common in multi-input circuits, where a node effort and a branch current each depend on the other), they are gathered and solved together as one linear subsystem. A guard blocks eliminations that would make a state depend on its own `_dot`. A second guard rejects eliminations that introduce **other states'** `x_dot` when the target state's own elemental already defines its dot.
-
-**Motor — final** (no coupling; both decouple immediately):
+**Motor.lgm** (outputs `T_J`, `i_L`, `T_B` selected):
 
 ```
+[state_space] solve - equations=28 unknowns=20 targets=4
 OmegaJ_dot = -B*OmegaJ/J + TF*i_L/J
 i_L_dot    = Vs1/L - R*i_L/L - TF*OmegaJ/L
 ```
 
 ---
 
-### Phase I — State matrix form
+### Phase G — State matrix form
 
-Build scalar state equations and LaTeX `ẋ = A x + B u [+ E u̇]` in the **State Space** dock.
+**Where:** `ssAssembleMatrix` — `state_equation`, `matrix_form`.
 
-**Motor** — state order 2, status OK.
+Builds `stateEquations` and LaTeX `ẋ = A x + B u [+ E u̇]`.
 
-State vector **x** = `[OmegaJ; i_L]`, input **u** = `Vs1`:
-
-```
-OmegaJ_dot = -B/J * OmegaJ + TF/J * i_L
-i_L_dot    = -TF/L * OmegaJ - R/L * i_L + 1/L * Vs1
-```
-
-Matrix form:
+**Motor.lgm** — state order 2, `status: Ok`. State vector **x** = `[OmegaJ; i_L]`, input **u** = `Vs1`:
 
 ```
 A = [ -B/J    TF/J  ]
@@ -369,54 +325,25 @@ B = [ 0   ]
 E = 0   (no input-derivative feedthrough)
 ```
 
+(Textbook eq. (69) in `TwoPortsBasics.txt`, with `Ka` → `TF`.)
+
 ---
 
-### Phase J — Output equations (C and D matrices)
+### Phase H — Output equations (C, D and F matrices)
 
-Optional. In **Analyze**, check **`T_J through`**, **`i_L through`**, **`T_B through`** before **Compute State Space** (textbook motor outputs: electromagnetic torque, armature current, viscous bearing torque).
+**Where:** `ssAssembleOutputs` — runs when the user selects **output variables** in the **Analyze** dock.
 
-For each selected observable the app:
+Selected outputs are extra targets of the Phase F solve, so **C**, **D** and **F** are consistent with **A**, **B** and **E** by construction. Any node across, branch through or branch across symbol can be selected; a selected state or input passes straight through.
 
-1. Seeds an expression — **primary state** symbols seed directly; otherwise from graph relations and the resolved replacement map.
-2. Eliminates non-state symbols.
-3. Checks linearity in `{x, u, u̇}`.
-4. Adds scalar output equations and LaTeX `y = C x + D u [+ F u̇]`.
+For this walkthrough, select the textbook motor outputs **`T_J`**, **`i_L`**, **`T_B`** (`TwoPortsBasics.txt` eq. (70–72)):
 
-| Output | UI label | After reduction | C row `[OmegaJ, i_L]` | D |
-|--------|----------|-----------------|------------------------|---|
+| Output | UI label | Result | C row `[OmegaJ, i_L]` | D |
+|--------|----------|--------|------------------------|---|
 | `T_J` | T_J through | `-B·OmegaJ + TF·i_L` | `[-B, TF]` | `0` |
 | `i_L` | i_L through | `i_L` | `[0, 1]` | `0` |
 | `T_B` | T_B through | `B·OmegaJ` | `[B, 0]` | `0` |
 
-Scalar output equations:
-
-```
-T_J = -B*OmegaJ + TF*i_L
-i_L = i_L
-T_B = B*OmegaJ
-```
-
-Output matrix form:
-
-```
-y = C x + D u
-
-C = [ -B      TF ]
-    [  0       1 ]
-    [  B       0 ]
-
-D = [ 0 ]
-    [ 0 ]
-    [ 0 ]
-
-F = 0   (omitted from LaTeX when zero)
-```
-
-with **y** = `[T_J; i_L; T_B]`.
-
-**Note:** selecting **state** outputs (`OmegaJ`, `i_L`) instead gives **C = I₂** and **D = 0**. The textbook **`T_J`, `i_L`, `T_B`** set is the nontrivial **C** case.
-
-Skip this phase by leaving all output checkboxes cleared — only the state matrix appears.
+**F** (input-derivative feedthrough) is zero here and omitted from the LaTeX. If no outputs are selected, Phase H is skipped and the **State Space** dock shows only the state matrix.
 
 ---
 
@@ -429,23 +356,36 @@ Skip this phase by leaving all output checkboxes cleared — only the state matr
 | Normal tree | Twigs `{Vs1, i1, T_J, i_R}`; states `{OmegaJ, i_L}` |
 | Input | `Vs1` |
 | State equations | Standard DC-motor dynamics coupled through `TF`, `J`, `L`, `R`, `B` |
-| **A**, **B** | 2×2 **A**, 2×1 **B** as in Phase I; **E** = 0 |
-| **C**, **D** (textbook outputs) | 3×2 **C**, 3×1 **D** = 0 as in Phase J |
+| **A**, **B** | 2×2 **A**, 2×1 **B** as in Phase G; **E** = 0 |
+| **C**, **D** (textbook outputs) | 3×2 **C**, 3×1 **D** = 0 as in Phase H |
 
 ### Constraint chain (quick reference)
 
-1. **Elementals** tie branches to node efforts and two-port laws.
-2. **Continuity** sets `i_Vs1 = −i_L`, `i1 = i_L`, `i_R = i_L`, `T2 = −(T_B + T_J)`, and `T_J = −T_B + TF·i_L`.
-3. **Compatibility** sets `V1 = Vs1` (grounded source; floating source → `v_from = u + v_to`).
-4. **Two-port across** adds `V3 = TF·OmegaJ`; flows stay out of replacements.
-5. **State equations** → **A**, **B**.
-6. **Output equations** for `T_J`, `i_L`, `T_B` → **C**, **D**.
+1. **Elementals** tie branches to node efforts (`V1−V2`, `V2−V3`, `OmegaJ`, …) and two-port laws.
+2. **KCL** at every node and **source** equations (`V1 = Vs1`) close the graph.
+3. **State definitions** tie `OmegaJ` and `i_L` to their branches.
+4. All algebraic equations are also differentiated once, coupling dependent storage.
+5. One Gaussian elimination yields **A**, **B**, **E** and, for selected outputs, **C**, **D**, **F**.
 
 ---
 
-## Debug output
+## Diagnostic log map
 
-Run **Compute State Space** from a terminal to see `[state_space]` log lines (`begin`, `continuity`, `replacements_resolved`, `state_dot`, `subsystem_solve`, `matrix_form`, `output_equation`, `output_matrix_form`, …). All log lines are also mirrored to **stderr** — useful on Windows where the GUI has no built-in console.
+Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) from a terminal, or set `QT_LOGGING_RULES=*.debug=true`. Tags are printed as `[state_space] <tag> - <detail>`. On all platforms, every log line is also mirrored to **stderr** via `app_log.cpp` — useful on Windows where the GUI has no console.
+
+| Log tag | Phase | Meaning |
+|---------|-------|---------|
+| `begin` | A | States and tree size |
+| `build_elementals` / `two_port_elementals` | B | Elemental construction |
+| `inputs` | C | Input symbols |
+| `continuity_cuts` / `compatibility` | D | Display equation construction |
+| `elemental_text` / `continuity` / `compatibility_eqs` | B–D | Display equation lists |
+| `solve` | E–F | Equation, unknown and target counts |
+| `state_equation` | G | Final scalar state equations |
+| `matrix_form` | G | LaTeX state matrix `ẋ = A x + B u [+ E u̇]` |
+| `output_equation` | H | Scalar output equation per selected variable |
+| `output_matrix_form` | H | LaTeX output matrix `y = C x + D u [+ F u̇]` |
+| `error` | any | Why the derivation stopped |
 
 Normal-tree search emits **no** debug tags.
 
@@ -456,7 +396,7 @@ Normal-tree search emits **no** debug tags.
 | Field | Content |
 |-------|---------|
 | Elemental equations | Constitutive laws |
-| Continuity equations | Flow replacements |
+| Continuity equations | Fundamental cut-set equation of each twig |
 | Compatibility equations | Active A-type bindings |
 | State equations | Final `symbol_dot = …` |
 | Matrix form | LaTeX `ẋ = Ax + Bu [+ E u̇]` |

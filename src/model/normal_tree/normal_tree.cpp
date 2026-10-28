@@ -78,11 +78,23 @@ NormalTreeEnumerationResult enumerateNormalTrees(const std::vector<NodeItem*>& n
         return result;
     }
 
+    // Equal scores fall back to the twigs' serial ids so the first tree never depends on memory layout.
+    const auto serialKey = [](const std::vector<BranchItem*>& tree) {
+        std::vector<int> key;
+        for (const BranchItem* branch : tree) {
+            key.push_back(branch->serialId());
+        }
+        std::sort(key.begin(), key.end());
+        return key;
+    };
     std::sort(collected.begin(), collected.end(),
               [&](const std::vector<BranchItem*>& left, const std::vector<BranchItem*>& right) {
                   const TreeScore leftScore = scoreTree(left, branches, orderedTwoPorts);
                   const TreeScore rightScore = scoreTree(right, branches, orderedTwoPorts);
-                  return leftScore.betterThan(rightScore);
+                  if (leftScore.betterThan(rightScore) || rightScore.betterThan(leftScore)) {
+                      return leftScore.betterThan(rightScore);
+                  }
+                  return serialKey(left) < serialKey(right);
               });
 
     result.trees.reserve(collected.size());
@@ -157,6 +169,11 @@ NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
         if (branch->isActive() && branch->branchType() == BranchType::A && inTree.count(branch) == 0) {
             result.status = NormalTreeResult::Status::ForcedCycle;
             result.message = QStringLiteral("Active A-type sources must be in the normal tree.");
+            return result;
+        }
+        if (branch->isActive() && branch->branchType() == BranchType::T && inTree.count(branch) != 0) {
+            result.status = NormalTreeResult::Status::NotConnected;
+            result.message = QStringLiteral("Active T-type sources must not be in the normal tree.");
             return result;
         }
     }
@@ -256,6 +273,34 @@ NormalTreeResult validateManualNormalTree(const std::vector<NodeItem*>& nodes,
     if (uf.components() != componentCount) {
         result.status = NormalTreeResult::Status::NotConnected;
         result.message = QStringLiteral("The tree does not connect all graph components.");
+        return result;
+    }
+
+    // Normal = most A-type and fewest T-type twigs for this two-port assignment; the greedy tree
+    // is optimal for both counts at once (matroid), so compare against it.
+    PortConstraints assignment;
+    for (TwoPortItem* item : orderedTwoPorts) {
+        for (BranchItem* port : {item->leftBranch(), item->rightBranch()}) {
+            if (port) {
+                (inTree.count(port) != 0 ? assignment.forcedIn : assignment.forbidden).insert(port);
+            }
+        }
+    }
+    const auto countPassive = [](const std::vector<BranchItem*>& twigs, BranchType type) {
+        return std::count_if(twigs.begin(), twigs.end(), [&](const BranchItem* twig) {
+            return twig && !twig->isActive() && !isTwoPortInternalBranch(*twig) &&
+                   effectivePassiveBranchType(*twig) == type;
+        });
+    };
+    const std::optional<BuildAttempt> best = kruskalNormalTree(nodes, branches, assignment);
+    if (best && best->status == NormalTreeResult::Status::Ok &&
+        (countPassive(tree, BranchType::A) != countPassive(best->treeBranches, BranchType::A) ||
+         countPassive(tree, BranchType::T) != countPassive(best->treeBranches, BranchType::T))) {
+        result.status = NormalTreeResult::Status::Incomplete;
+        result.message = QStringLiteral("The selection is a spanning tree but not a normal tree: it "
+                                        "needs %1 A-type and %2 T-type passive twigs.")
+                             .arg(countPassive(best->treeBranches, BranchType::A))
+                             .arg(countPassive(best->treeBranches, BranchType::T));
         return result;
     }
 

@@ -1,6 +1,8 @@
 // Canvas regression tests: node/branch/two-port topology, merging, delete and undo/redo.
 // Build with -DLGM_BUILD_TESTS=ON and run headless: QT_QPA_PLATFORM=offscreen ctest
 #include "canvas.h"
+#include "normal_tree.h"
+#include "state_space.h"
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -568,6 +570,55 @@ void fuzz(quint32 seed, int steps) {
 
 }  // namespace
 
+BranchItem* branchNamed(const QString& name) {
+    for (BranchItem* branch : itemsOf<BranchItem>()) {
+        if (branch->name() == name) {
+            return branch;
+        }
+    }
+    return nullptr;
+}
+
+void testAnalysis() {
+    // Two inertias on a shaft spring: three states, whatever the nodes are called.
+    CHECK(g_scene->documentFromJson(
+        R"({"branches":[{"id":1,"from":1,"to":2,"name":"Ts1","type":"T","active":true,"sourceInputId":1},)"
+        R"({"id":2,"from":2,"to":1,"name":"T_J1","type":"A","constant":"J1"},{"id":3,"from":2,"to":1,"name":"T_B1","type":"D","constant":"B1"},)"
+        R"({"id":4,"from":2,"to":3,"name":"T_K","type":"T","constant":"K"},{"id":5,"from":3,"to":1,"name":"T_J2","type":"A","constant":"J2"},)"
+        R"({"id":6,"from":3,"to":1,"name":"T_B2","type":"D","constant":"B2"}],"format":"LGM","nodes":[)"
+        R"({"id":1,"name":"n1","pos":{"x":0,"y":40},"systemType":"rotational","ground":true},)"
+        R"({"id":2,"name":"n2","pos":{"x":40,"y":40},"systemType":"rotational","across":"Omega1"},)"
+        R"({"id":3,"name":"n3","pos":{"x":80,"y":40},"systemType":"rotational","across":"Omega2"}],"normalTrees":[],)"
+        R"("settings":{"defaultSystemType":"rotational","gridSpacing":20,"nextBranchId":50,"nextNodeId":50,)"
+        R"("nextSourceInputId":5,"nextTwoPortId":5,"showGrid":true,"snapToGrid":true},"twoPorts":[],"version":4})"));
+    CHECK(g_scene->findNormalTree().stateVariables.size() == 3);
+    CHECK(g_scene->computeStateSpaceRep().status == lg::StateSpaceResult::Status::Ok);
+
+    // Inertias rigidly tied through transformers are dependent storage but still load the dynamics.
+    QFile cascade(QStringLiteral(EXAMPLES_SOURCE_DIR "/TransformerCascade.lgm"));
+    CHECK(cascade.open(QIODevice::ReadOnly) && g_scene->documentFromJson(cascade.readAll()));
+    g_scene->findNormalTree();
+    const lg::StateSpaceResult cascadeResult = g_scene->computeStateSpaceRep();
+    const QString cascadeEquations = cascadeResult.stateEquations.join(QLatin1Char(';'));
+    CHECK(cascadeResult.status == lg::StateSpaceResult::Status::Ok);
+    CHECK(cascadeEquations.contains(QStringLiteral("M_1")) && cascadeEquations.contains(QStringLiteral("Fs1")));
+
+    // Manual trees: a normal tree passes; a T-heavy tree and a tree holding a flow source do not.
+    QFile electrical(QStringLiteral(EXAMPLES_SOURCE_DIR "/Electrical.lgm"));
+    CHECK(electrical.open(QIODevice::ReadOnly) && g_scene->documentFromJson(electrical.readAll()));
+    const auto validate = [](const QStringList& names) {
+        std::vector<BranchItem*> tree;
+        for (const QString& name : names) {
+            tree.push_back(branchNamed(name));
+        }
+        return lg::validateManualNormalTree(itemsOf<NodeItem>(), itemsOf<BranchItem>(), {}, tree).status;
+    };
+    using Status = lg::NormalTreeResult::Status;
+    CHECK(validate({"Vs1", "i_C5", "i_R2", "i_L7"}) == Status::Ok);
+    CHECK(validate({"Vs1", "i_C5", "i_L7", "i_L3"}) != Status::Ok);
+    CHECK(validate({"Vs1", "i_C5", "i_R2", "Is2"}) != Status::Ok);
+}
+
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     GraphScene scene;
@@ -598,6 +649,7 @@ int main(int argc, char** argv) {
         {"ground domain persists", testGroundDomainPersists},
         {"document format", testDocumentFormat},
         {"examples round trip", testExamplesRoundTrip},
+        {"analysis", testAnalysis},
     };
     for (const auto& [name, test] : tests) {
         const int before = g_failures;

@@ -15,15 +15,6 @@
 
 namespace lg::nt {
 
-bool isInertiaConstant(const BranchItem& branch) {
-    const QString constant = branch.elementConstant().trimmed();
-    if (constant.isEmpty()) {
-        return false;
-    }
-    const QChar c = constant.at(0).toUpper();
-    return c == QLatin1Char('I') || c == QLatin1Char('J');
-}
-
 bool TreeScore::betterThan(const TreeScore& other) const {
     if (sameSpanTreeConflicts != other.sameSpanTreeConflicts) {
         return sameSpanTreeConflicts < other.sameSpanTreeConflicts;
@@ -463,7 +454,7 @@ std::optional<BuildAttempt> kruskalNormalTree(const std::vector<NodeItem*>& node
                   if (wa != wb) {
                       return wa < wb;
                   }
-                  return a.branch < b.branch;
+                  return a.branch->serialId() < b.branch->serialId();
               });
 
     UnionFind uf(n);
