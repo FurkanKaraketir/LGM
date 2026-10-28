@@ -1,12 +1,19 @@
-name: Release
+name: Build
 
+# Every push and PR builds, tests and packages all platforms; a v* tag also publishes the release.
 on:
   push:
+    branches: [master]
     tags:
       - "v*"
+  pull_request:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -16,6 +23,7 @@ jobs:
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-cache,readwrite
       QT_ROOT: ${{ github.workspace }}/Qt
       QT_VERSION: "6.11.0"
+      PACKAGE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-ci' }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +49,7 @@ jobs:
             qt_tools: ""
             qt_prefix: gcc_64
             preset: ci-linux
+            extra_cmake: -DLGM_BUILD_TESTS=ON
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +103,7 @@ jobs:
           vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
           runVcpkgInstall: false
 
-      # ponytail: tag runs only restore caches saved on master, so keys match the CI workflow
+      # ponytail: tag runs can only restore caches saved on master; branch pushes keep them warm
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
@@ -137,24 +146,25 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Test
+        if: matrix.name == 'linux'
+        run: ctest --test-dir build --output-on-failure
+
       - name: Package
         shell: pwsh
         if: matrix.name == 'windows'
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          ./scripts/package-windows.ps1 -Version $version -BuildDir build
+          ./scripts/package-windows.ps1 -Version $env:PACKAGE_VERSION.TrimStart('v') -BuildDir build
 
       - name: Package
         if: matrix.name == 'macos'
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          bash ./scripts/package-macos.sh "$VERSION" build
+          bash ./scripts/package-macos.sh "${PACKAGE_VERSION#v}" build
 
       - name: Package
         if: matrix.name == 'linux'
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          bash ./scripts/package-linux.sh "$VERSION" build
+          bash ./scripts/package-linux.sh "${PACKAGE_VERSION#v}" build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -183,7 +193,10 @@ jobs:
 
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
