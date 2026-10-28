@@ -152,6 +152,8 @@ private:
 
     void updateBranchPen();
 
+    qreal labelClearance() const;
+
 };
 
 
@@ -178,9 +180,20 @@ public:
 
     QRectF boundingRect() const override;
 
-    TwoPortItem* twoPort() const { return m_twoPort; }
+    // Primary owner; a cascaded junction can belong to several two-ports (see twoPorts()).
+    TwoPortItem* twoPort() const { return m_twoPorts.empty() ? nullptr : m_twoPorts.front(); }
 
-    void setTwoPort(TwoPortItem* twoPort);
+    const std::vector<TwoPortItem*>& twoPorts() const { return m_twoPorts; }
+
+    void attachTwoPort(TwoPortItem* twoPort);
+
+    void detachTwoPort(TwoPortItem* twoPort);
+
+    void refreshTwoPorts();
+
+    int serialId() const { return m_serialId; }
+
+    void setSerialId(int id) { m_serialId = id; }
 
     QString name() const { return m_name; }
 
@@ -218,7 +231,9 @@ private:
 
     bool m_ground = false;
 
-    TwoPortItem* m_twoPort = nullptr;
+    std::vector<TwoPortItem*> m_twoPorts;
+
+    int m_serialId = 0;
 
     QString m_name;
 
@@ -281,7 +296,14 @@ public:
 
     bool hasSharedReference() const { return m_g1 == m_g2; }
 
-    bool collapseSharedRef(NodeItem* gKeep, NodeItem* gRemove);
+    int serialId() const { return m_serialId; }
+
+    void setSerialId(int id) { m_serialId = id; }
+
+    // Port roles as a bitmask (1 = v1, 2 = v2, 4 = g1, 8 = g2); 0 when node is not a port of this two-port.
+    int portRoles(const NodeItem* node) const;
+
+    void replacePortNode(NodeItem* from, NodeItem* to, int roles);
 
     void setG1(NodeItem* node) { m_g1 = node; }
 
@@ -313,9 +335,14 @@ public:
 
 private:
 
-    QPointF couplerLeft() const;
+    void syncGeometry();
 
-    QPointF couplerRight() const;
+    QPointF m_couplerLeft;
+    QPointF m_couplerRight;
+    QPointF m_tangentLeft;
+    QPointF m_tangentRight;
+    QPainterPath m_shape;
+    int m_serialId = 0;
 
     QPointF m_dragScenePos;
 
@@ -431,17 +458,11 @@ public:
 
 
 
-    struct BranchKey {
-
-        QPointF from;
-
-        QPointF to;
-
-        int index;
-
-    };
-
+    // Snapshots identify items by serial id so undo/redo survives delete/re-create cycles and
+    // coincident nodes; positions are only used to place re-created items.
     struct TwoPortKey {
+
+        int id = 0;
 
         QPointF center;
 
@@ -454,6 +475,8 @@ public:
     };
 
     struct NodeSnapshot {
+
+        int id = 0;
 
         QPointF pos;
 
@@ -468,6 +491,10 @@ public:
     };
 
     struct BranchSnapshot {
+
+        int fromId = 0;
+
+        int toId = 0;
 
         QPointF from;
 
@@ -513,39 +540,42 @@ public:
 
 
 
-    void destroyBranchAt(const BranchKey& key);
+    static NodeSnapshot snapshotOf(const NodeItem* node);
+
+    static BranchSnapshot snapshotOf(const BranchItem* branch);
+
+    static TwoPortSnapshot snapshotOf(const TwoPortItem* twoPort);
+
+    NodeItem* createNodeFromSnapshot(const NodeSnapshot& snap);
+
+    BranchItem* createBranchFromSnapshot(const BranchSnapshot& snap);
+
+    TwoPortItem* restoreTwoPortSnapshot(const TwoPortSnapshot& data);
+
+    NodeItem* nodeById(int id) const;
+
+    BranchItem* branchBySerialId(int serialId) const;
+
+    TwoPortItem* twoPortById(int id) const;
 
     void pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& newPos);
 
     void pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter);
 
     struct MergeUndoData {
-        QPointF removePos;
-        QString removeName;
-        QString removeAcross;
-        bool removeGround = false;
-        TwoPortItem* twoPort = nullptr;
-        int removeRole = 0;
-        bool collapsedSharedRef = false;
-        struct Rewire {
-            BranchKey key;
-            bool removeWasFrom = false;
+        NodeSnapshot remove;
+        struct PortRoles {
+            int twoPortId = 0;
+            int roles = 0;
         };
-        struct Destroyed {
-            BranchKey key;
-            QString name;
-            bool active = false;
-            BranchType type = BranchType::A;
-            QString constant;
-            qreal bow = 0.0;
-        };
-        std::vector<Rewire> rewired;
-        std::vector<Destroyed> destroyed;
+        std::vector<PortRoles> portRoles;
+        std::vector<int> rewiredBranchIds;
+        std::vector<BranchSnapshot> destroyed;
     };
 
     void mergeNodes(NodeItem* keep, NodeItem* remove, MergeUndoData* undo = nullptr);
 
-    void unmergeNodes(NodeItem* keep, const MergeUndoData& undo);
+    NodeItem* unmergeNodes(NodeItem* keep, const MergeUndoData& undo);
 
     void pushSetNodeName(NodeItem* node, const QString& name);
 
@@ -591,8 +621,6 @@ public:
 
     TwoPortItem* twoPortAt(const QPointF& scenePos) const;
 
-    TwoPortItem* twoPortAtCenter(const QPointF& center) const;
-
     TwoPortItem* twoPortFor(const QGraphicsItem* item) const;
 
     TwoPortItem* twoPortForNode(const NodeItem* node, TwoPortItem* prefer = nullptr,
@@ -623,10 +651,6 @@ public:
     void restoreDelete(const std::vector<NodeSnapshot>& nodes, const std::vector<BranchSnapshot>& branches,
 
                        const std::vector<TwoPortSnapshot>& twoPorts);
-
-    void restoreTwoPortSnapshot(const TwoPortSnapshot& data);
-
-
 
     NodeItem* nodeAtPos(const QPointF& pos) const;
 
@@ -812,8 +836,6 @@ private:
     std::vector<SavedNormalTree> m_savedNormalTrees;
 
     int m_activeSavedNormalTreeIndex = -1;
-
-    BranchItem* branchBySerialId(int serialId) const;
 
     std::vector<int> canvasTreeBranchSerialIds() const;
 

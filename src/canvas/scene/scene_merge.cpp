@@ -1,139 +1,83 @@
 #include "canvas.h"
 #include "scene_detail.h"
 
+#include <algorithm>
+
 namespace {
 
-int twoPortRole(const TwoPortItem* tp, const NodeItem* node) {
-    if (!tp || !node) {
-        return 0;
-    }
-    if (node == tp->v1()) {
-        return 1;
-    }
-    if (node == tp->v2()) {
-        return 2;
-    }
-    if (node == tp->g1()) {
-        return 3;
-    }
-    if (node == tp->g2()) {
-        return 4;
-    }
-    return 0;
-}
+enum class PortClass { None, Across, Reference };
 
-NodeItem* chooseMergeKeep(NodeItem* a, NodeItem* b) {
-    TwoPortItem* tpA = a->twoPort();
-    TwoPortItem* tpB = b->twoPort();
-    if (tpA && tpA == tpB) {
-        if (a == tpA->g1() || b == tpA->g2()) {
-            return tpA->g1();
+// Merges only ever join like with like, so a junction shared by cascaded two-ports has one class.
+PortClass portClass(const NodeItem* node) {
+    for (const TwoPortItem* twoPort : node->twoPorts()) {
+        const int roles = twoPort->portRoles(node);
+        if (roles & 3) {
+            return PortClass::Across;
         }
-        if (b == tpA->g1() || a == tpA->g2()) {
-            return tpA->g1();
+        if (roles & 12) {
+            return PortClass::Reference;
         }
     }
-    if (tpA && !tpB) {
-        return a;
-    }
-    if (tpB && !tpA) {
-        return b;
-    }
-    return a;
+    return PortClass::None;
 }
 
-GraphScene::BranchKey branchKeyOf(const BranchItem* branch) {
-    return {branch->from()->scenePos(), branch->to()->scenePos(), branch->index()};
-}
-
-void reassignTwoPortEndpoint(TwoPortItem* tp, NodeItem* from, NodeItem* to) {
-    if (!tp || !from || !to || from == to) {
-        return;
-    }
-    if (tp->v1() == from) {
-        tp->setV1(to);
-    } else if (tp->v2() == from) {
-        tp->setV2(to);
-    } else if (tp->g1() == from) {
-        tp->setG1(to);
-    } else if (tp->g2() == from) {
-        tp->setG2(to);
-    }
-    tp->refresh();
+bool isReferenceOf(const TwoPortItem* twoPort, const NodeItem* node) {
+    return node == twoPort->g1() || node == twoPort->g2();
 }
 
 }  // namespace
 
 bool GraphScene::canMergeNodes(const NodeItem* a, const NodeItem* b, QString* reason) const {
-    if (!a || !b || a == b) {
+    const auto fail = [&](const QString& text) {
         if (reason) {
-            *reason = tr("Select two distinct nodes.");
+            *reason = text;
         }
         return false;
+    };
+    if (!a || !b || a == b) {
+        return fail(tr("Select two distinct nodes."));
     }
-    const TwoPortItem* tpA = a->twoPort();
-    const TwoPortItem* tpB = b->twoPort();
-    if (tpA && tpB) {
-        if (tpA != tpB) {
-            const int roleA = twoPortRole(tpA, a);
-            const int roleB = twoPortRole(tpB, b);
-            const bool acrossA = roleA >= 1 && roleA <= 2;
-            const bool acrossB = roleB >= 1 && roleB <= 2;
-            const bool refA = roleA >= 3 && roleA <= 4;
-            const bool refB = roleB >= 3 && roleB <= 4;
-            if ((acrossA && acrossB) || (refA && refB)) {
-                return true;
-            }
-            if (reason) {
-                *reason = tr("Cascade merge: combine across with across, or reference with reference.");
-            }
-            return false;
+    for (BranchItem* branch :
+         branchesBetween(const_cast<NodeItem*>(a), const_cast<NodeItem*>(b))) {
+        if (branch->isTwoPortPort()) {
+            return fail(tr("These nodes are joined by a two-port port branch and cannot be combined."));
         }
-        if (twoPortRole(tpA, a) < 3 || twoPortRole(tpA, b) < 3) {
-            if (reason) {
-                *reason = tr("Within one two-port, only the two reference nodes may be combined.");
+    }
+
+    const std::vector<TwoPortItem*>& tpsA = a->twoPorts();
+    const std::vector<TwoPortItem*>& tpsB = b->twoPorts();
+    if (!tpsA.empty() && !tpsB.empty()) {
+        for (const TwoPortItem* twoPort : tpsA) {
+            if (std::find(tpsB.begin(), tpsB.end(), twoPort) == tpsB.end()) {
+                continue;
             }
-            return false;
+            if (!isReferenceOf(twoPort, a) || !isReferenceOf(twoPort, b)) {
+                return fail(tr("Within one two-port, only the two reference nodes may be combined."));
+            }
         }
-        if (tpA->hasSharedReference()) {
-            if (reason) {
-                *reason = tr("This two-port already uses a shared reference node.");
-            }
-            return false;
+        const PortClass classA = portClass(a);
+        if (classA != portClass(b)) {
+            return fail(tr("Cascade merge: combine across with across, or reference with reference."));
+        }
+        if (classA == PortClass::Across && !a->isGround() && !b->isGround() &&
+            a->systemType() != b->systemType()) {
+            return fail(tr("Cascaded across nodes must be in the same energy domain to combine."));
         }
         return true;
     }
-    if (tpA && twoPortRole(tpA, a) <= 2 && !tpB) {
-        return true;
-    }
-    if (tpB && twoPortRole(tpB, b) <= 2 && !tpA) {
-        return true;
-    }
-    if ((tpA && !tpB && twoPortRole(tpA, a) >= 3) || (tpB && !tpA && twoPortRole(tpB, b) >= 3)) {
-        const TwoPortItem* tp = tpA ? tpA : tpB;
-        const NodeItem* refNode = tpA ? a : b;
-        const NodeItem* standalone = tpA ? b : a;
-        if (!standalone->twoPort()) {
-            if (!refNode->isGround() || !standalone->isGround()) {
-                if (reason) {
-                    *reason = tr("Only reference (ground) nodes may be combined with a two-port reference.");
-                }
-                return false;
-            }
-            if (refNode->systemType() != standalone->systemType()) {
-                if (reason) {
-                    *reason = tr("Reference nodes must be in the same energy domain to combine.");
-                }
-                return false;
-            }
+
+    if (!tpsA.empty() || !tpsB.empty()) {
+        const NodeItem* portNode = tpsA.empty() ? b : a;
+        const NodeItem* standalone = tpsA.empty() ? a : b;
+        if (portClass(portNode) != PortClass::Reference) {
             return true;
         }
-    }
-    if (tpA || tpB) {
-        if (reason) {
-            *reason = tr("This two-port node cannot be removed by combining.");
+        if (!portNode->isGround() || !standalone->isGround()) {
+            return fail(tr("Only reference (ground) nodes may be combined with a two-port reference."));
         }
-        return false;
+        if (portNode->systemType() != standalone->systemType()) {
+            return fail(tr("Reference nodes must be in the same energy domain to combine."));
+        }
     }
     return true;
 }
@@ -143,169 +87,96 @@ void GraphScene::mergeNodes(NodeItem* keep, NodeItem* remove, MergeUndoData* und
         return;
     }
 
-    TwoPortItem* tpKeep = keep->twoPort();
-    TwoPortItem* tpRemove = remove->twoPort();
-    const bool sharedRef = tpKeep && tpKeep == tpRemove && twoPortRole(tpKeep, keep) >= 3 &&
-                           twoPortRole(tpKeep, remove) >= 3;
-
+    const std::vector<TwoPortItem*> owners = remove->twoPorts();
     if (undo) {
-        undo->removePos = remove->scenePos();
-        undo->removeName = remove->name();
-        undo->removeAcross = remove->isGround() ? QStringLiteral("0") : remove->acrossVariable();
-        undo->removeGround = remove->isGround();
-        undo->twoPort = tpRemove;
-        undo->removeRole = twoPortRole(tpRemove, remove);
-        undo->collapsedSharedRef = sharedRef;
-        undo->rewired.clear();
+        undo->remove = snapshotOf(remove);
+        undo->portRoles.clear();
+        undo->rewiredBranchIds.clear();
         undo->destroyed.clear();
-    }
-    const auto snapshotDestroyed = [&](BranchItem* branch) {
-        if (!undo || !branch || !branch->from() || !branch->to()) {
-            return;
+        for (TwoPortItem* twoPort : owners) {
+            undo->portRoles.push_back({twoPort->serialId(), twoPort->portRoles(remove)});
         }
-        MergeUndoData::Destroyed snap;
-        snap.key = branchKeyOf(branch);
-        snap.name = branch->name();
-        snap.active = branch->isActive();
-        snap.type = branch->branchType();
-        snap.constant = branch->elementConstant();
-        snap.bow = branch->bow();
-        undo->destroyed.push_back(snap);
-    };
+    }
 
+    const bool suppressed = m_suppressGraphChange;
+    m_suppressGraphChange = true;
+
+    // Branches between the two nodes would become self-loops; everything else moves to `keep`.
     const std::vector<BranchItem*> branches = remove->branches();
     for (BranchItem* branch : branches) {
-        if (tpKeep && tpKeep == tpRemove && isInternalTwoPortBranch(tpKeep, branch) && sharedRef) {
-            continue;
-        }
         NodeItem* other = branch->from() == remove ? branch->to() : branch->from();
         if (other == keep) {
-            snapshotDestroyed(branch);
+            if (undo) {
+                undo->destroyed.push_back(snapshotOf(branch));
+            }
             destroyBranch(branch);
             continue;
         }
         if (undo) {
-            MergeUndoData::Rewire snap;
-            snap.removeWasFrom = branch->from() == remove;
-            undo->rewired.push_back(snap);
+            undo->rewiredBranchIds.push_back(branch->serialId());
         }
         branch->replaceEndpoint(remove, keep);
-        if (undo && !undo->rewired.empty()) {
-            undo->rewired.back().key = branchKeyOf(branch);
-        }
     }
 
-    if (sharedRef) {
-        tpKeep->collapseSharedRef(keep, remove);
-    } else if (tpRemove) {
-        reassignTwoPortEndpoint(tpRemove, remove, keep);
+    // Re-point every two-port using `remove` (cascade siblings included; both refs collapse for a
+    // 3-terminal element), so no two-port is left holding the deleted node.
+    for (TwoPortItem* twoPort : owners) {
+        twoPort->replacePortNode(remove, keep, twoPort->portRoles(remove));
+        remove->detachTwoPort(twoPort);
+        keep->attachTwoPort(twoPort);
     }
 
-    remove->setTwoPort(nullptr);
     removeFromScene(this, remove);
     delete remove;
 
-    QSet<NodeItem*> touched;
     for (BranchItem* branch : keep->branches()) {
-        if (branch->from()) {
-            touched.insert(branch->from());
-        }
-        if (branch->to()) {
-            touched.insert(branch->to());
-        }
+        reindexBranches(branch->from(), branch->to());
     }
-    for (NodeItem* node : touched) {
-        for (BranchItem* branch : node->branches()) {
-            if (branch->from() && branch->to()) {
-                reindexBranches(branch->from(), branch->to());
-            }
-        }
-    }
-    if (keep->twoPort()) {
-        refreshTwoPortEgressAt(keep);
-    }
+    refreshTwoPortEgressAt(keep);
+    m_suppressGraphChange = suppressed;
     notifyGraphChanged();
 }
 
-void GraphScene::unmergeNodes(NodeItem* keep, const MergeUndoData& undo) {
+NodeItem* GraphScene::unmergeNodes(NodeItem* keep, const MergeUndoData& undo) {
     if (!keep) {
-        return;
+        return nullptr;
     }
 
+    const bool suppressed = m_suppressGraphChange;
     m_suppressGraphChange = true;
-    auto* remove = createNode(undo.removePos);
-    remove->setName(undo.removeName);
-    if (undo.removeGround) {
-        remove->setGround(true);
-    } else {
-        remove->setAcrossVariable(undo.removeAcross);
-    }
+    NodeItem* remove = createNodeFromSnapshot(undo.remove);
 
-    if (undo.twoPort && undo.removeRole > 0) {
-        remove->setTwoPort(undo.twoPort);
-        switch (undo.removeRole) {
-        case 1:
-            undo.twoPort->setV1(remove);
-            break;
-        case 2:
-            undo.twoPort->setV2(remove);
-            break;
-        case 3:
-            undo.twoPort->setG1(remove);
-            break;
-        case 4:
-            undo.twoPort->setG2(remove);
-            break;
-        default:
-            break;
-        }
-        if (undo.collapsedSharedRef) {
-            if (undo.removeRole == 4) {
-                undo.twoPort->rightBranch()->replaceEndpoint(keep, remove);
-            } else if (undo.removeRole == 3) {
-                undo.twoPort->leftBranch()->replaceEndpoint(keep, remove);
-            }
-        }
-        undo.twoPort->refresh();
-    }
-
-    for (const MergeUndoData::Rewire& snap : undo.rewired) {
-        NodeItem* a = nodeAtPos(snap.key.from);
-        NodeItem* b = nodeAtPos(snap.key.to);
-        if (!a || !b) {
+    for (const MergeUndoData::PortRoles& entry : undo.portRoles) {
+        TwoPortItem* twoPort = twoPortById(entry.twoPortId);
+        if (!twoPort) {
             continue;
         }
-        for (BranchItem* branch : branchesBetween(a, b)) {
-            if (branch->index() != snap.key.index) {
-                continue;
-            }
-            if (snap.removeWasFrom) {
-                if (branch->from() == keep) {
-                    branch->replaceEndpoint(keep, remove);
-                }
-            } else if (branch->to() == keep) {
-                branch->replaceEndpoint(keep, remove);
-            }
-            break;
+        twoPort->replacePortNode(keep, remove, entry.roles);
+        remove->attachTwoPort(twoPort);
+        if (twoPort->portRoles(keep) == 0) {
+            keep->detachTwoPort(twoPort);
         }
     }
 
-    for (const MergeUndoData::Destroyed& snap : undo.destroyed) {
-        NodeItem* a = nodeAtPos(snap.key.from);
-        NodeItem* b = nodeAtPos(snap.key.to);
-        if (a && b) {
-            BranchItem* branch = createBranch(a, b, snap.bow);
-            if (branch) {
-                branch->setActive(snap.active);
-                branch->setElementConstant(snap.constant);
-                branch->setBranchType(snap.type);
-                branch->setName(snap.name);
-            }
+    for (int serialId : undo.rewiredBranchIds) {
+        if (BranchItem* branch = branchBySerialId(serialId)) {
+            branch->replaceEndpoint(keep, remove);
         }
     }
 
-    m_suppressGraphChange = false;
+    for (const BranchSnapshot& snap : undo.destroyed) {
+        createBranchFromSnapshot(snap);
+    }
+
+    for (NodeItem* node : {keep, remove}) {
+        for (BranchItem* branch : node->branches()) {
+            reindexBranches(branch->from(), branch->to());
+        }
+        refreshTwoPortEgressAt(node);
+    }
+    m_suppressGraphChange = suppressed;
     notifyGraphChanged();
+    return remove;
 }
 
 bool GraphScene::tryMergeOverlappingNodes(NodeItem* moved, const QPointF& dragStart) {

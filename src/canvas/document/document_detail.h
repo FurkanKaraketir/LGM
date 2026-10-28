@@ -26,6 +26,8 @@ struct BranchLoadData {
 
 BranchLoadData branchFromJson(const QJsonObject& obj);
 void applyLoadedBranchData(GraphScene* scene, BranchItem* branch, const BranchLoadData& data);
+// Port branches are always created v → ref; flip one that was saved/snapshotted ref → v.
+void matchPortBranchDirection(GraphScene* scene, BranchItem* branch, const GraphScene::BranchSnapshot& snap);
 
 QJsonObject twoPortToJson(const TwoPortItem* twoPort);
 

@@ -7,6 +7,8 @@
 #include <QGraphicsScene>
 #include <QStyleOptionGraphicsItem>
 
+#include <algorithm>
+
 using namespace ci;
 
 NodeItem::NodeItem(qreal radius) : QGraphicsEllipseItem(-radius, -radius, radius * 2, radius * 2) {
@@ -46,9 +48,23 @@ void NodeItem::setSystemType(SystemType type) {
     update();
 }
 
-void NodeItem::setTwoPort(TwoPortItem* twoPort) {
-    m_twoPort = twoPort;
-    setZValue(twoPort ? 3.0 : 1.0);
+void NodeItem::attachTwoPort(TwoPortItem* twoPort) {
+    if (!twoPort || std::find(m_twoPorts.begin(), m_twoPorts.end(), twoPort) != m_twoPorts.end()) {
+        return;
+    }
+    m_twoPorts.push_back(twoPort);
+    setZValue(3.0);
+}
+
+void NodeItem::detachTwoPort(TwoPortItem* twoPort) {
+    m_twoPorts.erase(std::remove(m_twoPorts.begin(), m_twoPorts.end(), twoPort), m_twoPorts.end());
+    setZValue(m_twoPorts.empty() ? 1.0 : 3.0);
+}
+
+void NodeItem::refreshTwoPorts() {
+    for (TwoPortItem* twoPort : m_twoPorts) {
+        twoPort->refresh();
+    }
 }
 
 QRectF NodeItem::boundingRect() const {
@@ -109,16 +125,14 @@ QVariant NodeItem::itemChange(GraphicsItemChange change, const QVariant& value) 
         for (BranchItem* branch : m_branches) {
             branch->updatePath();
         }
-        if (m_twoPort) {
-            m_twoPort->refresh();
-        }
+        refreshTwoPorts();
     }
     return QGraphicsEllipseItem::itemChange(change, value);
 }
 
 void NodeItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     m_dragStart = pos();
-    if (m_twoPort && scene()) {
+    if (twoPort() && scene()) {
         auto* graph = static_cast<GraphScene*>(scene());
         if (graph->mode() == GraphScene::Mode::SelectNormalTree) {
             event->accept();
@@ -151,7 +165,7 @@ void NodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 void NodeItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* event) {
-    if (!scene() || m_twoPort) {
+    if (!scene() || twoPort()) {
         QGraphicsEllipseItem::mouseDoubleClickEvent(event);
         return;
     }

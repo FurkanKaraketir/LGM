@@ -1,5 +1,7 @@
 #include "canvas.h"
 
+#include <unordered_set>
+
 void GraphScene::clearNormalTreeHighlight() {
     if (!m_normalTreeHighlightActive && m_mode != Mode::SelectNormalTree) {
         return;

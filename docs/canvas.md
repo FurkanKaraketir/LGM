@@ -9,7 +9,7 @@ The canvas is the main drawing surface (`GraphScene` + `GraphView` in `src/canva
 | Select | `Esc` | Click or rubber-band to select; drag to move |
 | Add Node | `N` | Click empty canvas |
 | Add Branch | `B` | Click source node, then target |
-| Add Two-Port | `P` | Click two attachment nodes |
+| Add Two-Port | `P` | Click empty canvas to place a two-port (four nodes, two port branches) |
 | Select Normal Tree | `Ctrl+Alt+T` | Click branches to build a manual tree (analysis mode) |
 
 ## Navigation
@@ -27,7 +27,7 @@ The canvas is the main drawing surface (`GraphScene` + `GraphView` in `src/canva
 | Delete selection | `Del` / `Backspace` |
 | Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
 | Flip branch direction | `F` (selected branch) |
-| Combine nodes | `M` (two selected nodes at same position; see below) |
+| Combine nodes | `M` (two selected nodes), or drop one node onto another; see below |
 | Toggle two-port kind | `T` (transformer ↔ gyrator) |
 | Select all | `Ctrl+A` |
 
@@ -35,11 +35,18 @@ Branches are directed (`from → to`). Multiple branches between the same node p
 
 ### Combine nodes (`M`)
 
-A **standalone reference (ground) node** may merge into a **two-port reference** when both nodes are ground and share the same **energy domain**. Other two-port node merges remain blocked. Merging references shows a distinct confirmation (reference joins the kept two-port’s reference; branches on the removed node attach to the kept node).
+Branches on the removed node move to the kept node; a branch that joined the two nodes is dropped (it would become a self-loop) and comes back on undo.
+
+- **Plain node → two-port across node** is always allowed (a note is shown if the energy domains differ; the two-port node's domain is kept).
+- **Standalone reference (ground) → two-port reference** requires both nodes to be ground and in the same energy domain.
+- **Cascade** — two-port nodes from *different* two-ports combine across-with-across (same energy domain) or reference-with-reference. A junction may be shared by any number of two-ports; every two-port using the removed node is re-pointed to the kept one.
+- **Three-terminal** — the two reference nodes of *one* two-port may collapse into a shared reference. Any other merge inside one two-port, or across a port branch, is blocked.
 
 ### Delete and undo
 
-Deleting a two-port captures a full **TwoPortSnapshot** (attachment nodes, both port branches, shared-ref flag, branch parameters) so undo/redo restores complete topology — not just the two-port identity. Purging a two-port preserves nodes still used by a **cascaded** sibling two-port on the same reference.
+Nodes, branches and two-ports carry a stable `serialId`. Undo commands and snapshots refer to items by that id (never by pointer or position), so undo/redo stays correct after items are deleted and re-created, and when nodes overlap.
+
+Deleting a two-port captures a full **TwoPortSnapshot** (attachment nodes, both port branches and their direction, shared-ref flag, branch parameters) plus every external branch on the port nodes that disappear with it, so undo restores the complete topology. Purging a two-port preserves nodes still used by a **cascaded** sibling; such shared junctions stay owned by the surviving two-ports (`NodeItem::twoPorts()`).
 
 ## Docks and panels
 
@@ -67,8 +74,20 @@ Use **File → Open / Save** (`Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`). Example graph
 
 In `src/canvas/items/geometry.cpp`:
 
-- `kBowFactor` — arch height as a fraction of chord length (default `0.24`)
-- `kLaneSpread` — gap between parallel branches (default `36`)
+- `kLaneSpread` / `kFieldSpread` — gap between parallel branches (default `48`)
+- `kFieldSingleBow` — arch of a lone branch as a fraction of chord length (default `0.08`)
+- A branch's **bow** offsets its curve perpendicular to the chord (vertical branches: `+bow` bulges to `+x`), so level branches bow too.
+- Two-port port branches bulge inwards; `kMinCouplerSpan` (default `48`) caps the bulge so closely cascaded couplers keep a usable width. The coupler is drawn along the line between the port-branch midpoints.
+
+## Tests
+
+`tests/canvas_undo_test.cpp` checks node/branch/two-port invariants, cascade and three-terminal merges, delete/undo of every example two-port and node, save/load round trips, and a seeded random edit/undo/redo fuzz:
+
+```bash
+cmake --preset <your-preset> -DLGM_BUILD_TESTS=ON
+cmake --build build --target lgm_canvas_tests
+ctest --test-dir build --output-on-failure
+```
 
 ## Source files
 

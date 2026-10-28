@@ -12,10 +12,9 @@ void refreshTwoPortEgressAt(NodeItem* port) {
     if (!port || !port->twoPort()) {
         return;
     }
-    TwoPortItem* twoPort = port->twoPort();
-    twoPort->refresh();
+    port->refreshTwoPorts();
     for (BranchItem* branch : port->branches()) {
-        if (!GraphScene::isInternalTwoPortBranch(twoPort, branch)) {
+        if (!branch->isTwoPortPort()) {
             branch->updatePath();
         }
     }

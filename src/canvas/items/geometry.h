@@ -39,11 +39,14 @@ QPainterPath fieldLineBranch(const QPointF& a, const QPointF& b, int index, int 
 QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false,
                          bool dashedTail = false, bool drawArrow = true);
 void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius);
+QPointF bowControlPoint(const QPointF& a, const QPointF& b, qreal bow);
 void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
-                            const QString& modulus, const QColor& fill);
+                            const QPointF& leftTangent, const QPointF& rightTangent);
 void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
-                        const QString& modulus);
+                        const QPointF& leftTangent, const QPointF& rightTangent);
+QPainterPath transformerCouplerPath(const QPointF& left, const QPointF& right);
 QPainterPath gyratorInfinityPath(const QPointF& left, const QPointF& right);
+void capTwoPortBows(const TwoPortItem* tp, qreal& leftMag, qreal& rightMag);
 void refreshNeighborTwoPortBows(TwoPortItem* tp);
 
 struct BranchArrowGeom {
@@ -67,7 +70,10 @@ BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, i
 BranchArrowGeom fieldLineArrowGeom(const QPointF& a, const QPointF& b, int index, int count,
                                    const QPointF& kickA = {}, const QPointF& kickB = {});
 QRectF nodeAcrossLabelRect(const QString& text, qreal radius, const QFont& font);
+// Default clearance keeps passive labels where they were; active branches pass kSourceLabelClearance.
+constexpr qreal kPassiveLabelClearance = 10.0;
+constexpr qreal kSourceLabelClearance = 19.0;  // source circle radius (14) + gap
 QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const QString& text,
-                         const QFont& font);
+                         const QFont& font, qreal clearance = kPassiveLabelClearance);
 
 }  // namespace ci

@@ -19,6 +19,7 @@
 #include <QPainterPathStroker>
 #include <QRadioButton>
 #include <QStyleOptionGraphicsItem>
+#include <QTransform>
 #include <QVBoxLayout>
 #include <QSet>
 
@@ -307,10 +308,26 @@ QPainterPath fieldLineBranch(const QPointF& a, const QPointF& b, int index, int 
     return path;
 }
 
+// Bow is measured perpendicular to the chord. The normal comes from a canonical chord direction (down
+// the screen, or rightwards when level), so vertical branches keep "+bow = +x" and flip() (which negates
+// the bow) still mirrors the curve; level branches bulge up/down instead of collapsing to a straight line.
+QPointF bowControlPoint(const QPointF& a, const QPointF& b, qreal bow) {
+    QPointF dir = b - a;
+    if (dir.y() < 0.0 || (dir.y() == 0.0 && dir.x() < 0.0)) {
+        dir = -dir;
+    }
+    const QPointF mid = (a + b) / 2.0;
+    const qreal len = std::hypot(dir.x(), dir.y());
+    if (len < 1e-6) {
+        return mid + QPointF(bow, 0.0);
+    }
+    return mid + QPointF(dir.y() / len, -dir.x() / len) * bow;
+}
+
 QPainterPath bowedBranch(const QPointF& top, const QPointF& bottom, qreal bow, bool active = false,
                          bool dashedTail = false, bool drawArrow = true) {
     QPainterPath path;
-    const QPointF ctrl = (top + bottom) / 2.0 + QPointF(bow, 0.0);
+    const QPointF ctrl = bowControlPoint(top, bottom, bow);
     
     if (dashedTail) {
         QPainterPath solidPart;
@@ -378,67 +395,80 @@ void drawGroundSymbol(QPainter* painter, const QPointF& center, qreal radius) {
     }
 }
 
-void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
-                            const QString& modulus, const QColor& fill) {
-    Q_UNUSED(modulus);
-    Q_UNUSED(fill);
-    const qreal midY = (left.y() + right.y()) / 2.0;
-    const QRectF box(left.x() - kTfPadX, midY - kTfHalfHeight, right.x() - left.x() + kTfPadX * 2.0,
-                     kTfHalfHeight * 2.0);
-    painter->setBrush(Qt::NoBrush);
-    painter->drawPath(stadiumPath(box));
-
-    drawDownArrow(painter, QPointF(left.x(), midY - 4.0));
-    drawDownArrow(painter, QPointF(right.x(), midY - 4.0));
+// Coupler shapes are built along the x axis from (0, 0) to (len, 0) and mapped onto the actual
+// left→right coupler segment, so they stay attached when port branches are tilted or cascaded.
+QTransform couplerFrame(const QPointF& left, const QPointF& right, qreal* length) {
+    const QPointF d = right - left;
+    *length = std::hypot(d.x(), d.y());
+    QTransform frame;
+    frame.translate(left.x(), left.y());
+    if (*length > 1e-6) {
+        frame.rotateRadians(std::atan2(d.y(), d.x()));
+    }
+    return frame;
 }
 
-void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
-                        const QString& modulus) {
-    Q_UNUSED(modulus);
-    const qreal midY = (left.y() + right.y()) / 2.0;
-    const QPointF center((left.x() + right.x()) / 2.0, midY);
+QPainterPath transformerCouplerPath(const QPointF& left, const QPointF& right) {
+    qreal len = 0.0;
+    const QTransform frame = couplerFrame(left, right, &len);
+    return frame.map(
+        stadiumPath(QRectF(-kTfPadX, -kTfHalfHeight, len + kTfPadX * 2.0, kTfHalfHeight * 2.0)));
+}
+
+QPainterPath gyratorInfinityPath(const QPointF& left, const QPointF& right) {
+    qreal len = 0.0;
+    const QTransform frame = couplerFrame(left, right, &len);
+    const QPointF l(0.0, 0.0);
+    const QPointF r(len, 0.0);
+    const QPointF center(len / 2.0, 0.0);
     const qreal w = 12.0;
     const qreal h = 17.0;
 
     QPainterPath loop;
-    loop.moveTo(left);
-    loop.cubicTo(QPointF(left.x() - w, midY - h * 0.55), QPointF(center.x() - w * 0.45, midY - h),
-                 center);
-    loop.cubicTo(QPointF(center.x() + w * 0.45, midY + h), QPointF(right.x() + w, midY + h * 0.55),
-                 right);
-    loop.cubicTo(QPointF(right.x() + w, midY - h * 0.55), QPointF(center.x() + w * 0.45, midY - h),
-                 center);
-    loop.cubicTo(QPointF(center.x() - w * 0.45, midY + h), QPointF(left.x() - w, midY + h * 0.55),
-                 left);
+    loop.moveTo(l);
+    loop.cubicTo(QPointF(l.x() - w, -h * 0.55), QPointF(center.x() - w * 0.45, -h), center);
+    loop.cubicTo(QPointF(center.x() + w * 0.45, h), QPointF(r.x() + w, h * 0.55), r);
+    loop.cubicTo(QPointF(r.x() + w, -h * 0.55), QPointF(center.x() + w * 0.45, -h), center);
+    loop.cubicTo(QPointF(center.x() - w * 0.45, h), QPointF(l.x() - w, h * 0.55), l);
+    return frame.map(loop);
+}
 
+// Port arrow drawn along the port branch direction (v → ref for an unflipped port).
+void drawPortArrow(QPainter* painter, const QPointF& at, const QPointF& tangent, qreal lead) {
+    const qreal len = std::hypot(tangent.x(), tangent.y());
+    const QPointF u = len < 1e-6 ? QPointF(0.0, 1.0) : tangent / len;
+    const QPointF n(-u.y(), u.x());
+    const QPointF top = at - u * lead;
+    const QPointF bottom = top + u * 11.0;
+    painter->drawLine(top, bottom);
+    QPainterPath head;
+    head.moveTo(bottom);
+    head.lineTo(bottom - u * 5.5 + n * 4.5);
+    head.lineTo(bottom - u * 5.5 - n * 4.5);
+    head.closeSubpath();
+    painter->fillPath(head, painter->pen().color());
+}
+
+void drawTransformerCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
+                            const QPointF& leftTangent, const QPointF& rightTangent) {
+    painter->setBrush(Qt::NoBrush);
+    painter->drawPath(transformerCouplerPath(left, right));
+
+    drawPortArrow(painter, left, leftTangent, 4.0);
+    drawPortArrow(painter, right, rightTangent, 4.0);
+}
+
+void drawGyratorCoupler(QPainter* painter, const QPointF& left, const QPointF& right,
+                        const QPointF& leftTangent, const QPointF& rightTangent) {
     QPen loopPen = painter->pen();
     loopPen.setWidthF(1.5);
     painter->setPen(loopPen);
     painter->setBrush(Qt::NoBrush);
-    painter->drawPath(loop);
+    painter->drawPath(gyratorInfinityPath(left, right));
 
     painter->setPen(QPen(loopPen.color(), 2.0));
-    drawDownArrow(painter, left + QPointF(0.0, -5.0));
-    drawDownArrow(painter, right + QPointF(0.0, -5.0));
-}
-
-QPainterPath gyratorInfinityPath(const QPointF& left, const QPointF& right) {
-    const qreal midY = (left.y() + right.y()) / 2.0;
-    const QPointF center((left.x() + right.x()) / 2.0, midY);
-    const qreal w = 12.0;
-    const qreal h = 17.0;
-
-    QPainterPath loop;
-    loop.moveTo(left);
-    loop.cubicTo(QPointF(left.x() - w, midY - h * 0.55), QPointF(center.x() - w * 0.45, midY - h),
-                 center);
-    loop.cubicTo(QPointF(center.x() + w * 0.45, midY + h), QPointF(right.x() + w, midY + h * 0.55),
-                 right);
-    loop.cubicTo(QPointF(right.x() + w, midY - h * 0.55), QPointF(center.x() + w * 0.45, midY - h),
-                 center);
-    loop.cubicTo(QPointF(center.x() - w * 0.45, midY + h), QPointF(left.x() - w, midY + h * 0.55),
-                 left);
-    return loop;
+    drawPortArrow(painter, left, leftTangent, 5.0);
+    drawPortArrow(painter, right, rightTangent, 5.0);
 }
 
 struct BranchArrowGeom {
@@ -450,42 +480,28 @@ bool isTwoPortPortBranch(const BranchItem* branch) {
     return branch && branch->isTwoPortPort();
 }
 
-bool isInterTwoPortLink(const BranchItem* branch, TwoPortItem** outA = nullptr,
-                        TwoPortItem** outB = nullptr) {
-    if (!branch || isTwoPortPortBranch(branch) || !branch->from() || !branch->to()) {
-        return false;
-    }
-    TwoPortItem* tpA = branch->from()->twoPort();
-    TwoPortItem* tpB = branch->to()->twoPort();
-    if (!tpA || !tpB || tpA == tpB) {
-        return false;
-    }
-    if (outA) {
-        *outA = tpA;
-    }
-    if (outB) {
-        *outB = tpB;
-    }
-    return true;
-}
-
+// A branch from `port` of `tp` to a port of another two-port lying on the same side. Every owner of
+// the far node counts, so cascaded (shared) junctions route the same whatever their owner order.
 bool isFacingNeighborLink(const TwoPortItem* tp, const NodeItem* port, const BranchItem* branch) {
-    if (!tp || !port || !branch) {
+    if (!tp || !port || !branch || isTwoPortPortBranch(branch) || !branch->from() || !branch->to()) {
         return false;
     }
-    TwoPortItem* tpA = nullptr;
-    TwoPortItem* tpB = nullptr;
-    if (!isInterTwoPortLink(branch, &tpA, &tpB)) {
-        return false;
+    const NodeItem* other = branch->from() == port ? branch->to() : branch->from();
+    if (tp->portRoles(other) != 0) {
+        return false;  // both ends on this two-port: an element across its own port, not a link
     }
-    TwoPortItem* otherTp = tpA == tp ? tpB : (tpB == tp ? tpA : nullptr);
-    if (!otherTp) {
-        return false;
-    }
-    const qreal dx = otherTp->center().x() - tp->center().x();
     const bool portOnLeft = port == tp->v1() || port == tp->g1();
     const bool portOnRight = port == tp->v2() || port == tp->g2();
-    return (portOnRight && dx > 0.0) || (portOnLeft && dx < 0.0);
+    for (const TwoPortItem* otherTp : other->twoPorts()) {
+        if (otherTp == tp) {
+            continue;
+        }
+        const qreal dx = otherTp->center().x() - tp->center().x();
+        if ((portOnRight && dx > 0.0) || (portOnLeft && dx < 0.0)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool hasFacingNeighborLinkOnSide(const TwoPortItem* tp, bool leftSide) {
@@ -503,7 +519,8 @@ bool hasFacingNeighborLinkOnSide(const TwoPortItem* tp, bool leftSide) {
 }
 
 int externalOutwardBranchCountAt(const TwoPortItem* tp, bool leftSide) {
-    int count = 0;
+    // A branch spanning v and ref on the same side is one branch, not two.
+    QSet<const BranchItem*> counted;
     for (NodeItem* port : {leftSide ? tp->v1() : tp->v2(), leftSide ? tp->g1() : tp->g2()}) {
         if (!port) {
             continue;
@@ -512,10 +529,10 @@ int externalOutwardBranchCountAt(const TwoPortItem* tp, bool leftSide) {
             if (isTwoPortPortBranch(branch) || isFacingNeighborLink(tp, port, branch)) {
                 continue;
             }
-            ++count;
+            counted.insert(branch);
         }
     }
-    return count;
+    return counted.size();
 }
 
 bool hasNeighborTwoPortOn(const TwoPortItem* tp, bool right) {
@@ -556,6 +573,27 @@ qreal twoPortSideBowMag(const TwoPortItem* tp, bool leftSide) {
         mag += kTwoPortPortBowNeighbor;
     }
     return mag;
+}
+
+constexpr qreal kMinCouplerSpan = 48.0;
+constexpr qreal kMinPortBow = 8.0;
+
+// Port branches bulge inwards by bow / 2 at their midpoint; shrink both bulges when they would squeeze
+// the coupler below kMinCouplerSpan (closely cascaded or narrow two-ports).
+void capTwoPortBows(const TwoPortItem* tp, qreal& leftMag, qreal& rightMag) {
+    if (!tp || !tp->v1() || !tp->v2() || !tp->g1() || !tp->g2()) {
+        return;
+    }
+    const QPointF leftMid = (tp->v1()->scenePos() + tp->g1()->scenePos()) / 2.0;
+    const QPointF rightMid = (tp->v2()->scenePos() + tp->g2()->scenePos()) / 2.0;
+    const qreal span = std::hypot(rightMid.x() - leftMid.x(), rightMid.y() - leftMid.y());
+    const qreal allowedBulge = std::max<qreal>(0.0, span - kMinCouplerSpan);
+    const qreal bulge = (leftMag + rightMag) / 2.0;
+    if (bulge > allowedBulge && bulge > 1e-6) {
+        const qreal scale = allowedBulge / bulge;
+        leftMag = std::max(kMinPortBow, leftMag * scale);
+        rightMag = std::max(kMinPortBow, rightMag * scale);
+    }
 }
 
 void refreshNeighborTwoPortBows(TwoPortItem* tp) {
@@ -661,6 +699,24 @@ struct BranchEgress {
     QPointF kickB;
 };
 
+// The two-port an external branch leaves from: at a shared junction, the owner nearest the far end.
+TwoPortItem* egressOwner(const NodeItem* port, const QPointF& farEnd) {
+    TwoPortItem* best = nullptr;
+    qreal bestDist = 0.0;
+    for (TwoPortItem* owner : port->twoPorts()) {
+        const QPointF d = owner->center() - farEnd;
+        const qreal dist = d.x() * d.x() + d.y() * d.y();
+        const bool tie = best && std::abs(dist - bestDist) < 1e-6;
+        if (!best || dist < bestDist - 1e-6 ||
+            (tie && (owner->center().x() < best->center().x() ||
+                     (owner->center().x() == best->center().x() && owner->center().y() < best->center().y())))) {
+            best = owner;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
 BranchEgress computeBranchEgress(const BranchItem* branch) {
     BranchEgress egress;
     if (!branch || isTwoPortPortBranch(branch) || !branch->from() || !branch->to()) {
@@ -678,15 +734,13 @@ BranchEgress computeBranchEgress(const BranchItem* branch) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(from, branch, index, count);
-        egress.kickA =
-            twoPortKick(from->twoPort(), from, branch, externalBranchLane(index, count), chordLen);
+        egress.kickA = twoPortKick(egressOwner(from, b), from, branch, externalBranchLane(index, count), chordLen);
     }
     if (NodeItem* to = branch->to(); to && to->twoPort()) {
         int index = 0;
         int count = 1;
         externalLaneAtPort(to, branch, index, count);
-        egress.kickB =
-            twoPortKick(to->twoPort(), to, branch, externalBranchLane(index, count), chordLen);
+        egress.kickB = twoPortKick(egressOwner(to, a), to, branch, externalBranchLane(index, count), chordLen);
     }
     return egress;
 }
@@ -705,7 +759,7 @@ QString branchAnnotationLabel(const BranchItem* branch) {
 BranchArrowGeom branchArrowGeom(const QPointF& a, const QPointF& b, int index, int count, qreal bow,
                                 const QPointF& kickA = {}, const QPointF& kickB = {}) {
     if (std::abs(bow) > 1e-6) {
-        const QPointF ctrl = (a + b) / 2.0 + QPointF(bow, 0.0);
+        const QPointF ctrl = bowControlPoint(a, b, bow);
         return {
             QPointF((1 - 0.5) * (1 - 0.5) * a.x() + 2 * 0.5 * (1 - 0.5) * ctrl.x() + 0.5 * 0.5 * b.x(),
                     (1 - 0.5) * (1 - 0.5) * a.y() + 2 * 0.5 * (1 - 0.5) * ctrl.y() + 0.5 * 0.5 * b.y()),
@@ -749,16 +803,14 @@ QRectF nodeAcrossLabelRect(const QString& text, qreal radius, const QFont& font)
 }
 
 QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const QString& text,
-                         const QFont& font) {
+                         const QFont& font, qreal clearance) {
     constexpr qreal kPad = 6.0;
-    constexpr qreal kOffset = 18.0;
     const qreal len = std::hypot(tangent.x(), tangent.y());
     if (len < 1e-6) {
         return {};
     }
     const QPointF u(tangent.x() / len, tangent.y() / len);
     const QPointF n(-u.y(), u.x());
-    const QPointF center = arrowTip + n * kOffset;
 
     const QFontMetricsF fm(font);
     QRectF textBounds = fm.boundingRect(QRectF(), Qt::TextDontClip, text);
@@ -766,7 +818,10 @@ QRectF constantLabelRect(const QPointF& arrowTip, const QPointF& tangent, const 
         const qreal w = fm.horizontalAdvance(text);
         textBounds = QRectF(-w * 0.5, -fm.ascent(), w, fm.height());
     }
-    textBounds.moveCenter(center);
+    // Push the text box out until its near edge clears the curve (or the source circle) by `clearance`.
+    const qreal halfExtent =
+        std::abs(n.x()) * textBounds.width() / 2.0 + std::abs(n.y()) * textBounds.height() / 2.0;
+    textBounds.moveCenter(arrowTip + n * (clearance + halfExtent));
     return textBounds.adjusted(-kPad, -kPad, kPad, kPad);
 }
 

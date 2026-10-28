@@ -30,8 +30,41 @@ void TwoPortItem::applyInternalBranchBows() {
     if (!m_left || !m_right) {
         return;
     }
-    m_left->setBow(twoPortSideBowMag(this, true));
-    m_right->setBow(-twoPortSideBowMag(this, false));
+    qreal leftMag = twoPortSideBowMag(this, true);
+    qreal rightMag = twoPortSideBowMag(this, false);
+    capTwoPortBows(this, leftMag, rightMag);
+    m_left->setBow(leftMag);
+    m_right->setBow(-rightMag);
+    syncGeometry();
+}
+
+void TwoPortItem::syncGeometry() {
+    if (!m_left || !m_right || !m_left->from() || !m_left->to() || !m_right->from() || !m_right->to()) {
+        return;
+    }
+    // Midpoint and direction of each (quadratic, bowed) port branch, computed from the same control
+    // point the branch path uses; dashed A-type paths make pointAtPercent() unreliable.
+    const auto portMid = [](const BranchItem* branch, QPointF& point, QPointF& tangent) {
+        const QPointF a = branch->from()->scenePos();
+        const QPointF b = branch->to()->scenePos();
+        const QPointF ctrl = bowControlPoint(a, b, branch->bow());
+        point = a * 0.25 + ctrl * 0.5 + b * 0.25;
+        tangent = b - a;
+    };
+    QPointF left;
+    QPointF right;
+    portMid(m_left, left, m_tangentLeft);
+    portMid(m_right, right, m_tangentRight);
+    const QPainterPath shape = m_kind == TwoPortKind::Gyrator ? gyratorInfinityPath(left, right)
+                                                              : transformerCouplerPath(left, right);
+    // ponytail: geometry must be announced before boundingRect() starts returning the new shape
+    if (shape != m_shape || left != m_couplerLeft || right != m_couplerRight) {
+        prepareGeometryChange();
+        m_couplerLeft = left;
+        m_couplerRight = right;
+        m_shape = shape;
+    }
+    update();
 }
 
 void TwoPortItem::setKind(TwoPortKind kind) {
@@ -41,7 +74,6 @@ void TwoPortItem::setKind(TwoPortKind kind) {
     m_kind = kind;
     setZValue(kind == TwoPortKind::Gyrator ? 0.5 : 2.0);
     applyInternalBranchBows();
-    update();
 }
 
 void TwoPortItem::setModulus(const QString& modulus) {
@@ -79,8 +111,6 @@ void TwoPortItem::refresh() {
     }
     applyInternalBranchBows();
     refreshNeighborTwoPortBows(this);
-    prepareGeometryChange();
-    update();
 }
 
 void TwoPortItem::moveBy(const QPointF& delta) {
@@ -103,24 +133,30 @@ void TwoPortItem::moveBy(const QPointF& delta) {
     refresh();
 }
 
-bool TwoPortItem::collapseSharedRef(NodeItem* gKeep, NodeItem* gRemove) {
-    if (!gKeep || !gRemove || gKeep == gRemove) {
-        return false;
+int TwoPortItem::portRoles(const NodeItem* node) const {
+    if (!node) {
+        return 0;
     }
-    if ((gKeep != m_g1 && gKeep != m_g2) || (gRemove != m_g1 && gRemove != m_g2)) {
-        return false;
+    return (node == m_v1 ? 1 : 0) | (node == m_v2 ? 2 : 0) | (node == m_g1 ? 4 : 0) |
+           (node == m_g2 ? 8 : 0);
+}
+
+void TwoPortItem::replacePortNode(NodeItem* from, NodeItem* to, int roles) {
+    if (!to) {
+        return;
     }
-    BranchItem* branch = gRemove == m_g1 ? m_left : m_right;
-    branch->replaceEndpoint(gRemove, gKeep);
-    if (m_g1 == gRemove) {
-        m_g1 = gKeep;
+    if ((roles & 1) && m_v1 == from) {
+        m_v1 = to;
     }
-    if (m_g2 == gRemove) {
-        m_g2 = gKeep;
+    if ((roles & 2) && m_v2 == from) {
+        m_v2 = to;
     }
-    gRemove->setTwoPort(nullptr);
-    refresh();
-    return true;
+    if ((roles & 4) && m_g1 == from) {
+        m_g1 = to;
+    }
+    if ((roles & 8) && m_g2 == from) {
+        m_g2 = to;
+    }
 }
 
 void TwoPortItem::selectMembers(bool selected) {
@@ -131,41 +167,23 @@ void TwoPortItem::selectMembers(bool selected) {
     }
 }
 
-QPointF TwoPortItem::couplerLeft() const {
-    return m_left->path().pointAtPercent(0.5);
-}
-
-QPointF TwoPortItem::couplerRight() const {
-    return m_right->path().pointAtPercent(0.5);
-}
-
 QRectF TwoPortItem::boundingRect() const {
-    return shape().boundingRect().adjusted(-2.0, -2.0, 2.0, 2.0);
+    // Margin covers the port arrows (they reach ~7 px past the coupler axis) and the pen.
+    return m_shape.boundingRect().adjusted(-8.0, -8.0, 8.0, 8.0);
 }
 
 QPainterPath TwoPortItem::shape() const {
-    const QPointF left = couplerLeft();
-    const QPointF right = couplerRight();
-    if (m_kind == TwoPortKind::Gyrator) {
-        return gyratorInfinityPath(left, right);
-    }
-    const qreal midY = (left.y() + right.y()) / 2.0;
-    const qreal span = right.x() - left.x();
-    return stadiumPath(
-        QRectF(left.x() - kTfPadX, midY - kTfHalfHeight, span + kTfPadX * 2.0, kTfHalfHeight * 2.0));
+    return m_shape;
 }
 
 void TwoPortItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     Q_UNUSED(option);
 
-    const QPointF left = couplerLeft();
-    const QPointF right = couplerRight();
-
     painter->setPen(QPen(isSelected() ? kSelectionColor : itemInk(widget), 2.0));
     if (m_kind == TwoPortKind::Transformer) {
-        drawTransformerCoupler(painter, left, right, m_modulus, itemFill(widget));
+        drawTransformerCoupler(painter, m_couplerLeft, m_couplerRight, m_tangentLeft, m_tangentRight);
     } else {
-        drawGyratorCoupler(painter, left, right, m_modulus);
+        drawGyratorCoupler(painter, m_couplerLeft, m_couplerRight, m_tangentLeft, m_tangentRight);
     }
 }
 

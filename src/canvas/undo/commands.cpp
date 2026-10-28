@@ -21,119 +21,139 @@ enum UndoMergeId {
     SetTwoPortModulusId = 8,
 };
 
+// Commands refer to items by serial id, never by pointer: delete + undo (and merge + undo) re-create
+// items as new objects carrying the same id, so a stored pointer would dangle.
 template <typename Item>
-bool itemAlive(Item* item) {
-    return item && item->scene();
+class ItemRef {
+public:
+    ItemRef(GraphScene* scene, const Item* item) : m_scene(scene), m_id(item ? item->serialId() : 0) {}
+
+    Item* get() const;
+
+    bool operator==(const ItemRef& other) const { return m_id == other.m_id; }
+
+    bool operator!=(const ItemRef& other) const { return m_id != other.m_id; }
+
+private:
+    GraphScene* m_scene;
+    int m_id;
+};
+
+template <>
+NodeItem* ItemRef<NodeItem>::get() const {
+    return m_scene->nodeById(m_id);
+}
+
+template <>
+BranchItem* ItemRef<BranchItem>::get() const {
+    return m_scene->branchBySerialId(m_id);
+}
+
+template <>
+TwoPortItem* ItemRef<TwoPortItem>::get() const {
+    return m_scene->twoPortById(m_id);
 }
 
 class AddNodeCommand : public QUndoCommand {
 public:
-    AddNodeCommand(GraphScene* scene, const QPointF& pos)
-        : m_scene(scene), m_pos(scene->snap(pos)) {
+    AddNodeCommand(GraphScene* scene, const QPointF& pos) : m_scene(scene) {
+        m_snap.pos = scene->snap(pos);
         setText("Add node");
     }
 
     void undo() override {
-        if (!m_exists) {
-            return;
-        }
-        if (NodeItem* node = m_scene->nodeAtPos(m_pos)) {
+        if (NodeItem* node = m_scene->nodeById(m_snap.id)) {
+            m_snap = GraphScene::snapshotOf(node);
             m_scene->destroyNode(node);
         }
-        m_exists = false;
     }
 
     void redo() override {
-        if (m_exists) {
-            return;
-        }
-        if (NodeItem* node = m_scene->createNode(m_pos)) {
+        NodeItem* node =
+            m_snap.id == 0 ? m_scene->createNode(m_snap.pos) : m_scene->createNodeFromSnapshot(m_snap);
+        if (node) {
+            m_snap.id = node->serialId();
             m_scene->clearSelection();
             node->setSelected(true);
         }
-        m_exists = true;
     }
 
 private:
     GraphScene* m_scene;
-    QPointF m_pos;
-    bool m_exists = false;
+    GraphScene::NodeSnapshot m_snap;
 };
 
 class AddBranchCommand : public QUndoCommand {
 public:
-    AddBranchCommand(GraphScene* scene, NodeItem* a, NodeItem* b)
-        : m_scene(scene), m_key{a->scenePos(), b->scenePos(), 0} {
+    AddBranchCommand(GraphScene* scene, NodeItem* a, NodeItem* b) : m_scene(scene) {
+        m_snap.fromId = a->serialId();
+        m_snap.toId = b->serialId();
         setText("Add branch");
     }
 
     void undo() override {
-        if (!m_exists) {
-            return;
+        if (BranchItem* branch = m_scene->branchBySerialId(m_snap.serialId)) {
+            m_snap = GraphScene::snapshotOf(branch);
+            m_scene->destroyBranch(branch);
         }
-        m_scene->destroyBranchAt(m_key);
-        m_exists = false;
     }
 
     void redo() override {
-        if (m_exists) {
-            return;
+        BranchItem* branch = nullptr;
+        if (m_snap.serialId == 0) {
+            NodeItem* a = m_scene->nodeById(m_snap.fromId);
+            NodeItem* b = m_scene->nodeById(m_snap.toId);
+            branch = a && b ? m_scene->createBranch(a, b) : nullptr;
+            if (branch) {
+                m_snap.serialId = branch->serialId();
+            }
+        } else {
+            branch = m_scene->createBranchFromSnapshot(m_snap);
         }
-        NodeItem* a = m_scene->nodeAtPos(m_key.from);
-        NodeItem* b = m_scene->nodeAtPos(m_key.to);
-        if (!a || !b) {
-            return;
-        }
-        if (BranchItem* branch = m_scene->createBranch(a, b)) {
-            m_key.index = branch->index();
+        if (branch) {
             m_scene->clearSelection();
             branch->setSelected(true);
-            m_exists = true;
         }
     }
 
 private:
     GraphScene* m_scene;
-    GraphScene::BranchKey m_key;
-    bool m_exists = false;
+    GraphScene::BranchSnapshot m_snap;
 };
 
 class AddTwoPortCommand : public QUndoCommand {
 public:
     AddTwoPortCommand(GraphScene* scene, const QPointF& center, TwoPortKind kind)
-        : m_scene(scene), m_key{center, kind} {
+        : m_scene(scene), m_center(center), m_kind(kind) {
         setText("Add two-port");
     }
 
     void undo() override {
-        if (!m_exists) {
-            return;
-        }
-        if (TwoPortItem* item = m_scene->twoPortAtCenter(m_key.center)) {
+        if (TwoPortItem* item = m_scene->twoPortById(m_snap.key.id)) {
+            m_snap = GraphScene::snapshotOf(item);
             m_scene->purgeTwoPort(item);
         }
-        m_exists = false;
     }
 
     void redo() override {
-        if (m_exists) {
-            return;
-        }
-        if (TwoPortItem* item = m_scene->createTwoPort(m_key.center, m_key.kind)) {
+        TwoPortItem* item = m_snap.key.id == 0 ? m_scene->createTwoPort(m_center, m_kind)
+                                               : m_scene->restoreTwoPortSnapshot(m_snap);
+        if (item) {
+            m_snap.key.id = item->serialId();
             m_scene->selectTwoPort(item);
         }
-        m_exists = true;
     }
 
 private:
     GraphScene* m_scene;
-    GraphScene::TwoPortKey m_key;
-    bool m_exists = false;
+    QPointF m_center;
+    TwoPortKind m_kind;
+    GraphScene::TwoPortSnapshot m_snap;
 };
 
 class FlipBranchCommand : public QUndoCommand {
 public:
-    FlipBranchCommand(GraphScene* scene, BranchItem* branch) : m_scene(scene), m_branch(branch) {
+    FlipBranchCommand(GraphScene* scene, BranchItem* branch) : m_scene(scene), m_branch(scene, branch) {
         setText("Flip branch");
     }
 
@@ -143,19 +163,19 @@ public:
 
 private:
     void apply() {
-        if (itemAlive(m_branch)) {
-            m_scene->flipBranch(m_branch);
+        if (BranchItem* branch = m_branch.get()) {
+            m_scene->flipBranch(branch);
         }
     }
 
     GraphScene* m_scene;
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
 };
 
 class SetNodeNameCommand : public QUndoCommand {
 public:
-    SetNodeNameCommand(NodeItem* node, const QString& oldName, const QString& newName)
-        : m_node(node), m_old(oldName), m_new(newName) {
+    SetNodeNameCommand(GraphScene* scene, NodeItem* node, const QString& oldName, const QString& newName)
+        : m_node(scene, node), m_old(oldName), m_new(newName) {
         setText("Rename node");
     }
 
@@ -176,12 +196,12 @@ public:
 
 private:
     void apply(const QString& name) {
-        if (itemAlive(m_node)) {
-            m_node->setName(name);
+        if (NodeItem* node = m_node.get()) {
+            node->setName(name);
         }
     }
 
-    NodeItem* m_node;
+    ItemRef<NodeItem> m_node;
     QString m_old;
     QString m_new;
 };
@@ -190,7 +210,7 @@ class SetNodeAcrossVariableCommand : public QUndoCommand {
 public:
     SetNodeAcrossVariableCommand(GraphScene* scene, NodeItem* node, const QString& oldSymbol,
                                  const QString& newSymbol)
-        : m_scene(scene), m_node(node), m_old(oldSymbol), m_new(newSymbol) {
+        : m_scene(scene), m_node(scene, node), m_old(oldSymbol), m_new(newSymbol) {
         setText("Change node across variable");
     }
 
@@ -211,29 +231,28 @@ public:
 
 private:
     void apply(const QString& symbol) {
-        if (!itemAlive(m_node)) {
+        NodeItem* node = m_node.get();
+        if (!node) {
             return;
         }
-        const QString previous = m_node->acrossVariable();
+        const QString previous = node->acrossVariable();
         if (previous == symbol) {
             return;
         }
-        m_node->setAcrossVariable(symbol);
-        if (m_scene) {
-            m_scene->renameOutputVariableSymbol(previous, symbol);
-        }
+        node->setAcrossVariable(symbol);
+        m_scene->renameOutputVariableSymbol(previous, symbol);
     }
 
-    GraphScene* m_scene = nullptr;
-    NodeItem* m_node;
+    GraphScene* m_scene;
+    ItemRef<NodeItem> m_node;
     QString m_old;
     QString m_new;
 };
 
 class SetNodeGroundCommand : public QUndoCommand {
 public:
-    SetNodeGroundCommand(NodeItem* node, bool oldGround, bool newGround)
-        : m_node(node), m_old(oldGround), m_new(newGround) {
+    SetNodeGroundCommand(GraphScene* scene, NodeItem* node, bool oldGround, bool newGround)
+        : m_node(scene, node), m_old(oldGround), m_new(newGround) {
         setText("Change node type");
     }
 
@@ -243,12 +262,12 @@ public:
 
 private:
     void apply(bool ground) {
-        if (itemAlive(m_node)) {
-            m_node->setGround(ground);
+        if (NodeItem* node = m_node.get()) {
+            node->setGround(ground);
         }
     }
 
-    NodeItem* m_node;
+    ItemRef<NodeItem> m_node;
     bool m_old;
     bool m_new;
 };
@@ -259,7 +278,7 @@ public:
                           SystemType oldType, SystemType newType, SystemType oldDefault,
                           SystemType newDefault)
         : m_scene(scene),
-          m_node(node),
+          m_node(scene, node),
           m_oldGround(oldGround),
           m_newGround(newGround),
           m_oldType(oldType),
@@ -275,18 +294,19 @@ public:
 
 private:
     void apply(bool ground, SystemType type, SystemType defaultType) {
-        if (!itemAlive(m_node)) {
+        NodeItem* node = m_node.get();
+        if (!node) {
             return;
         }
-        m_node->setGround(ground);
+        node->setGround(ground);
         if (!ground) {
-            m_node->setSystemType(type);
+            node->setSystemType(type);
         }
         m_scene->setDefaultSystemType(defaultType);
     }
 
     GraphScene* m_scene;
-    NodeItem* m_node;
+    ItemRef<NodeItem> m_node;
     bool m_oldGround;
     bool m_newGround;
     SystemType m_oldType;
@@ -297,8 +317,9 @@ private:
 
 class SetBranchNameCommand : public QUndoCommand {
 public:
-    SetBranchNameCommand(BranchItem* branch, const QString& oldName, const QString& newName)
-        : m_branch(branch), m_old(oldName), m_new(newName) {
+    SetBranchNameCommand(GraphScene* scene, BranchItem* branch, const QString& oldName,
+                         const QString& newName)
+        : m_branch(scene, branch), m_old(oldName), m_new(newName) {
         setText("Rename branch");
     }
 
@@ -319,20 +340,20 @@ public:
 
 private:
     void apply(const QString& name) {
-        if (itemAlive(m_branch)) {
-            m_branch->setName(name);
+        if (BranchItem* branch = m_branch.get()) {
+            branch->setName(name);
         }
     }
 
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
     QString m_old;
     QString m_new;
 };
 
 class SetBranchActiveCommand : public QUndoCommand {
 public:
-    SetBranchActiveCommand(BranchItem* branch, bool oldActive, bool newActive)
-        : m_branch(branch), m_old(oldActive), m_new(newActive) {
+    SetBranchActiveCommand(GraphScene* scene, BranchItem* branch, bool oldActive, bool newActive)
+        : m_branch(scene, branch), m_old(oldActive), m_new(newActive) {
         setText("Change branch category");
     }
 
@@ -342,12 +363,12 @@ public:
 
 private:
     void apply(bool active) {
-        if (itemAlive(m_branch)) {
-            m_branch->setActive(active);
+        if (BranchItem* branch = m_branch.get()) {
+            branch->setActive(active);
         }
     }
 
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
     bool m_old;
     bool m_new;
 };
@@ -355,7 +376,7 @@ private:
 class SetBranchTypeCommand : public QUndoCommand {
 public:
     SetBranchTypeCommand(GraphScene* scene, BranchItem* branch, BranchType oldType, BranchType newType)
-        : m_scene(scene), m_branch(branch), m_old(oldType), m_new(newType) {
+        : m_branch(scene, branch), m_old(oldType), m_new(newType) {
         setText("Change branch element");
     }
 
@@ -365,13 +386,12 @@ public:
 
 private:
     void apply(BranchType type) {
-        if (itemAlive(m_branch)) {
-            m_branch->setBranchType(type);
+        if (BranchItem* branch = m_branch.get()) {
+            branch->setBranchType(type);
         }
     }
 
-    GraphScene* m_scene;
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
     BranchType m_old;
     BranchType m_new;
 };
@@ -381,7 +401,7 @@ public:
     SetNodeSystemTypeCommand(GraphScene* scene, NodeItem* node, SystemType oldType, SystemType newType,
                              SystemType oldDefault, SystemType newDefault)
         : m_scene(scene),
-          m_node(node),
+          m_node(scene, node),
           m_old(oldType),
           m_new(newType),
           m_oldDefault(oldDefault),
@@ -395,14 +415,14 @@ public:
 
 private:
     void apply(SystemType type, SystemType defaultType) {
-        if (itemAlive(m_node)) {
-            m_node->setSystemType(type);
+        if (NodeItem* node = m_node.get()) {
+            node->setSystemType(type);
         }
         m_scene->setDefaultSystemType(defaultType);
     }
 
     GraphScene* m_scene;
-    NodeItem* m_node;
+    ItemRef<NodeItem> m_node;
     SystemType m_old;
     SystemType m_new;
     SystemType m_oldDefault;
@@ -413,7 +433,7 @@ class SetBranchConstantCommand : public QUndoCommand {
 public:
     SetBranchConstantCommand(GraphScene* scene, BranchItem* branch, const QString& oldConstant,
                              const QString& newConstant)
-        : m_scene(scene), m_branch(branch), m_old(oldConstant), m_new(newConstant) {
+        : m_branch(scene, branch), m_old(oldConstant), m_new(newConstant) {
         setText("Change branch constant");
     }
 
@@ -434,23 +454,23 @@ public:
 
 private:
     void apply(const QString& constant) {
-        if (itemAlive(m_branch)) {
-            m_branch->setElementConstant(constant);
-            lg::applyConstantThroughNaming(m_branch);
+        if (BranchItem* branch = m_branch.get()) {
+            branch->setElementConstant(constant);
+            lg::applyConstantThroughNaming(branch);
         }
     }
 
-    GraphScene* m_scene;
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
     QString m_old;
     QString m_new;
 };
 
 class BranchPropertiesCommand : public QUndoCommand {
 public:
-    BranchPropertiesCommand(BranchItem* branch, bool oldActive, BranchType oldType, const QString& oldConstant,
-                            bool newActive, BranchType newType, const QString& newConstant)
-        : m_branch(branch),
+    BranchPropertiesCommand(GraphScene* scene, BranchItem* branch, bool oldActive, BranchType oldType,
+                            const QString& oldConstant, bool newActive, BranchType newType,
+                            const QString& newConstant)
+        : m_branch(scene, branch),
           m_oldActive(oldActive),
           m_oldType(oldType),
           m_oldConstant(oldConstant),
@@ -466,17 +486,18 @@ public:
 
 private:
     void apply(bool active, BranchType type, const QString& constant) {
-        if (!itemAlive(m_branch)) {
+        BranchItem* branch = m_branch.get();
+        if (!branch) {
             return;
         }
-        m_branch->setActive(active);
-        m_branch->setBranchType(type);
+        branch->setActive(active);
+        branch->setBranchType(type);
         if (!active) {
-            m_branch->setElementConstant(constant);
+            branch->setElementConstant(constant);
         }
     }
 
-    BranchItem* m_branch;
+    ItemRef<BranchItem> m_branch;
     bool m_oldActive;
     BranchType m_oldType;
     QString m_oldConstant;
@@ -487,8 +508,9 @@ private:
 
 class SetTwoPortNameCommand : public QUndoCommand {
 public:
-    SetTwoPortNameCommand(TwoPortItem* item, const QString& oldName, const QString& newName)
-        : m_item(item), m_old(oldName), m_new(newName) {
+    SetTwoPortNameCommand(GraphScene* scene, TwoPortItem* item, const QString& oldName,
+                          const QString& newName)
+        : m_item(scene, item), m_old(oldName), m_new(newName) {
         setText("Rename two-port");
     }
 
@@ -509,20 +531,20 @@ public:
 
 private:
     void apply(const QString& name) {
-        if (itemAlive(m_item)) {
-            m_item->setName(name);
+        if (TwoPortItem* item = m_item.get()) {
+            item->setName(name);
         }
     }
 
-    TwoPortItem* m_item;
+    ItemRef<TwoPortItem> m_item;
     QString m_old;
     QString m_new;
 };
 
 class SetTwoPortKindCommand : public QUndoCommand {
 public:
-    SetTwoPortKindCommand(TwoPortItem* item, TwoPortKind from, TwoPortKind to)
-        : m_item(item), m_from(from), m_to(to) {
+    SetTwoPortKindCommand(GraphScene* scene, TwoPortItem* item, TwoPortKind from, TwoPortKind to)
+        : m_item(scene, item), m_from(from), m_to(to) {
         setText("Change two-port type");
     }
 
@@ -532,24 +554,26 @@ public:
 
 private:
     void apply(TwoPortKind kind) {
-        if (!itemAlive(m_item)) {
+        TwoPortItem* item = m_item.get();
+        if (!item) {
             return;
         }
-        if (m_item->modulus() == lg::defaultTwoPortModulus(m_item->kind())) {
-            m_item->setModulus(lg::defaultTwoPortModulus(kind));
+        if (item->modulus() == lg::defaultTwoPortModulus(item->kind())) {
+            item->setModulus(lg::defaultTwoPortModulus(kind));
         }
-        m_item->setKind(kind);
+        item->setKind(kind);
     }
 
-    TwoPortItem* m_item;
+    ItemRef<TwoPortItem> m_item;
     TwoPortKind m_from;
     TwoPortKind m_to;
 };
 
 class SetTwoPortModulusCommand : public QUndoCommand {
 public:
-    SetTwoPortModulusCommand(TwoPortItem* item, const QString& oldModulus, const QString& newModulus)
-        : m_item(item), m_old(oldModulus), m_new(newModulus) {
+    SetTwoPortModulusCommand(GraphScene* scene, TwoPortItem* item, const QString& oldModulus,
+                             const QString& newModulus)
+        : m_item(scene, item), m_old(oldModulus), m_new(newModulus) {
         setText("Change two-port modulus");
     }
 
@@ -570,12 +594,12 @@ public:
 
 private:
     void apply(const QString& modulus) {
-        if (itemAlive(m_item)) {
-            m_item->setModulus(modulus);
+        if (TwoPortItem* item = m_item.get()) {
+            item->setModulus(modulus);
         }
     }
 
-    TwoPortItem* m_item;
+    ItemRef<TwoPortItem> m_item;
     QString m_old;
     QString m_new;
 };
@@ -598,16 +622,27 @@ private:
     std::vector<GraphScene::TwoPortSnapshot> m_twoPorts;
 };
 
+void applyNodePos(NodeItem* node, const QPointF& pos) {
+    if (!node) {
+        return;
+    }
+    node->setPos(pos);
+    for (BranchItem* branch : node->branches()) {
+        branch->updatePath();
+    }
+    node->refreshTwoPorts();
+}
+
 class MoveNodeCommand : public QUndoCommand {
 public:
-    MoveNodeCommand(NodeItem* node, const QPointF& oldPos, const QPointF& newPos)
-        : m_node(node), m_oldPos(oldPos), m_newPos(newPos) {
+    MoveNodeCommand(GraphScene* scene, NodeItem* node, const QPointF& oldPos, const QPointF& newPos)
+        : m_node(scene, node), m_oldPos(oldPos), m_newPos(newPos) {
         setText("Move node");
     }
 
-    void undo() override { apply(m_oldPos); }
+    void undo() override { applyNodePos(m_node.get(), m_oldPos); }
 
-    void redo() override { apply(m_newPos); }
+    void redo() override { applyNodePos(m_node.get(), m_newPos); }
 
     bool mergeWith(const QUndoCommand* other) override {
         const auto* cmd = dynamic_cast<const MoveNodeCommand*>(other);
@@ -621,28 +656,16 @@ public:
     int id() const override { return MoveNodeId; }
 
 private:
-    void apply(const QPointF& pos) {
-        if (!itemAlive(m_node)) {
-            return;
-        }
-        m_node->setPos(pos);
-        for (BranchItem* branch : m_node->branches()) {
-            branch->updatePath();
-        }
-        if (TwoPortItem* twoPort = m_node->twoPort()) {
-            twoPort->refresh();
-        }
-    }
-
-    NodeItem* m_node;
+    ItemRef<NodeItem> m_node;
     QPointF m_oldPos;
     QPointF m_newPos;
 };
 
 class MoveTwoPortCommand : public QUndoCommand {
 public:
-    MoveTwoPortCommand(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter)
-        : m_item(item), m_oldCenter(oldCenter), m_newCenter(newCenter) {
+    MoveTwoPortCommand(GraphScene* scene, TwoPortItem* item, const QPointF& oldCenter,
+                       const QPointF& newCenter)
+        : m_item(scene, item), m_oldCenter(oldCenter), m_newCenter(newCenter) {
         setText("Move two-port");
     }
 
@@ -663,27 +686,33 @@ public:
 
 private:
     void apply(const QPointF& targetCenter) {
-        if (itemAlive(m_item)) {
-            m_item->moveBy(targetCenter - m_item->center());
+        if (TwoPortItem* item = m_item.get()) {
+            item->moveBy(targetCenter - item->center());
         }
     }
 
-    TwoPortItem* m_item;
+    ItemRef<TwoPortItem> m_item;
     QPointF m_oldCenter;
     QPointF m_newCenter;
 };
 
-void applyNodePos(NodeItem* node, const QPointF& pos) {
-    if (!itemAlive(node)) {
-        return;
+TwoPortItem* sharedTwoPort(const NodeItem* a, const NodeItem* b) {
+    for (TwoPortItem* twoPort : a->twoPorts()) {
+        const auto& others = b->twoPorts();
+        if (std::find(others.begin(), others.end(), twoPort) != others.end()) {
+            return twoPort;
+        }
     }
-    node->setPos(pos);
-    for (BranchItem* branch : node->branches()) {
-        branch->updatePath();
+    return nullptr;
+}
+
+bool isReferencePort(const NodeItem* node) {
+    for (const TwoPortItem* twoPort : node->twoPorts()) {
+        if (node == twoPort->g1() || node == twoPort->g2()) {
+            return true;
+        }
     }
-    if (TwoPortItem* twoPort = node->twoPort()) {
-        twoPort->refresh();
-    }
+    return false;
 }
 
 struct MergeEndpoints {
@@ -692,81 +721,66 @@ struct MergeEndpoints {
 };
 
 MergeEndpoints resolveMergeKeepRemove(NodeItem* a, NodeItem* b) {
-    MergeEndpoints out{a, b};
-    TwoPortItem* tpA = a->twoPort();
-    TwoPortItem* tpB = b->twoPort();
-    if (tpA && tpA == tpB) {
-        out.keep = tpA->g1();
-        out.remove = a == out.keep ? b : a;
-    } else if (tpA && tpB && tpA != tpB) {
-        const int roleA = a == tpA->v1() ? 1 : a == tpA->v2() ? 2 : a == tpA->g1() ? 3 : a == tpA->g2() ? 4 : 0;
-        const int roleB = b == tpB->v1() ? 1 : b == tpB->v2() ? 2 : b == tpB->g1() ? 3 : b == tpB->g2() ? 4 : 0;
-        const bool acrossA = roleA >= 1 && roleA <= 2;
-        const bool acrossB = roleB >= 1 && roleB <= 2;
-        if (acrossA && !acrossB) {
-            out.keep = a;
-            out.remove = b;
-        } else if (acrossB && !acrossA) {
-            out.keep = b;
-            out.remove = a;
-        }
-    } else if (tpA && !tpB) {
-        out.keep = a;
-        out.remove = b;
-    } else if (tpB && !tpA) {
-        out.keep = b;
-        out.remove = a;
+    if (TwoPortItem* shared = sharedTwoPort(a, b)) {
+        // Collapsing a two-port's references: the g1 node survives.
+        return b == shared->g1() ? MergeEndpoints{b, a} : MergeEndpoints{a, b};
     }
-    return out;
+    const size_t ownersA = a->twoPorts().size();
+    const size_t ownersB = b->twoPorts().size();
+    // Keep the node that already belongs to more two-ports so a cascade junction keeps its identity.
+    return ownersB > ownersA ? MergeEndpoints{b, a} : MergeEndpoints{a, b};
 }
 
 class MergeNodesCommand : public QUndoCommand {
 public:
-    MergeNodesCommand(GraphScene* scene, NodeItem* keep, NodeItem* remove, bool keepWasDragged,
-                      const QPointF& keepOldPos)
+    MergeNodesCommand(GraphScene* scene, NodeItem* keep, NodeItem* remove, NodeItem* dragged,
+                      const QPointF& draggedOldPos)
         : m_scene(scene),
-          m_keep(keep),
-          m_remove(remove),
-          m_keepWasDragged(keepWasDragged),
-          m_keepOldPos(keepOldPos) {
+          m_keepId(keep->serialId()),
+          m_removeId(remove->serialId()),
+          m_keepWasDragged(dragged && dragged == keep),
+          m_removeWasDragged(dragged && dragged == remove),
+          m_draggedOldPos(draggedOldPos),
+          m_keepDropPos(keep->scenePos()) {
         setText("Combine nodes");
     }
 
     void undo() override {
-        if (!m_done) {
+        NodeItem* keep = m_scene->nodeById(m_keepId);
+        if (!keep) {
             return;
         }
-        m_scene->unmergeNodes(m_keep, m_undo);
+        m_scene->unmergeNodes(keep, m_undo);
         if (m_keepWasDragged) {
-            applyNodePos(m_keep, m_keepOldPos);
+            applyNodePos(keep, m_draggedOldPos);
         }
-        m_done = false;
     }
 
     void redo() override {
-        NodeItem* remove = m_done ? m_scene->nodeAtPos(m_undo.removePos) : m_remove;
-        if (!remove || remove == m_keep) {
+        NodeItem* keep = m_scene->nodeById(m_keepId);
+        NodeItem* remove = m_scene->nodeById(m_removeId);
+        if (!keep || !remove || keep == remove) {
             return;
         }
-        if (m_done && m_keepWasDragged) {
-            applyNodePos(m_keep, m_undo.removePos);
+        if (m_keepWasDragged) {
+            applyNodePos(keep, m_keepDropPos);
         }
-        if (m_done) {
-            m_scene->mergeNodes(m_keep, remove, nullptr);
-        } else {
-            m_scene->mergeNodes(m_keep, remove, &m_undo);
-            m_done = true;
+        m_scene->mergeNodes(keep, remove, &m_undo);
+        if (m_removeWasDragged) {
+            // Undo puts the dragged node back where the drag started, not on top of `keep`.
+            m_undo.remove.pos = m_draggedOldPos;
         }
     }
 
 private:
     GraphScene* m_scene;
-    NodeItem* m_keep;
-    NodeItem* m_remove;
+    int m_keepId;
+    int m_removeId;
     GraphScene::MergeUndoData m_undo;
-    bool m_keepWasDragged = false;
-    QPointF m_keepOldPos;
-    bool m_done = false;
+    bool m_keepWasDragged;
+    bool m_removeWasDragged;
+    QPointF m_draggedOldPos;
+    QPointF m_keepDropPos;
 };
 
 class SavedNormalTreesCommand : public QUndoCommand {
@@ -829,7 +843,7 @@ void GraphScene::pushSetNodeName(NodeItem* node, const QString& name) {
     if (!node || node->name() == name) {
         return;
     }
-    m_undoStack.push(new SetNodeNameCommand(node, node->name(), name));
+    m_undoStack.push(new SetNodeNameCommand(this, node, node->name(), name));
 }
 
 void GraphScene::pushSetNodeAcrossVariable(NodeItem* node, const QString& symbol) {
@@ -843,7 +857,7 @@ void GraphScene::pushSetNodeGround(NodeItem* node, bool ground) {
     if (!node || node->isGround() == ground) {
         return;
     }
-    m_undoStack.push(new SetNodeGroundCommand(node, node->isGround(), ground));
+    m_undoStack.push(new SetNodeGroundCommand(this, node, node->isGround(), ground));
 }
 
 void GraphScene::pushNodeProperties(NodeItem* node, bool oldGround, bool newGround, SystemType oldType,
@@ -867,14 +881,14 @@ void GraphScene::pushSetBranchName(BranchItem* branch, const QString& name) {
     if (!branch || branch->name() == name) {
         return;
     }
-    m_undoStack.push(new SetBranchNameCommand(branch, branch->name(), name));
+    m_undoStack.push(new SetBranchNameCommand(this, branch, branch->name(), name));
 }
 
 void GraphScene::pushSetBranchActive(BranchItem* branch, bool active) {
     if (!branch || branch->isActive() == active) {
         return;
     }
-    m_undoStack.push(new SetBranchActiveCommand(branch, branch->isActive(), active));
+    m_undoStack.push(new SetBranchActiveCommand(this, branch, branch->isActive(), active));
 }
 
 void GraphScene::pushSetBranchType(BranchItem* branch, BranchType type) {
@@ -918,28 +932,28 @@ void GraphScene::pushBranchProperties(BranchItem* branch, bool active, BranchTyp
         return;
     }
     m_undoStack.push(
-        new BranchPropertiesCommand(branch, oldActive, oldType, oldConstant, active, type, constant));
+        new BranchPropertiesCommand(this, branch, oldActive, oldType, oldConstant, active, type, constant));
 }
 
 void GraphScene::pushSetTwoPortName(TwoPortItem* item, const QString& name) {
     if (!item || item->name() == name) {
         return;
     }
-    m_undoStack.push(new SetTwoPortNameCommand(item, item->name(), name));
+    m_undoStack.push(new SetTwoPortNameCommand(this, item, item->name(), name));
 }
 
 void GraphScene::pushSetTwoPortKind(TwoPortItem* item, TwoPortKind kind) {
     if (!item || item->kind() == kind) {
         return;
     }
-    m_undoStack.push(new SetTwoPortKindCommand(item, item->kind(), kind));
+    m_undoStack.push(new SetTwoPortKindCommand(this, item, item->kind(), kind));
 }
 
 void GraphScene::pushSetTwoPortModulus(TwoPortItem* item, const QString& modulus) {
     if (!item || item->modulus() == modulus) {
         return;
     }
-    m_undoStack.push(new SetTwoPortModulusCommand(item, item->modulus(), modulus));
+    m_undoStack.push(new SetTwoPortModulusCommand(this, item, item->modulus(), modulus));
 }
 
 void GraphScene::pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& newPos) {
@@ -948,14 +962,14 @@ void GraphScene::pushMove(NodeItem* node, const QPointF& oldPos, const QPointF& 
     if (!node || from == to) {
         return;
     }
-    m_undoStack.push(new MoveNodeCommand(node, from, to));
+    m_undoStack.push(new MoveNodeCommand(this, node, from, to));
 }
 
 void GraphScene::pushMoveTwoPort(TwoPortItem* item, const QPointF& oldCenter, const QPointF& newCenter) {
     if (!item || oldCenter == newCenter) {
         return;
     }
-    m_undoStack.push(new MoveTwoPortCommand(item, oldCenter, newCenter));
+    m_undoStack.push(new MoveTwoPortCommand(this, item, oldCenter, newCenter));
 }
 
 bool GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged,
@@ -971,40 +985,41 @@ bool GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged,
     const MergeEndpoints endpoints = resolveMergeKeepRemove(a, b);
     NodeItem* keep = endpoints.keep;
     NodeItem* remove = endpoints.remove;
-    TwoPortItem* tpA = a->twoPort();
-    TwoPortItem* tpB = b->twoPort();
+    TwoPortItem* keepTp = keep->twoPort();
+    TwoPortItem* removeTp = remove->twoPort();
 
     QString warning;
-    TwoPortItem* tp = keep->twoPort() ? keep->twoPort() : remove->twoPort();
-    if (tpA && tpB && tpA == tpB) {
+    if (TwoPortItem* shared = sharedTwoPort(keep, remove)) {
         warning = tr("The two reference nodes of \"%1\" will share one node (3-terminal two-port).\n"
                      "External connections on \"%2\" move to the kept reference.\n\nContinue?")
-                      .arg(tp->name(), remove->name());
-    } else if (tpA && tpB && tpA != tpB) {
-        const bool refMerge = (a == tpA->g1() || a == tpA->g2()) && (b == tpB->g1() || b == tpB->g2());
-        if (refMerge) {
+                      .arg(shared->name(), remove->name());
+    } else if (keepTp && removeTp) {
+        if (isReferencePort(keep)) {
             warning = tr("Cascade: reference nodes \"%1\" (%2) and \"%3\" (%4) become one shared "
                          "junction.\n\nContinue?")
-                          .arg(remove->name(), tpB->name(), keep->name(), tpA->name());
+                          .arg(remove->name(), removeTp->name(), keep->name(), keepTp->name());
         } else {
             warning = tr("Cascade: \"%1\" (%2) and \"%3\" (%4) merge into one across junction.\n"
                          "Both two-ports share this node.\n\nContinue?")
-                          .arg(remove->name(), tpB->name(), keep->name(), tpA->name());
+                          .arg(remove->name(), removeTp->name(), keep->name(), keepTp->name());
         }
-    } else if (tp) {
-        const bool refMerge = (tpA && !tpB && (a == tpA->g1() || a == tpA->g2())) ||
-                              (tpB && !tpA && (b == tpB->g1() || b == tpB->g2()));
-        if (refMerge) {
+    } else if (keepTp) {
+        if (isReferencePort(keep)) {
             warning = tr("Reference \"%1\" will join \"%2\" (%3's reference).\n"
                          "Branches on \"%1\" attach to the kept node.\n\nContinue?")
-                          .arg(remove->name(), keep->name(), tp->name());
+                          .arg(remove->name(), keep->name(), keepTp->name());
         } else {
             warning = tr("Branches on \"%1\" will attach to \"%2\" (%3).\n\nContinue?")
-                          .arg(remove->name(), keep->name(), tp->name());
+                          .arg(remove->name(), keep->name(), keepTp->name());
         }
     } else {
         warning = tr("Branches on \"%1\" will move to \"%2\" and \"%1\" will be deleted.\n\nContinue?")
                       .arg(remove->name(), keep->name());
+    }
+    if (!keep->isGround() && !remove->isGround() && keep->systemType() != remove->systemType()) {
+        warning += tr("\n\nNote: \"%1\" is %2 and \"%3\" is %4; the combined node stays %4.")
+                       .arg(remove->name(), lg::systemTypeLabel(remove->systemType()), keep->name(),
+                            lg::systemTypeLabel(keep->systemType()));
     }
 
     if (views().isEmpty()) {
@@ -1015,9 +1030,7 @@ bool GraphScene::pushMergeNodes(NodeItem* a, NodeItem* b, NodeItem* dragged,
         return false;
     }
 
-    const bool keepWasDragged = dragged && keep == dragged;
-    m_undoStack.push(new MergeNodesCommand(this, keep, remove, keepWasDragged,
-                                            keepWasDragged ? draggedOldPos : QPointF()));
+    m_undoStack.push(new MergeNodesCommand(this, keep, remove, dragged, draggedOldPos));
     return true;
 }
 

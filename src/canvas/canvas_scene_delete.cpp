@@ -5,10 +5,9 @@
 #include <algorithm>
 #include <vector>
 
-namespace {
-
-GraphScene::NodeSnapshot nodeSnapshotFrom(const NodeItem* node) {
-    GraphScene::NodeSnapshot snap;
+GraphScene::NodeSnapshot GraphScene::snapshotOf(const NodeItem* node) {
+    NodeSnapshot snap;
+    snap.id = node->serialId();
     snap.pos = node->scenePos();
     snap.name = node->name();
     snap.ground = node->isGround();
@@ -17,8 +16,10 @@ GraphScene::NodeSnapshot nodeSnapshotFrom(const NodeItem* node) {
     return snap;
 }
 
-GraphScene::BranchSnapshot branchSnapshotFrom(const BranchItem* branch) {
-    GraphScene::BranchSnapshot snap;
+GraphScene::BranchSnapshot GraphScene::snapshotOf(const BranchItem* branch) {
+    BranchSnapshot snap;
+    snap.fromId = branch->from()->serialId();
+    snap.toId = branch->to()->serialId();
     snap.from = branch->from()->scenePos();
     snap.to = branch->to()->scenePos();
     snap.index = branch->index();
@@ -32,44 +33,99 @@ GraphScene::BranchSnapshot branchSnapshotFrom(const BranchItem* branch) {
     return snap;
 }
 
-GraphScene::TwoPortSnapshot snapshotFromTwoPort(const TwoPortItem* twoPort) {
-    GraphScene::TwoPortSnapshot snap;
-    snap.key = {twoPort->center(), twoPort->kind(), twoPort->modulus(), twoPort->name()};
-    snap.v1 = nodeSnapshotFrom(twoPort->v1());
-    snap.v2 = nodeSnapshotFrom(twoPort->v2());
-    snap.g1 = nodeSnapshotFrom(twoPort->g1());
-    snap.g2 = nodeSnapshotFrom(twoPort->g2());
-    snap.leftBranch = branchSnapshotFrom(twoPort->leftBranch());
-    snap.rightBranch = branchSnapshotFrom(twoPort->rightBranch());
+GraphScene::TwoPortSnapshot GraphScene::snapshotOf(const TwoPortItem* twoPort) {
+    TwoPortSnapshot snap;
+    snap.key = {twoPort->serialId(), twoPort->center(), twoPort->kind(), twoPort->modulus(),
+                twoPort->name()};
+    snap.v1 = snapshotOf(twoPort->v1());
+    snap.v2 = snapshotOf(twoPort->v2());
+    snap.g1 = snapshotOf(twoPort->g1());
+    snap.g2 = snapshotOf(twoPort->g2());
+    snap.leftBranch = snapshotOf(twoPort->leftBranch());
+    snap.rightBranch = snapshotOf(twoPort->rightBranch());
     snap.sharedRef = twoPort->hasSharedReference();
     return snap;
 }
 
-}  // namespace
+NodeItem* GraphScene::createNodeFromSnapshot(const NodeSnapshot& snap) {
+    NodeItem* node = createNode(snap.pos);
+    if (!node) {
+        return nullptr;
+    }
+    if (snap.id > 0) {
+        node->setSerialId(snap.id);
+        m_nextNodeId = std::max(m_nextNodeId, snap.id + 1);
+    }
+    node->setGround(snap.ground);
+    // Domain first: it only rewrites auto-generated across names, then the saved name wins.
+    node->setSystemType(snap.systemType);
+    if (!snap.ground) {
+        node->setAcrossVariable(snap.across);
+    }
+    node->setName(snap.name);
+    return node;
+}
 
-void GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
-    NodeItem* v1 = getOrCreateNodeAt(this, data.v1);
-    NodeItem* v2 = getOrCreateNodeAt(this, data.v2);
-    NodeItem* g1 = getOrCreateNodeAt(this, data.g1);
-    NodeItem* g2 = data.sharedRef ? g1 : getOrCreateNodeAt(this, data.g2);
+BranchItem* GraphScene::createBranchFromSnapshot(const BranchSnapshot& snap) {
+    NodeItem* a = snap.fromId > 0 ? nodeById(snap.fromId) : nodeAtPos(snap.from);
+    NodeItem* b = snap.toId > 0 ? nodeById(snap.toId) : nodeAtPos(snap.to);
+    if (!a || !b) {
+        return nullptr;
+    }
+    BranchItem* branch = createBranch(a, b, snap.bow);
+    if (!branch) {
+        return nullptr;
+    }
+    BranchLoadData load;
+    load.snap = snap;
+    load.serialId = snap.serialId;
+    load.sourceInputId = snap.sourceInputId;
+    applyLoadedBranchData(this, branch, load);
+    if (snap.serialId >= m_nextBranchId) {
+        m_nextBranchId = snap.serialId + 1;
+    }
+    return branch;
+}
+
+TwoPortItem* GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
+    // Ports still present (shared with a cascaded sibling) are reused by id, the rest are re-created.
+    const auto nodeFor = [&](const NodeSnapshot& snap) -> NodeItem* {
+        if (NodeItem* existing = nodeById(snap.id)) {
+            return existing;
+        }
+        return createNodeFromSnapshot(snap);
+    };
+    NodeItem* v1 = nodeFor(data.v1);
+    NodeItem* v2 = nodeFor(data.v2);
+    NodeItem* g1 = nodeFor(data.g1);
+    NodeItem* g2 = data.sharedRef ? g1 : nodeFor(data.g2);
     if (!v1 || !v2 || !g1 || !g2) {
-        return;
+        return nullptr;
     }
-    if (TwoPortItem* twoPort = createTwoPortFromPorts(v1, v2, g1, g2, data.key.kind, data.key.modulus,
-                                                      data.key.name)) {
-        const auto apply = [&](BranchItem* branch, const BranchSnapshot& snap) {
-            BranchLoadData load;
-            load.snap = snap;
-            load.serialId = snap.serialId;
-            load.sourceInputId = snap.sourceInputId;
-            applyLoadedBranchData(this, branch, load);
-            if (snap.serialId >= m_nextBranchId) {
-                m_nextBranchId = snap.serialId + 1;
-            }
-        };
-        apply(twoPort->leftBranch(), data.leftBranch);
-        apply(twoPort->rightBranch(), data.rightBranch);
+    TwoPortItem* twoPort =
+        createTwoPortFromPorts(v1, v2, g1, g2, data.key.kind, data.key.modulus, data.key.name);
+    if (!twoPort) {
+        return nullptr;
     }
+    if (data.key.id > 0) {
+        twoPort->setSerialId(data.key.id);
+        m_nextTwoPortId = std::max(m_nextTwoPortId, data.key.id + 1);
+    }
+    const auto apply = [&](BranchItem* branch, const BranchSnapshot& snap) {
+        BranchLoadData load;
+        load.snap = snap;
+        load.serialId = snap.serialId;
+        load.sourceInputId = snap.sourceInputId;
+        applyLoadedBranchData(this, branch, load);
+        matchPortBranchDirection(this, branch, snap);
+        if (snap.serialId >= m_nextBranchId) {
+            m_nextBranchId = snap.serialId + 1;
+        }
+    };
+    apply(twoPort->leftBranch(), data.leftBranch);
+    apply(twoPort->rightBranch(), data.rightBranch);
+    twoPort->refresh();
+    return twoPort;
 }
 
 void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vector<BranchSnapshot>& branches,
@@ -92,11 +148,9 @@ void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vecto
                 nodesToDelete.insert(node);
             }
         } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
-            if (TwoPortItem* twoPort = twoPortFor(branch)) {
-                if (isInternalTwoPortBranch(twoPort, branch)) {
+            if (branch->isTwoPortPort()) {
+                if (TwoPortItem* twoPort = twoPortFor(branch)) {
                     twoPortsToDelete.insert(twoPort);
-                } else {
-                    branchesToDelete.insert(branch);
                 }
             } else {
                 branchesToDelete.insert(branch);
@@ -110,41 +164,41 @@ void GraphScene::captureDeleteState(std::vector<NodeSnapshot>& nodes, std::vecto
         }
     }
 
+    // A port node goes with its two-port unless a surviving sibling still owns it; every external
+    // branch on such a node is destroyed too, so it must be in the snapshot for undo.
     for (TwoPortItem* twoPort : twoPortsToDelete) {
-        twoPorts.push_back(snapshotFromTwoPort(twoPort));
+        for (NodeItem* port : {twoPort->v1(), twoPort->v2(), twoPort->g1(), twoPort->g2()}) {
+            const bool survives =
+                std::any_of(port->twoPorts().begin(), port->twoPorts().end(),
+                            [&](TwoPortItem* owner) { return !twoPortsToDelete.contains(owner); });
+            if (survives) {
+                continue;
+            }
+            for (BranchItem* branch : port->branches()) {
+                if (!branch->isTwoPortPort()) {
+                    branchesToDelete.insert(branch);
+                }
+            }
+        }
+    }
+
+    // Two-ports are restored in this order; deterministic ids keep cascades re-linking the same way.
+    std::vector<TwoPortItem*> orderedTwoPorts(twoPortsToDelete.begin(), twoPortsToDelete.end());
+    std::sort(orderedTwoPorts.begin(), orderedTwoPorts.end(),
+              [](const TwoPortItem* a, const TwoPortItem* b) { return a->serialId() < b->serialId(); });
+    for (TwoPortItem* twoPort : orderedTwoPorts) {
+        twoPorts.push_back(snapshotOf(twoPort));
     }
 
     for (NodeItem* node : nodesToDelete) {
-        if (node->twoPort()) {
-            continue;
-        }
-        NodeSnapshot snap;
-        snap.pos = node->scenePos();
-        snap.name = node->name();
-        snap.ground = node->isGround();
-        snap.across = node->isGround() ? QStringLiteral("0") : node->acrossVariable();
-        snap.systemType = node->systemType();
-        nodes.push_back(snap);
+        nodes.push_back(snapshotOf(node));
     }
 
     for (BranchItem* branch : branchesToDelete) {
-        if (TwoPortItem* twoPort = twoPortFor(branch)) {
-            if (isInternalTwoPortBranch(twoPort, branch)) {
-                continue;
-            }
+        if (branch->isTwoPortPort()) {
+            continue;
         }
-        BranchSnapshot snap;
-        snap.from = branch->from()->scenePos();
-        snap.to = branch->to()->scenePos();
-        snap.index = branch->index();
-        snap.name = branch->name();
-        snap.active = branch->isActive();
-        snap.type = branch->branchType();
-        snap.constant = branch->elementConstant();
-        snap.bow = branch->bow();
-        snap.serialId = branch->serialId();
-        snap.sourceInputId = branch->sourceInputId();
-        branches.push_back(snap);
+        branches.push_back(snapshotOf(branch));
     }
 }
 
@@ -155,42 +209,20 @@ void GraphScene::executeDelete(const std::vector<NodeSnapshot>& nodes,
     clearSelection();
 
     for (const TwoPortSnapshot& snap : twoPorts) {
-        if (TwoPortItem* item = twoPortAtCenter(snap.key.center)) {
+        if (TwoPortItem* item = twoPortById(snap.key.id)) {
             purgeTwoPort(item);
         }
     }
 
-    const auto deletingNode = [&](const QPointF& pos) {
-        return std::any_of(nodes.begin(), nodes.end(),
-                           [&](const NodeSnapshot& snap) { return snap.pos == pos; });
-    };
-
-    std::vector<BranchSnapshot> loneBranches;
     for (const BranchSnapshot& snap : branches) {
-        if (deletingNode(snap.from) || deletingNode(snap.to)) {
-            continue;
-        }
-        loneBranches.push_back(snap);
-    }
-    std::sort(loneBranches.begin(), loneBranches.end(),
-              [](const BranchSnapshot& a, const BranchSnapshot& b) { return a.index > b.index; });
-
-    for (const BranchSnapshot& snap : loneBranches) {
-        NodeItem* a = nodeAtPos(snap.from);
-        NodeItem* b = nodeAtPos(snap.to);
-        if (!a || !b) {
-            continue;
-        }
-        for (BranchItem* branch : branchesBetween(a, b)) {
-            if (branch->index() == snap.index) {
-                destroyBranch(branch);
-                break;
-            }
+        BranchItem* branch = branchBySerialId(snap.serialId);
+        if (branch && !branch->isTwoPortPort()) {
+            destroyBranch(branch);
         }
     }
 
     for (const NodeSnapshot& snap : nodes) {
-        if (NodeItem* node = nodeAtPos(snap.pos)) {
+        if (NodeItem* node = nodeById(snap.id)) {
             destroyNode(node);
         }
     }
@@ -203,17 +235,9 @@ void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
     for (const TwoPortSnapshot& snap : twoPorts) {
         restoreTwoPortSnapshot(snap);
     }
-    m_suppressGraphChange = false;
 
     for (const NodeSnapshot& snap : nodes) {
-        if (NodeItem* node = createNode(snap.pos)) {
-            node->setName(snap.name);
-            node->setGround(snap.ground);
-            if (!snap.ground) {
-                node->setAcrossVariable(snap.across);
-                node->setSystemType(snap.systemType);
-            }
-        }
+        createNodeFromSnapshot(snap);
     }
 
     std::vector<BranchSnapshot> sortedBranches = branches;
@@ -221,29 +245,8 @@ void GraphScene::restoreDelete(const std::vector<NodeSnapshot>& nodes,
               [](const BranchSnapshot& a, const BranchSnapshot& b) { return a.index < b.index; });
 
     for (const BranchSnapshot& snap : sortedBranches) {
-        NodeItem* a = nodeAtPos(snap.from);
-        NodeItem* b = nodeAtPos(snap.to);
-        if (!a || !b) {
-            continue;
-        }
-        if (BranchItem* branch = createBranch(a, b, snap.bow)) {
-            if (snap.serialId > 0) {
-                branch->setSerialId(snap.serialId);
-                if (snap.serialId >= m_nextBranchId) {
-                    m_nextBranchId = snap.serialId + 1;
-                }
-            }
-            branch->setName(snap.name);
-            branch->setBranchType(snap.type);
-            if (snap.sourceInputId > 0) {
-                branch->setSourceInputId(snap.sourceInputId);
-                registerSourceInputId(snap.sourceInputId);
-            }
-            branch->setActive(snap.active);
-            if (!snap.active) {
-                branch->setElementConstant(snap.constant);
-            }
-        }
+        createBranchFromSnapshot(snap);
     }
+    m_suppressGraphChange = false;
     notifyGraphChanged();
 }

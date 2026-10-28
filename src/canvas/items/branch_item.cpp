@@ -161,8 +161,12 @@ QRectF BranchItem::boundingRect() const {
     const QString label = branchAnnotationLabel(this);
     QFont font;
     font.setPointSizeF(9.0);
-    rect |= constantLabelRect(arrow.tip, arrow.tangent, label, font);
+    rect |= constantLabelRect(arrow.tip, arrow.tangent, label, font, labelClearance());
     return rect.marginsAdded(QMarginsF(2.0, 2.0, 2.0, 2.0));
+}
+
+qreal BranchItem::labelClearance() const {
+    return m_active ? kSourceLabelClearance : kPassiveLabelClearance;
 }
 
 QPainterPath BranchItem::shape() const {
@@ -201,7 +205,7 @@ void BranchItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     painter->setFont(font);
     painter->setPen(isSelected() ? kSelectionColor : itemInk(widget));
 
-    const QRectF textRect = constantLabelRect(arrow.tip, arrow.tangent, label, font);
+    const QRectF textRect = constantLabelRect(arrow.tip, arrow.tangent, label, font, labelClearance());
     painter->save();
     painter->setClipping(false);
     painter->drawText(textRect, Qt::AlignCenter, label);

@@ -19,6 +19,13 @@ GraphScene::GraphScene(QObject* parent) : QGraphicsScene(-2000, -2000, 4000, 400
 void GraphScene::notifyGraphChanged() {
     clearNormalTreeHighlight();
     if (!m_suppressGraphChange) {
+        // Port bows depend on neighbouring two-ports and external branches; re-derive them all so the
+        // layout is a function of the graph, not of the edit history (undo must look like before).
+        for (QGraphicsItem* item : items()) {
+            if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
+                twoPort->applyInternalBranchBows();
+            }
+        }
         emit graphChanged();
     }
 }
@@ -36,6 +43,7 @@ void GraphScene::registerSourceInputId(int id) {
 NodeItem* GraphScene::createNode(const QPointF& center) {
     const int id = m_nextNodeId++;
     auto* node = new NodeItem;
+    node->setSerialId(id);
     node->setName(tr("Node %1").arg(id));
     node->setAcrossVariable(lg::defaultNodeAcrossName(id, m_defaultSystemType));
     node->setSystemType(m_defaultSystemType);
@@ -114,16 +122,17 @@ TwoPortItem* GraphScene::createTwoPort(const QPointF& center, TwoPortKind kind, 
         name.isEmpty() ? (kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
                                                            : tr("Gyrator %1").arg(m_nextTwoPortId))
                        : name;
-    ++m_nextTwoPortId;
+    const int twoPortId = m_nextTwoPortId++;
 
     auto* item = new TwoPortItem(kind, c, v1, v2, g1, g2, left, right);
+    item->setSerialId(twoPortId);
     item->setName(twoPortName);
     item->applyPortDefaults();
     if (!modulus.isEmpty()) {
         item->setModulus(modulus);
     }
     for (NodeItem* node : {v1, v2, g1, g2}) {
-        node->setTwoPort(item);
+        node->attachTwoPort(item);
     }
     addItem(item);
     item->refresh();
@@ -163,17 +172,16 @@ TwoPortItem* GraphScene::createTwoPortFromPorts(NodeItem* v1, NodeItem* v2, Node
         name.isEmpty() ? (kind == TwoPortKind::Transformer ? tr("Transformer %1").arg(m_nextTwoPortId)
                                                            : tr("Gyrator %1").arg(m_nextTwoPortId))
                        : name;
-    ++m_nextTwoPortId;
+    const int twoPortId = m_nextTwoPortId++;
 
     auto* item = new TwoPortItem(kind, c, v1, v2, g1, g2, left, right);
+    item->setSerialId(twoPortId);
     item->setName(twoPortName);
     if (!modulus.isEmpty()) {
         item->setModulus(modulus);
     }
     for (NodeItem* node : {v1, v2, g1, g2}) {
-        if (node && !node->twoPort()) {
-            node->setTwoPort(item);
-        }
+        node->attachTwoPort(item);
     }
     addItem(item);
     item->refresh();
@@ -190,9 +198,7 @@ void GraphScene::destroyTwoPort(TwoPortItem* item) {
 
     for (NodeItem* node : {item->v1(), item->v2(), item->g1(), item->g2()}) {
         if (node) {
-            if (node->twoPort() == item) {
-                node->setTwoPort(nullptr);
-            }
+            node->detachTwoPort(item);
             node->setSelected(false);
         }
     }
@@ -235,13 +241,16 @@ void GraphScene::purgeTwoPort(TwoPortItem* item) {
         }
     }
     destroyTwoPort(item);
+    // Nodes shared with a cascaded sibling stay (still owned by it); the rest go with the two-port.
     QSet<TwoPortItem*> survivors;
     for (NodeItem* node : portNodes) {
         if (node->scene() != this) {
             continue;
         }
-        if (TwoPortItem* other = twoPortForNode(node)) {
-            survivors.insert(other);
+        if (!node->twoPorts().empty()) {
+            for (TwoPortItem* other : node->twoPorts()) {
+                survivors.insert(other);
+            }
             continue;
         }
         destroyNode(node);
@@ -256,6 +265,11 @@ void GraphScene::flipBranch(BranchItem* branch) {
         return;
     }
     branch->flip();
+    if (branch->isTwoPortPort()) {
+        if (TwoPortItem* twoPort = twoPortFor(branch)) {
+            twoPort->refresh();
+        }
+    }
 }
 
 void GraphScene::destroyBranch(BranchItem* branch) {
@@ -297,25 +311,6 @@ void GraphScene::destroyBranch(BranchItem* branch) {
     }
 }
 
-void GraphScene::destroyBranchAt(const BranchKey& key) {
-    NodeItem* a = nodeAtPos(key.from);
-    NodeItem* b = nodeAtPos(key.to);
-    if (!a || !b) {
-        return;
-    }
-    for (BranchItem* branch : branchesBetween(a, b)) {
-        if (branch->index() == key.index) {
-            if (TwoPortItem* twoPort = twoPortFor(branch)) {
-                if (isInternalTwoPortBranch(twoPort, branch)) {
-                    return;
-                }
-            }
-            destroyBranch(branch);
-            return;
-        }
-    }
-}
-
 NodeItem* GraphScene::nodeAtPos(const QPointF& pos) const {
     for (QGraphicsItem* item : items()) {
         auto* node = dynamic_cast<NodeItem*>(item);
@@ -326,11 +321,26 @@ NodeItem* GraphScene::nodeAtPos(const QPointF& pos) const {
     return nullptr;
 }
 
-TwoPortItem* GraphScene::twoPortAtCenter(const QPointF& center) const {
-    const QPointF snapped = snap(center);
+NodeItem* GraphScene::nodeById(int id) const {
+    if (id <= 0) {
+        return nullptr;
+    }
+    for (QGraphicsItem* item : items()) {
+        auto* node = dynamic_cast<NodeItem*>(item);
+        if (node && node->serialId() == id) {
+            return node;
+        }
+    }
+    return nullptr;
+}
+
+TwoPortItem* GraphScene::twoPortById(int id) const {
+    if (id <= 0) {
+        return nullptr;
+    }
     for (QGraphicsItem* item : items()) {
         auto* twoPort = dynamic_cast<TwoPortItem*>(item);
-        if (twoPort && twoPort->center() == snapped) {
+        if (twoPort && twoPort->serialId() == id) {
             return twoPort;
         }
     }
@@ -364,16 +374,12 @@ TwoPortItem* GraphScene::twoPortForNode(const NodeItem* node, TwoPortItem* prefe
     }
 
     QVector<TwoPortItem*> matches;
-    for (QGraphicsItem* sceneItem : items()) {
-        if (auto* twoPort = dynamic_cast<TwoPortItem*>(sceneItem)) {
-            if (isTwoPortPortNode(twoPort, node)) {
-                matches.push_back(twoPort);
-            }
-        }
+    for (TwoPortItem* twoPort : node->twoPorts()) {
+        matches.push_back(twoPort);
     }
 
     if (matches.isEmpty()) {
-        return node->twoPort();
+        return nullptr;
     }
     if (matches.size() == 1) {
         return matches.front();

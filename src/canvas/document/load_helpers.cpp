@@ -93,19 +93,32 @@ void applyLoadedBranchData(GraphScene* scene, BranchItem* branch, const BranchLo
         return;
     }
     branch->setBow(data.snap.bow);
-    branch->setActive(data.snap.active);
     if (data.serialId > 0) {
         branch->setSerialId(data.serialId);
     }
+    // Before setActive(): an active branch without an id would otherwise allocate a fresh source input.
     if (data.sourceInputId > 0) {
         branch->setSourceInputId(data.sourceInputId);
         scene->registerSourceInputId(data.sourceInputId);
     }
+    branch->setActive(data.snap.active);
     if (!branch->isActive()) {
         branch->setElementConstant(data.snap.constant);
     }
     branch->setBranchType(data.snap.type);
     branch->setName(data.snap.name);
+}
+
+void matchPortBranchDirection(GraphScene* scene, BranchItem* branch, const GraphScene::BranchSnapshot& snap) {
+    if (!scene || !branch) {
+        return;
+    }
+    const bool reversed = snap.fromId > 0 ? snap.fromId == branch->to()->serialId()
+                                          : snap.from == branch->to()->scenePos() &&
+                                                snap.from != branch->from()->scenePos();
+    if (reversed) {
+        scene->flipBranch(branch);
+    }
 }
 
 BranchLoadData branchFromJson(const QJsonObject& obj) {
@@ -211,16 +224,7 @@ NodeItem* getOrCreateNodeAt(GraphScene* scene, const GraphScene::NodeSnapshot& s
     if (NodeItem* existing = findNodeAt(scene, snap.pos)) {
         return existing;
     }
-    if (NodeItem* node = scene->createNode(snap.pos)) {
-        node->setName(snap.name);
-        node->setGround(snap.ground);
-        if (!snap.ground) {
-            node->setAcrossVariable(snap.across);
-            node->setSystemType(snap.systemType);
-        }
-        return node;
-    }
-    return nullptr;
+    return scene->createNodeFromSnapshot(snap);
 }
 
 GraphScene::NodeSnapshot nodeSnapshotAt(const GraphScene* scene, const QPointF& pos,

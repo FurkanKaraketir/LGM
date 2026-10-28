@@ -188,3 +188,25 @@ add_custom_command(TARGET LGM POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/Examples" "${_lgm_examples_dest}"
     COMMENT "Copying example graphs")
+
+# Headless canvas regression tests (topology, merging, delete, undo/redo fuzz). Off by default.
+option(LGM_BUILD_TESTS "Build the canvas regression tests" OFF)
+if(LGM_BUILD_TESTS)
+    get_target_property(_lgm_sources LGM SOURCES)
+    list(FILTER _lgm_sources INCLUDE REGEX "^src/(canvas|model)/")
+    add_executable(lgm_canvas_tests tests/canvas_undo_test.cpp ${_lgm_sources})
+    target_link_libraries(lgm_canvas_tests PRIVATE Qt6::Widgets symengine Boost::multiprecision)
+    target_include_directories(lgm_canvas_tests PRIVATE
+        src
+        src/canvas
+        src/canvas/items
+        src/model
+        ${symengine_SOURCE_DIR}
+        ${CMAKE_BINARY_DIR}/_deps/symengine-build
+    )
+    target_compile_definitions(lgm_canvas_tests PRIVATE
+        "EXAMPLES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Examples\"")
+    enable_testing()
+    add_test(NAME canvas_undo COMMAND lgm_canvas_tests)
+    set_tests_properties(canvas_undo PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

@@ -5,6 +5,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
+
 void GraphScene::clearDocument() {
     const bool blocked = blockSignals(true);
     m_suppressGraphChange = true;
@@ -268,6 +270,16 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
     m_showGrid = settings.value(QStringLiteral("showGrid")).toBool(true);
     m_gridSpacing = settings.value(QStringLiteral("gridSpacing")).toDouble(20.0);
 
+    // Reserve every serial id in the file first: a branch saved without one gets a fresh id that
+    // must not collide with an id loaded later (saved normal trees reference these ids).
+    for (const TwoPortLoadData& data : twoPorts) {
+        m_nextBranchId = std::max({m_nextBranchId, data.leftBranch.serialId + 1,
+                                   data.rightBranch.serialId + 1});
+    }
+    for (const BranchLoadData& data : branches) {
+        m_nextBranchId = std::max(m_nextBranchId, data.serialId + 1);
+    }
+
     m_suppressGraphChange = true;
     for (const TwoPortLoadData& data : twoPorts) {
         NodeItem* v1 = getOrCreateNodeAt(this, data.v1);
@@ -281,12 +293,9 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
                 createTwoPortFromPorts(v1, v2, g1, g2, data.key.kind, data.key.modulus, data.key.name)) {
             applyLoadedBranchData(this, twoPort->leftBranch(), data.leftBranch);
             applyLoadedBranchData(this, twoPort->rightBranch(), data.rightBranch);
-            if (data.leftBranch.serialId >= m_nextBranchId) {
-                m_nextBranchId = data.leftBranch.serialId + 1;
-            }
-            if (data.rightBranch.serialId >= m_nextBranchId) {
-                m_nextBranchId = data.rightBranch.serialId + 1;
-            }
+            matchPortBranchDirection(this, twoPort->leftBranch(), data.leftBranch.snap);
+            matchPortBranchDirection(this, twoPort->rightBranch(), data.rightBranch.snap);
+            twoPort->refresh();
         }
     }
 
@@ -294,14 +303,7 @@ bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
         if (findNodeAt(this, snap.pos)) {
             continue;
         }
-        if (NodeItem* node = createNode(snap.pos)) {
-            node->setName(snap.name);
-            node->setGround(snap.ground);
-            if (!snap.ground) {
-                node->setAcrossVariable(snap.across);
-                node->setSystemType(snap.systemType);
-            }
-        }
+        createNodeFromSnapshot(snap);
     }
 
     ensureSceneNodesForBranchEndpoints(this, branches);
