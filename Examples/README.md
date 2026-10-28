@@ -23,4 +23,4 @@ Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or dr
 
 1. **File → New**, pick a domain, draw the graph.
 2. **File → Save As** → `MyModel.lgm`.
-3. Keep files in this folder or anywhere on disk — the format is portable JSON.
+3. Keep files in this folder or anywhere on disk — the format is portable JSON (version 4, see [docs/canvas.md](../docs/canvas.md#document-format-lgm)).

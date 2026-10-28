@@ -1,5 +1,6 @@
 #include "canvas.h"
 
+#include <algorithm>
 #include <unordered_set>
 
 void GraphScene::clearNormalTreeHighlight() {
@@ -52,6 +53,13 @@ void GraphScene::collectGraphItems(std::vector<NodeItem*>& nodes, std::vector<Br
             twoPorts.push_back(twoPort);
         }
     }
+    // Analysis tie-breaks follow this order. Newest-first by id is what scene stacking order gives
+    // while editing; pinning it to ids keeps results independent of how items were (re-)created by
+    // load, undo/redo or delete/restore.
+    const auto byId = [](const auto* a, const auto* b) { return a->serialId() > b->serialId(); };
+    std::sort(nodes.begin(), nodes.end(), byId);
+    std::sort(branches.begin(), branches.end(), byId);
+    std::sort(twoPorts.begin(), twoPorts.end(), byId);
 }
 
 void GraphScene::refreshManualNormalTreeValidation() {

@@ -1,126 +1,131 @@
 {
     "branches": [
         {
-            "active": false,
-            "bow": 0,
-            "constant": "B",
-            "from": {
-                "x": 140,
-                "y": -100
-            },
-            "index": 0,
-            "name": "T_B",
-            "serialId": 7,
-            "sourceInputId": 0,
-            "to": {
-                "x": 140,
-                "y": 20
-            },
-            "type": 2
+            "from": 1,
+            "id": 1,
+            "name": "i1",
+            "to": 3,
+            "type": "T"
         },
         {
-            "active": false,
-            "bow": 0,
-            "constant": "J",
-            "from": {
-                "x": 140,
-                "y": -100
-            },
-            "index": 1,
-            "name": "T_J",
-            "serialId": 8,
-            "sourceInputId": 0,
-            "to": {
-                "x": 140,
-                "y": 20
-            },
-            "type": 0
+            "from": 2,
+            "id": 2,
+            "name": "T2",
+            "to": 4,
+            "type": "T"
         },
         {
-            "active": false,
-            "bow": 0,
+            "constant": "R",
+            "from": 5,
+            "id": 5,
+            "name": "i_R",
+            "to": 6,
+            "type": "D"
+        },
+        {
             "constant": "L",
-            "from": {
-                "x": -40,
-                "y": -120
-            },
-            "index": 0,
+            "from": 6,
+            "id": 6,
             "name": "i_L",
-            "serialId": 6,
-            "sourceInputId": 0,
-            "to": {
-                "x": 20,
-                "y": -100
-            },
-            "type": 1
+            "to": 1,
+            "type": "T"
+        },
+        {
+            "constant": "B",
+            "from": 2,
+            "id": 7,
+            "name": "T_B",
+            "to": 4,
+            "type": "D"
+        },
+        {
+            "constant": "J",
+            "from": 2,
+            "id": 8,
+            "name": "T_J",
+            "to": 4,
+            "type": "A"
         },
         {
             "active": true,
-            "bow": 0,
-            "constant": "1",
-            "from": {
-                "x": -100,
-                "y": -100
-            },
-            "index": 0,
+            "from": 5,
+            "id": 9,
             "name": "Vs1",
-            "serialId": 9,
             "sourceInputId": 1,
-            "to": {
-                "x": 20,
-                "y": 20
-            },
-            "type": 0
-        },
-        {
-            "active": false,
-            "bow": 0,
-            "constant": "R",
-            "from": {
-                "x": -100,
-                "y": -100
-            },
-            "index": 0,
-            "name": "i_R",
-            "serialId": 5,
-            "sourceInputId": 0,
-            "to": {
-                "x": -40,
-                "y": -120
-            },
-            "type": 2
+            "to": 3,
+            "type": "A"
         }
     ],
     "format": "LGM",
     "nodes": [
         {
+            "across": "V3",
+            "id": 1,
+            "name": "v₁",
+            "pos": {
+                "x": 20,
+                "y": -100
+            },
+            "systemType": "electrical"
+        },
+        {
+            "across": "OmegaJ",
+            "id": 2,
+            "name": "v₂",
+            "pos": {
+                "x": 140,
+                "y": -100
+            },
+            "systemType": "rotational"
+        },
+        {
+            "ground": true,
+            "id": 3,
+            "name": "ref₁",
+            "pos": {
+                "x": 20,
+                "y": 20
+            },
+            "systemType": "rotational"
+        },
+        {
+            "ground": true,
+            "id": 4,
+            "name": "ref₂",
+            "pos": {
+                "x": 140,
+                "y": 20
+            },
+            "systemType": "rotational"
+        },
+        {
             "across": "V1",
-            "ground": false,
+            "id": 5,
             "name": "Node 1",
             "pos": {
                 "x": -100,
                 "y": -100
             },
-            "systemType": 1
+            "systemType": "electrical"
         },
         {
             "across": "V2",
-            "ground": false,
+            "id": 6,
             "name": "Node 2",
             "pos": {
                 "x": -40,
                 "y": -120
             },
-            "systemType": 1
+            "systemType": "electrical"
         }
     ],
     "normalTrees": [
     ],
     "settings": {
-        "defaultSystemType": 4,
+        "defaultSystemType": "rotational",
         "gridSpacing": 20,
-        "nextBranchId": 13,
-        "nextNodeId": 11,
+        "nextBranchId": 17,
+        "nextNodeId": 13,
         "nextSourceInputId": 2,
         "nextTwoPortId": 3,
         "showGrid": true,
@@ -128,90 +133,17 @@
     },
     "twoPorts": [
         {
-            "center": {
-                "x": 80,
-                "y": -40
-            },
-            "g1": {
-                "across": "0",
-                "ground": true,
-                "name": "ref₁",
-                "pos": {
-                    "x": 20,
-                    "y": 20
-                },
-                "systemType": 4
-            },
-            "g2": {
-                "across": "0",
-                "ground": true,
-                "name": "ref₂",
-                "pos": {
-                    "x": 140,
-                    "y": 20
-                },
-                "systemType": 4
-            },
-            "kind": 0,
-            "leftBranch": {
-                "active": false,
-                "bow": 60,
-                "constant": "1",
-                "from": {
-                    "x": 20,
-                    "y": -100
-                },
-                "index": 0,
-                "name": "i1",
-                "serialId": 1,
-                "sourceInputId": 0,
-                "to": {
-                    "x": 20,
-                    "y": 20
-                },
-                "type": 1
-            },
+            "g1": 3,
+            "g2": 4,
+            "id": 1,
+            "kind": "transformer",
+            "leftBranch": 1,
             "modulus": "TF",
             "name": "Transformer 1",
-            "rightBranch": {
-                "active": false,
-                "bow": -92,
-                "constant": "1",
-                "from": {
-                    "x": 140,
-                    "y": -100
-                },
-                "index": 2,
-                "name": "T2",
-                "serialId": 2,
-                "sourceInputId": 0,
-                "to": {
-                    "x": 140,
-                    "y": 20
-                },
-                "type": 1
-            },
-            "v1": {
-                "across": "V3",
-                "ground": false,
-                "name": "v₁",
-                "pos": {
-                    "x": 20,
-                    "y": -100
-                },
-                "systemType": 1
-            },
-            "v2": {
-                "across": "OmegaJ",
-                "ground": false,
-                "name": "v₂",
-                "pos": {
-                    "x": 140,
-                    "y": -100
-                },
-                "systemType": 4
-            }
+            "rightBranch": 2,
+            "v1": 1,
+            "v2": 2
         }
     ],
-    "version": 3
+    "version": 4
 }

@@ -1,207 +1,139 @@
 {
     "branches": [
         {
-            "active": false,
-            "bow": 0,
-            "constant": "m",
-            "from": {
-                "x": 300,
-                "y": -80
-            },
-            "index": 0,
-            "name": "f_m",
-            "serialId": 4,
-            "sourceInputId": 0,
-            "to": {
-                "x": 300,
-                "y": 40
-            },
-            "type": 0
+            "from": 1,
+            "id": 1,
+            "name": "Q_C1",
+            "to": 3,
+            "type": "T"
         },
         {
-            "active": false,
-            "bow": 0,
-            "constant": "b",
-            "from": {
-                "x": 300,
-                "y": -80
-            },
-            "index": 1,
-            "name": "f_b",
-            "serialId": 5,
-            "sourceInputId": 0,
-            "to": {
-                "x": 300,
-                "y": 40
-            },
-            "type": 2
-        },
-        {
-            "active": false,
-            "bow": 0,
-            "constant": "k",
-            "from": {
-                "x": 300,
-                "y": -80
-            },
-            "index": 2,
-            "name": "f_k",
-            "serialId": 6,
-            "sourceInputId": 0,
-            "to": {
-                "x": 300,
-                "y": 40
-            },
-            "type": 1
+            "from": 2,
+            "id": 2,
+            "name": "f_C2",
+            "to": 4,
+            "type": "T"
         },
         {
             "active": true,
-            "bow": 0,
-            "constant": "C3",
-            "from": {
-                "x": 20,
-                "y": -100
-            },
-            "index": 0,
+            "from": 5,
+            "id": 3,
             "name": "Ps1",
-            "serialId": 3,
             "sourceInputId": 1,
-            "to": {
-                "x": 160,
-                "y": 40
-            },
-            "type": 0
+            "to": 3,
+            "type": "A"
         },
         {
-            "active": false,
-            "bow": 0,
+            "constant": "m",
+            "from": 2,
+            "id": 4,
+            "name": "f_m",
+            "to": 4,
+            "type": "A"
+        },
+        {
+            "constant": "b",
+            "from": 2,
+            "id": 5,
+            "name": "f_b",
+            "to": 4,
+            "type": "D"
+        },
+        {
+            "constant": "k",
+            "from": 2,
+            "id": 6,
+            "name": "f_k",
+            "to": 4,
+            "type": "T"
+        },
+        {
             "constant": "R",
-            "from": {
-                "x": 20,
-                "y": -100
-            },
-            "index": 0,
+            "from": 5,
+            "id": 7,
             "name": "Q_R",
-            "serialId": 7,
-            "sourceInputId": 0,
-            "to": {
-                "x": 160,
-                "y": -80
-            },
-            "type": 2
+            "to": 1,
+            "type": "D"
         }
     ],
     "format": "LGM",
     "nodes": [
         {
+            "across": "P1",
+            "id": 1,
+            "name": "v₁",
+            "pos": {
+                "x": 160,
+                "y": -80
+            },
+            "systemType": "fluid"
+        },
+        {
+            "across": "v1",
+            "id": 2,
+            "name": "v₂",
+            "pos": {
+                "x": 300,
+                "y": -80
+            },
+            "systemType": "mechanical"
+        },
+        {
+            "ground": true,
+            "id": 3,
+            "name": "ref₁",
+            "pos": {
+                "x": 160,
+                "y": 40
+            },
+            "systemType": "mechanical"
+        },
+        {
+            "ground": true,
+            "id": 4,
+            "name": "ref₂",
+            "pos": {
+                "x": 300,
+                "y": 40
+            },
+            "systemType": "mechanical"
+        },
+        {
             "across": "P5",
-            "ground": false,
+            "id": 5,
             "name": "Node 5",
             "pos": {
                 "x": 20,
                 "y": -100
             },
-            "systemType": 2
+            "systemType": "fluid"
         }
     ],
     "normalTrees": [
     ],
     "settings": {
-        "defaultSystemType": 0,
+        "defaultSystemType": "mechanical",
         "gridSpacing": 20,
-        "nextBranchId": 12,
-        "nextNodeId": 6,
+        "nextBranchId": 15,
+        "nextNodeId": 11,
         "nextSourceInputId": 2,
-        "nextTwoPortId": 2,
+        "nextTwoPortId": 3,
         "showGrid": true,
         "snapToGrid": true
     },
     "twoPorts": [
         {
-            "center": {
-                "x": 240,
-                "y": -20
-            },
-            "g1": {
-                "across": "0",
-                "ground": true,
-                "name": "ref₁",
-                "pos": {
-                    "x": 160,
-                    "y": 40
-                },
-                "systemType": 0
-            },
-            "g2": {
-                "across": "0",
-                "ground": true,
-                "name": "ref₂",
-                "pos": {
-                    "x": 300,
-                    "y": 40
-                },
-                "systemType": 0
-            },
-            "kind": 1,
-            "leftBranch": {
-                "active": false,
-                "bow": 60,
-                "constant": "1",
-                "from": {
-                    "x": 160,
-                    "y": -80
-                },
-                "index": 0,
-                "name": "Q_C1",
-                "serialId": 1,
-                "sourceInputId": 0,
-                "to": {
-                    "x": 160,
-                    "y": 40
-                },
-                "type": 1
-            },
+            "g1": 3,
+            "g2": 4,
+            "id": 1,
+            "kind": "gyrator",
+            "leftBranch": 1,
             "modulus": "1/A",
             "name": "Transformer 1",
-            "rightBranch": {
-                "active": false,
-                "bow": -124,
-                "constant": "1",
-                "from": {
-                    "x": 300,
-                    "y": -80
-                },
-                "index": 3,
-                "name": "f_C2",
-                "serialId": 2,
-                "sourceInputId": 0,
-                "to": {
-                    "x": 300,
-                    "y": 40
-                },
-                "type": 1
-            },
-            "v1": {
-                "across": "P1",
-                "ground": false,
-                "name": "v₁",
-                "pos": {
-                    "x": 160,
-                    "y": -80
-                },
-                "systemType": 2
-            },
-            "v2": {
-                "across": "v1",
-                "ground": false,
-                "name": "v₂",
-                "pos": {
-                    "x": 300,
-                    "y": -80
-                },
-                "systemType": 0
-            }
+            "rightBranch": 2,
+            "v1": 1,
+            "v2": 2
         }
     ],
-    "version": 3
+    "version": 4
 }

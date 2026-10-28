@@ -361,13 +361,94 @@ void testGroundDomainPersists() {
     CHECK(itemsOf<NodeItem>().front()->systemType() == SystemType::Electrical);
 }
 
+QByteArray minimalDocument(const QString& nodes, const QString& branches, const QString& twoPorts,
+                           int version = 4) {
+    return QStringLiteral("{\"format\":\"LGM\",\"version\":%1,\"nodes\":[%2],\"branches\":[%3],"
+                          "\"twoPorts\":[%4]}")
+        .arg(version)
+        .arg(nodes, branches, twoPorts)
+        .toUtf8();
+}
+
+void testDocumentFormat() {
+    // Distinct nodes at the same position stay distinct (identity is the id, not the position).
+    g_scene->clearDocument();
+    NodeItem* a = g_scene->createNode({0, 0});
+    NodeItem* b = g_scene->createNode({0, 0});
+    NodeItem* c = g_scene->createNode({100, 0});
+    g_scene->createBranch(a, c);
+    g_scene->createBranch(b, c);
+    TwoPortItem* tp = g_scene->createTwoPort({300, 0}, TwoPortKind::Gyrator);
+    g_scene->flipBranch(tp->rightBranch());
+    const QString before = fingerprint();
+    CHECK(g_scene->documentFromJson(g_scene->documentToJson()));
+    checkSame("overlapping nodes and flipped port survive save/load", before, fingerprint());
+    CHECK(countOf(0) == 7 && countOf(1) == 4);
+    checkInvariants("format round trip");
+
+    const QString node1 = QStringLiteral(
+        "{\"id\":1,\"pos\":{\"x\":0,\"y\":0},\"systemType\":\"electrical\",\"across\":\"V1\"}");
+    const QString node2 = QStringLiteral(
+        "{\"id\":2,\"pos\":{\"x\":0,\"y\":100},\"systemType\":\"electrical\",\"ground\":true}");
+    const QString branch = QStringLiteral(
+        "{\"id\":1,\"from\":1,\"to\":2,\"type\":\"D\",\"constant\":\"R\"}");
+    QString error;
+    CHECK(g_scene->documentFromJson(minimalDocument(node1 + "," + node2, branch, QString()), &error));
+    CHECK(countOf(0) == 2 && countOf(1) == 1);
+
+    // Each malformed document is rejected with a message and leaves the open document untouched.
+    const QString kept = fingerprint();
+    const std::vector<std::pair<const char*, QByteArray>> invalid = {
+        {"old version", minimalDocument(node1, QString(), QString(), 3)},
+        {"duplicate node id", minimalDocument(node1 + "," + node1, QString(), QString())},
+        {"dangling branch end",
+         minimalDocument(node1, QStringLiteral("{\"id\":1,\"from\":1,\"to\":9,\"type\":\"D\",\"constant\":\"R\"}"),
+                         QString())},
+        {"self loop",
+         minimalDocument(node1, QStringLiteral("{\"id\":1,\"from\":1,\"to\":1,\"type\":\"D\",\"constant\":\"R\"}"),
+                         QString())},
+        {"unknown branch type",
+         minimalDocument(node1 + "," + node2,
+                         QStringLiteral("{\"id\":1,\"from\":1,\"to\":2,\"type\":\"Q\",\"constant\":\"R\"}"),
+                         QString())},
+        {"numeric constant",
+         minimalDocument(node1 + "," + node2,
+                         QStringLiteral("{\"id\":1,\"from\":1,\"to\":2,\"type\":\"D\",\"constant\":\"5\"}"),
+                         QString())},
+        {"port branch on wrong nodes",
+         minimalDocument(node1 + "," + node2 +
+                             ",{\"id\":3,\"pos\":{\"x\":100,\"y\":0},\"systemType\":\"electrical\",\"across\":\"V3\"}"
+                             ",{\"id\":4,\"pos\":{\"x\":100,\"y\":100},\"systemType\":\"electrical\",\"ground\":true}",
+                         branch + ",{\"id\":2,\"from\":3,\"to\":4,\"type\":\"T\"}",
+                         QStringLiteral("{\"id\":1,\"kind\":\"transformer\",\"v1\":1,\"v2\":3,\"g1\":2,"
+                                        "\"g2\":4,\"leftBranch\":2,\"rightBranch\":1}"))},
+    };
+    for (const auto& [what, json] : invalid) {
+        QString message;
+        if (g_scene->documentFromJson(json, &message) || message.isEmpty()) {
+            std::fprintf(stderr, "  FAIL invalid document accepted: %s\n", what);
+            ++g_failures;
+        }
+    }
+    checkSame("rejected documents leave the scene untouched", kept, fingerprint());
+}
+
 void testExamplesRoundTrip() {
     for (const QString& file :
          {QStringLiteral("Electrical.lgm"), QStringLiteral("FloatingSource.lgm"), QStringLiteral("Gyrator.lgm"),
           QStringLiteral("Motor.lgm"), QStringLiteral("MultiNormalTree.lgm"),
           QStringLiteral("PumpAccumulator.lgm"), QStringLiteral("TransformerCascade.lgm")}) {
-        loadExample(file);
+        QFile f(QStringLiteral(EXAMPLES_SOURCE_DIR "/") + file);
+        CHECK(f.open(QIODevice::ReadOnly));
+        const QByteArray bytes = f.readAll();
+        QString error;
+        CHECK(g_scene->documentFromJson(bytes, &error));
         checkInvariants("load");
+        // Examples are stored exactly as the app writes them.
+        if (g_scene->documentToJson() != bytes) {
+            std::fprintf(stderr, "  FAIL %s is not in canonical form (re-save it)\n", qPrintable(file));
+            ++g_failures;
+        }
         const QString loaded = fingerprint();
         CHECK(g_scene->documentFromJson(g_scene->documentToJson()));
         checkSame("save/load round trip", loaded, fingerprint());
@@ -515,6 +596,7 @@ int main(int argc, char** argv) {
         {"three-terminal collapse", testThreeTerminalCollapse},
         {"commands survive re-creation", testCommandsSurviveRecreation},
         {"ground domain persists", testGroundDomainPersists},
+        {"document format", testDocumentFormat},
         {"examples round trip", testExamplesRoundTrip},
     };
     for (const auto& [name, test] : tests) {

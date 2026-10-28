@@ -1,128 +1,89 @@
 {
     "branches": [
         {
-            "active": false,
-            "bow": 0,
-            "constant": "C",
-            "from": {
-                "x": 200,
-                "y": 40
-            },
-            "index": 0,
-            "name": "i_C",
-            "serialId": 5,
-            "sourceInputId": 0,
-            "to": {
-                "x": 120,
-                "y": 40
-            },
-            "type": 0
-        },
-        {
-            "active": false,
-            "bow": 0,
-            "constant": "R2",
-            "from": {
-                "x": 40,
-                "y": 40
-            },
-            "index": 0,
-            "name": "i_R2",
-            "serialId": 4,
-            "sourceInputId": 0,
-            "to": {
-                "x": 200,
-                "y": 40
-            },
-            "type": 2
-        },
-        {
-            "active": false,
-            "bow": 0,
-            "constant": "R1",
-            "from": {
-                "x": 40,
-                "y": 40
-            },
-            "index": 0,
-            "name": "i_R1",
-            "serialId": 3,
-            "sourceInputId": 0,
-            "to": {
-                "x": 120,
-                "y": 40
-            },
-            "type": 2
-        },
-        {
             "active": true,
-            "bow": 0,
-            "constant": "1",
-            "from": {
-                "x": 40,
-                "y": 160
-            },
-            "index": 0,
+            "from": 4,
+            "id": 1,
             "name": "Vs1",
-            "serialId": 1,
             "sourceInputId": 1,
-            "to": {
-                "x": 40,
-                "y": 40
-            },
-            "type": 0
+            "to": 3,
+            "type": "A"
+        },
+        {
+            "constant": "R1",
+            "from": 3,
+            "id": 3,
+            "name": "i_R1",
+            "to": 2,
+            "type": "D"
+        },
+        {
+            "constant": "R2",
+            "from": 3,
+            "id": 4,
+            "name": "i_R2",
+            "to": 1,
+            "type": "D"
+        },
+        {
+            "constant": "C",
+            "from": 1,
+            "id": 5,
+            "name": "i_C",
+            "to": 2,
+            "type": "A"
         }
     ],
     "format": "LGM",
     "nodes": [
         {
             "across": "V3",
-            "ground": false,
+            "id": 1,
             "name": "Node 3",
             "pos": {
                 "x": 200,
                 "y": 40
             },
-            "systemType": 1
+            "systemType": "electrical"
         },
         {
             "across": "V2",
-            "ground": false,
+            "id": 2,
             "name": "Node 2",
             "pos": {
                 "x": 120,
                 "y": 40
             },
-            "systemType": 1
+            "systemType": "electrical"
         },
         {
             "across": "V1",
-            "ground": false,
+            "id": 3,
             "name": "Node 1",
             "pos": {
                 "x": 40,
                 "y": 40
             },
-            "systemType": 1
+            "systemType": "electrical"
         },
         {
-            "across": "0",
             "ground": true,
+            "id": 4,
             "name": "Node G",
             "pos": {
                 "x": 40,
                 "y": 160
             },
-            "systemType": 1
+            "systemType": "electrical"
         }
     ],
     "normalTrees": [
     ],
     "settings": {
-        "defaultSystemType": 1,
+        "defaultSystemType": "electrical",
         "gridSpacing": 20,
-        "nextBranchId": 6,
-        "nextNodeId": 5,
+        "nextBranchId": 10,
+        "nextNodeId": 9,
         "nextSourceInputId": 2,
         "nextTwoPortId": 1,
         "showGrid": true,
@@ -130,5 +91,5 @@
     },
     "twoPorts": [
     ],
-    "version": 3
+    "version": 4
 }

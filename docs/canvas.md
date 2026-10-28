@@ -57,7 +57,41 @@ Deleting a two-port captures a full **TwoPortSnapshot** (attachment nodes, both 
 
 ## Document format (`.lgm`)
 
-JSON with top-level keys such as `branches`, `nodes`, `twoPorts`, `systemType`, and view metadata. Positions are scene coordinates; `serialId` gives stable identity across save/load.
+UTF-8 JSON, **version 4**. Every node and branch is stored once with an integer `id`; branches and two-ports refer to nodes (and two-ports to their port branches) by id. Positions are layout only, so two distinct nodes may share a position. Only version 4 is read; older files are rejected.
+
+```json
+{
+  "format": "LGM",
+  "version": 4,
+  "settings": { "defaultSystemType": "electrical", "snapToGrid": true, "showGrid": true, "gridSpacing": 20,
+                "nextNodeId": 7, "nextBranchId": 10, "nextSourceInputId": 2, "nextTwoPortId": 2 },
+  "nodes": [
+    { "id": 1, "name": "v₁", "pos": { "x": 20, "y": -100 }, "systemType": "electrical", "across": "V3" },
+    { "id": 3, "name": "ref₁", "pos": { "x": 20, "y": 20 }, "systemType": "electrical", "ground": true }
+  ],
+  "branches": [
+    { "id": 1, "from": 1, "to": 3, "name": "i1", "type": "T" },
+    { "id": 6, "from": 6, "to": 1, "name": "i_L", "type": "T", "constant": "L" },
+    { "id": 9, "from": 5, "to": 3, "name": "Vs1", "type": "A", "active": true, "sourceInputId": 1 }
+  ],
+  "twoPorts": [
+    { "id": 1, "name": "Transformer 1", "kind": "transformer", "modulus": "TF",
+      "v1": 1, "v2": 2, "g1": 3, "g2": 4, "leftBranch": 1, "rightBranch": 2 }
+  ],
+  "normalTrees": [ { "name": "Tree 1", "branches": [1, 5, 8, 9] } ],
+  "activeNormalTreeIndex": 0,
+  "outputVariables": ["T_J", "i_L"]
+}
+```
+
+| Item | Fields |
+|------|--------|
+| node | `id`, `name`, `pos`, `systemType` (`mechanical`, `rotational`, `electrical`, `fluid`, `heat`); `ground: true` **or** `across` (symbol) |
+| branch | `id`, `from`/`to` (node ids, direction of the branch), `name`, `type` (`A`, `T`, `D`); sources: `active: true` + `sourceInputId`; passive non-port branches: `constant`; optional `bow` (port bows are derived) |
+| two-port | `id`, `name`, `kind` (`transformer`, `gyrator`), `modulus`, port nodes `v1`, `v2`, `g1`, `g2` (`g1 == g2` for a shared reference; cascaded two-ports share node ids), `leftBranch` (joins `v1`–`g1`) and `rightBranch` (joins `v2`–`g2`) — both also listed in `branches` |
+| saved normal tree | `name`, `branches` (branch ids in the tree) |
+
+Loading validates the whole document first (unique ids, every reference resolves, port branches join their two-port's nodes, valid enums and constants) and reports the first problem without touching the open graph. Saving sorts items by id, so the same graph always produces the same file; the examples are stored in exactly that form.
 
 Use **File → Open / Save** (`Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`). Example graphs live in [Examples/](../Examples/README.md).
 
@@ -99,7 +133,7 @@ ctest --test-dir build --output-on-failure
 | `scene/scene_merge.cpp` | Combine nodes (including ground ↔ two-port ref), merge undo |
 | `scene/scene_normal_tree.cpp` | Normal tree UI, saved trees, canvas twig IDs, state-space trigger (see [analysis.md](analysis.md)) |
 | `canvas_scene_delete.cpp` | Delete capture/restore with `TwoPortSnapshot` |
-| `document/` | `.lgm` load/save |
+| `document/` | `.lgm` load/save (`document_json.cpp`: schema, enum names, validation) |
 | `undo/commands.cpp` | Undo stack commands |
 | `canvas_scene_input.cpp` | Mouse/keyboard interaction |
 | `canvas_view.cpp` | Zoom, pan, grid |

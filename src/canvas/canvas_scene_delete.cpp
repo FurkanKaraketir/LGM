@@ -1,5 +1,4 @@
 #include "canvas.h"
-#include "document/document_detail.h"
 
 #include <QSet>
 #include <algorithm>
@@ -20,8 +19,6 @@ GraphScene::BranchSnapshot GraphScene::snapshotOf(const BranchItem* branch) {
     BranchSnapshot snap;
     snap.fromId = branch->from()->serialId();
     snap.toId = branch->to()->serialId();
-    snap.from = branch->from()->scenePos();
-    snap.to = branch->to()->scenePos();
     snap.index = branch->index();
     snap.name = branch->name();
     snap.active = branch->isActive();
@@ -35,15 +32,13 @@ GraphScene::BranchSnapshot GraphScene::snapshotOf(const BranchItem* branch) {
 
 GraphScene::TwoPortSnapshot GraphScene::snapshotOf(const TwoPortItem* twoPort) {
     TwoPortSnapshot snap;
-    snap.key = {twoPort->serialId(), twoPort->center(), twoPort->kind(), twoPort->modulus(),
-                twoPort->name()};
+    snap.key = {twoPort->serialId(), twoPort->kind(), twoPort->modulus(), twoPort->name()};
     snap.v1 = snapshotOf(twoPort->v1());
     snap.v2 = snapshotOf(twoPort->v2());
     snap.g1 = snapshotOf(twoPort->g1());
     snap.g2 = snapshotOf(twoPort->g2());
     snap.leftBranch = snapshotOf(twoPort->leftBranch());
     snap.rightBranch = snapshotOf(twoPort->rightBranch());
-    snap.sharedRef = twoPort->hasSharedReference();
     return snap;
 }
 
@@ -66,29 +61,47 @@ NodeItem* GraphScene::createNodeFromSnapshot(const NodeSnapshot& snap) {
     return node;
 }
 
+void GraphScene::applyBranchSnapshot(BranchItem* branch, const BranchSnapshot& snap) {
+    if (!branch) {
+        return;
+    }
+    if (!branch->isTwoPortPort()) {
+        branch->setBow(snap.bow);  // port bows are derived from the layout
+    }
+    if (snap.serialId > 0) {
+        branch->setSerialId(snap.serialId);
+        m_nextBranchId = std::max(m_nextBranchId, snap.serialId + 1);
+    }
+    // Before setActive(): an active branch without an id would otherwise allocate a fresh source input.
+    if (snap.sourceInputId > 0) {
+        branch->setSourceInputId(snap.sourceInputId);
+        registerSourceInputId(snap.sourceInputId);
+    }
+    branch->setActive(snap.active);
+    if (!snap.active) {
+        branch->setElementConstant(snap.constant);
+    }
+    branch->setBranchType(snap.type);
+    branch->setName(snap.name);
+    // Port branches are created v → ref; restore one that was flipped to ref → v.
+    if (branch->isTwoPortPort() && snap.fromId > 0 && snap.fromId == branch->to()->serialId()) {
+        flipBranch(branch);
+    }
+}
+
 BranchItem* GraphScene::createBranchFromSnapshot(const BranchSnapshot& snap) {
-    NodeItem* a = snap.fromId > 0 ? nodeById(snap.fromId) : nodeAtPos(snap.from);
-    NodeItem* b = snap.toId > 0 ? nodeById(snap.toId) : nodeAtPos(snap.to);
+    NodeItem* a = nodeById(snap.fromId);
+    NodeItem* b = nodeById(snap.toId);
     if (!a || !b) {
         return nullptr;
     }
     BranchItem* branch = createBranch(a, b, snap.bow);
-    if (!branch) {
-        return nullptr;
-    }
-    BranchLoadData load;
-    load.snap = snap;
-    load.serialId = snap.serialId;
-    load.sourceInputId = snap.sourceInputId;
-    applyLoadedBranchData(this, branch, load);
-    if (snap.serialId >= m_nextBranchId) {
-        m_nextBranchId = snap.serialId + 1;
-    }
+    applyBranchSnapshot(branch, snap);
     return branch;
 }
 
 TwoPortItem* GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
-    // Ports still present (shared with a cascaded sibling) are reused by id, the rest are re-created.
+    // Ports still present (shared with a cascaded sibling, or g1 == g2) are reused by id.
     const auto nodeFor = [&](const NodeSnapshot& snap) -> NodeItem* {
         if (NodeItem* existing = nodeById(snap.id)) {
             return existing;
@@ -98,7 +111,7 @@ TwoPortItem* GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
     NodeItem* v1 = nodeFor(data.v1);
     NodeItem* v2 = nodeFor(data.v2);
     NodeItem* g1 = nodeFor(data.g1);
-    NodeItem* g2 = data.sharedRef ? g1 : nodeFor(data.g2);
+    NodeItem* g2 = nodeFor(data.g2);
     if (!v1 || !v2 || !g1 || !g2) {
         return nullptr;
     }
@@ -111,19 +124,8 @@ TwoPortItem* GraphScene::restoreTwoPortSnapshot(const TwoPortSnapshot& data) {
         twoPort->setSerialId(data.key.id);
         m_nextTwoPortId = std::max(m_nextTwoPortId, data.key.id + 1);
     }
-    const auto apply = [&](BranchItem* branch, const BranchSnapshot& snap) {
-        BranchLoadData load;
-        load.snap = snap;
-        load.serialId = snap.serialId;
-        load.sourceInputId = snap.sourceInputId;
-        applyLoadedBranchData(this, branch, load);
-        matchPortBranchDirection(this, branch, snap);
-        if (snap.serialId >= m_nextBranchId) {
-            m_nextBranchId = snap.serialId + 1;
-        }
-    };
-    apply(twoPort->leftBranch(), data.leftBranch);
-    apply(twoPort->rightBranch(), data.rightBranch);
+    applyBranchSnapshot(twoPort->leftBranch(), data.leftBranch);
+    applyBranchSnapshot(twoPort->rightBranch(), data.rightBranch);
     twoPort->refresh();
     return twoPort;
 }

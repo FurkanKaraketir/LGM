@@ -57,7 +57,7 @@ add_executable(LGM WIN32
     src/canvas/scene/scene_normal_tree.cpp
     src/canvas/scene/scene_merge.cpp
     src/canvas/canvas_scene_delete.cpp
-    src/canvas/document/load_helpers.cpp
+    src/canvas/document/document_json.cpp
     src/canvas/document/document_io.cpp
     src/canvas/canvas_scene_input.cpp
     src/canvas/canvas_view.cpp

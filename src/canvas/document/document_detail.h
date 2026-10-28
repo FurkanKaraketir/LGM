@@ -2,54 +2,53 @@
 
 #include "canvas.h"
 
+#include <QByteArray>
 #include <QJsonObject>
-#include <QPointF>
+#include <QString>
+#include <QStringList>
 #include <vector>
 
-constexpr int kDocumentVersion = 3;
+// .lgm format version 4: every node and branch is stored once with its id; branches and two-ports
+// refer to nodes (and two-ports to their port branches) by id. Positions are layout only.
+constexpr int kDocumentVersion = 4;
 
-enum class DocVersionStatus { Ok, Older, TooNew, Invalid };
+struct DocumentData {
+    SystemType defaultSystemType = SystemType::Mechanical;
+    bool snapToGrid = true;
+    bool showGrid = true;
+    qreal gridSpacing = 20.0;
+    int nextNodeId = 1;
+    int nextBranchId = 1;
+    int nextSourceInputId = 1;
+    int nextTwoPortId = 1;
 
-DocVersionStatus classifyDocumentVersion(int version);
+    struct TwoPort {
+        GraphScene::TwoPortKey key;
+        int v1 = 0;
+        int v2 = 0;
+        int g1 = 0;
+        int g2 = 0;
+        int leftBranch = 0;
+        int rightBranch = 0;
+    };
 
-QJsonObject pointToJson(const QPointF& p);
-QPointF pointFromJson(const QJsonObject& obj);
-QJsonObject nodeToJson(const GraphScene::NodeSnapshot& snap);
-GraphScene::NodeSnapshot nodeFromJson(const QJsonObject& obj);
-QJsonObject branchToJson(const GraphScene::BranchSnapshot& snap, int serialId, int sourceInputId);
-
-struct BranchLoadData {
-    GraphScene::BranchSnapshot snap;
-    int serialId = 0;
-    int sourceInputId = 0;
+    std::vector<GraphScene::NodeSnapshot> nodes;
+    std::vector<GraphScene::BranchSnapshot> branches;  // port branches included
+    std::vector<TwoPort> twoPorts;
+    std::vector<GraphScene::SavedNormalTree> normalTrees;
+    int activeNormalTreeIndex = -1;
+    QStringList outputVariables;
 };
 
-BranchLoadData branchFromJson(const QJsonObject& obj);
-void applyLoadedBranchData(GraphScene* scene, BranchItem* branch, const BranchLoadData& data);
-// Port branches are always created v → ref; flip one that was saved/snapshotted ref → v.
-void matchPortBranchDirection(GraphScene* scene, BranchItem* branch, const GraphScene::BranchSnapshot& snap);
+QString systemTypeKey(SystemType type);
+QString branchTypeKey(BranchType type);
+QString twoPortKindKey(TwoPortKind kind);
 
+QJsonObject nodeToJson(const NodeItem* node);
+QJsonObject branchToJson(const BranchItem* branch);
 QJsonObject twoPortToJson(const TwoPortItem* twoPort);
-
-struct TwoPortLoadData {
-    GraphScene::TwoPortKey key;
-    GraphScene::NodeSnapshot v1;
-    GraphScene::NodeSnapshot v2;
-    GraphScene::NodeSnapshot g1;
-    GraphScene::NodeSnapshot g2;
-    BranchLoadData leftBranch;
-    BranchLoadData rightBranch;
-    bool sharedRef = false;
-};
-
-TwoPortLoadData twoPortFromJson(const QJsonObject& obj);
 QJsonObject savedNormalTreeToJson(const GraphScene::SavedNormalTree& tree);
-GraphScene::SavedNormalTree savedNormalTreeFromJson(const QJsonObject& obj);
 
-bool hasNodeSnapshotAt(const std::vector<GraphScene::NodeSnapshot>& nodes, const QPointF& pos);
-bool isTwoPortPortAt(const GraphScene* scene, const QPointF& pos);
-void ensureBranchEndpointNodes(std::vector<GraphScene::NodeSnapshot>& nodes, const GraphScene* scene,
-                               const QPointF& from, const QPointF& to);
-void ensureSceneNodesForBranchEndpoints(GraphScene* scene, const std::vector<BranchLoadData>& branches);
-NodeItem* findNodeAt(const GraphScene* scene, const QPointF& pos);
-NodeItem* getOrCreateNodeAt(GraphScene* scene, const GraphScene::NodeSnapshot& snap);
+// Parses and validates a whole document (ids unique, every reference resolves, port branches join
+// their two-port's nodes) without touching any scene; on failure `error` says what is wrong.
+bool parseDocument(const QByteArray& data, DocumentData& out, QString* error);

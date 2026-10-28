@@ -458,15 +458,13 @@ public:
 
 
 
-    // Snapshots identify items by serial id so undo/redo survives delete/re-create cycles and
-    // coincident nodes; positions are only used to place re-created items.
+    // Snapshots (and .lgm documents) identify items by serial id, never by position, so undo/redo
+    // survives delete/re-create cycles and overlapping nodes stay distinct.
     struct TwoPortKey {
 
         int id = 0;
 
-        QPointF center;
-
-        TwoPortKind kind;
+        TwoPortKind kind = TwoPortKind::Transformer;
 
         QString modulus;
 
@@ -495,10 +493,6 @@ public:
         int fromId = 0;
 
         int toId = 0;
-
-        QPointF from;
-
-        QPointF to;
 
         int index = 0;
 
@@ -534,8 +528,6 @@ public:
 
         BranchSnapshot rightBranch;
 
-        bool sharedRef = false;
-
     };
 
 
@@ -549,6 +541,8 @@ public:
     NodeItem* createNodeFromSnapshot(const NodeSnapshot& snap);
 
     BranchItem* createBranchFromSnapshot(const BranchSnapshot& snap);
+
+    void applyBranchSnapshot(BranchItem* branch, const BranchSnapshot& snap);
 
     TwoPortItem* restoreTwoPortSnapshot(const TwoPortSnapshot& data);
 
@@ -652,7 +646,6 @@ public:
 
                        const std::vector<TwoPortSnapshot>& twoPorts);
 
-    NodeItem* nodeAtPos(const QPointF& pos) const;
 
     QRectF contentBounds() const;
 

@@ -311,16 +311,6 @@ void GraphScene::destroyBranch(BranchItem* branch) {
     }
 }
 
-NodeItem* GraphScene::nodeAtPos(const QPointF& pos) const {
-    for (QGraphicsItem* item : items()) {
-        auto* node = dynamic_cast<NodeItem*>(item);
-        if (node && node->scenePos() == pos) {
-            return node;
-        }
-    }
-    return nullptr;
-}
-
 NodeItem* GraphScene::nodeById(int id) const {
     if (id <= 0) {
         return nullptr;

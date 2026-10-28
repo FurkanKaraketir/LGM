@@ -5,7 +5,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <QSet>
+
 #include <algorithm>
+#include <map>
 
 void GraphScene::clearDocument() {
     const bool blocked = blockSignals(true);
@@ -71,67 +74,28 @@ void GraphScene::clearDocument() {
 }
 
 QByteArray GraphScene::documentToJson() const {
-    std::vector<NodeSnapshot> nodes;
-    struct BranchRecord {
-        BranchSnapshot snap;
-        int serialId = 0;
-        int sourceInputId = 0;
-    };
-    std::vector<BranchRecord> branches;
-    for (QGraphicsItem* item : items()) {
-        if (auto* node = dynamic_cast<NodeItem*>(item)) {
-            if (node->twoPort()) {
-                continue;
-            }
-            NodeSnapshot snap;
-            snap.pos = node->scenePos();
-            snap.name = node->name();
-            snap.ground = node->isGround();
-            snap.across = node->isGround() ? QStringLiteral("0") : node->acrossVariable();
-            snap.systemType = node->systemType();
-            nodes.push_back(snap);
-        } else if (auto* branch = dynamic_cast<BranchItem*>(item)) {
-            if (TwoPortItem* twoPort = twoPortFor(branch)) {
-                if (isInternalTwoPortBranch(twoPort, branch)) {
-                    continue;
-                }
-            }
-            BranchRecord record;
-            record.snap.from = branch->from()->scenePos();
-            record.snap.to = branch->to()->scenePos();
-            record.snap.index = branch->index();
-            record.snap.name = branch->name();
-            record.snap.active = branch->isActive();
-            record.snap.type = branch->branchType();
-            record.snap.constant = branch->elementConstant();
-            record.snap.bow = branch->bow();
-            record.serialId = branch->serialId();
-            record.sourceInputId = branch->sourceInputId();
-            branches.push_back(record);
-        }
-    }
-
-    for (const BranchRecord& record : branches) {
-        ensureBranchEndpointNodes(nodes, this, record.snap.from, record.snap.to);
-    }
-
-    QJsonArray twoPortArray;
-    for (QGraphicsItem* item : items()) {
-        if (auto* twoPort = dynamic_cast<TwoPortItem*>(item)) {
-            twoPortArray.append(twoPortToJson(twoPort));
-        }
-    }
+    std::vector<NodeItem*> nodes;
+    std::vector<BranchItem*> branches;
+    std::vector<TwoPortItem*> twoPorts;
+    collectGraphItems(nodes, branches, twoPorts);
+    // Sorted by id so saving the same graph always produces the same file.
+    const auto byId = [](const auto* a, const auto* b) { return a->serialId() < b->serialId(); };
+    std::sort(nodes.begin(), nodes.end(), byId);
+    std::sort(branches.begin(), branches.end(), byId);
+    std::sort(twoPorts.begin(), twoPorts.end(), byId);
 
     QJsonArray nodeArray;
-    for (const NodeSnapshot& snap : nodes) {
-        nodeArray.append(nodeToJson(snap));
+    for (const NodeItem* node : nodes) {
+        nodeArray.append(nodeToJson(node));
     }
-
     QJsonArray branchArray;
-    for (const BranchRecord& record : branches) {
-        branchArray.append(branchToJson(record.snap, record.serialId, record.sourceInputId));
+    for (const BranchItem* branch : branches) {
+        branchArray.append(branchToJson(branch));
     }
-
+    QJsonArray twoPortArray;
+    for (const TwoPortItem* twoPort : twoPorts) {
+        twoPortArray.append(twoPortToJson(twoPort));
+    }
     QJsonArray normalTreeArray;
     for (const SavedNormalTree& tree : m_savedNormalTrees) {
         normalTreeArray.append(savedNormalTreeToJson(tree));
@@ -141,7 +105,7 @@ QByteArray GraphScene::documentToJson() const {
         {QStringLiteral("format"), QStringLiteral("LGM")},
         {QStringLiteral("version"), kDocumentVersion},
         {QStringLiteral("settings"),
-         QJsonObject{{QStringLiteral("defaultSystemType"), static_cast<int>(m_defaultSystemType)},
+         QJsonObject{{QStringLiteral("defaultSystemType"), systemTypeKey(m_defaultSystemType)},
                      {QStringLiteral("snapToGrid"), m_snapToGrid},
                      {QStringLiteral("showGrid"), m_showGrid},
                      {QStringLiteral("gridSpacing"), m_gridSpacing},
@@ -149,17 +113,13 @@ QByteArray GraphScene::documentToJson() const {
                      {QStringLiteral("nextBranchId"), m_nextBranchId},
                      {QStringLiteral("nextSourceInputId"), m_nextSourceInputId},
                      {QStringLiteral("nextTwoPortId"), m_nextTwoPortId}}},
-        {QStringLiteral("twoPorts"), twoPortArray},
         {QStringLiteral("nodes"), nodeArray},
         {QStringLiteral("branches"), branchArray},
+        {QStringLiteral("twoPorts"), twoPortArray},
         {QStringLiteral("normalTrees"), normalTreeArray},
     };
     if (!m_outputVariables.isEmpty()) {
-        QJsonArray outputArray;
-        for (const QString& symbol : m_outputVariables) {
-            outputArray.append(symbol);
-        }
-        root.insert(QStringLiteral("outputVariables"), outputArray);
+        root.insert(QStringLiteral("outputVariables"), QJsonArray::fromStringList(m_outputVariables));
     }
     if (m_activeSavedNormalTreeIndex >= 0) {
         root.insert(QStringLiteral("activeNormalTreeIndex"), m_activeSavedNormalTreeIndex);
@@ -169,191 +129,77 @@ QByteArray GraphScene::documentToJson() const {
 }
 
 bool GraphScene::documentFromJson(const QByteArray& data, QString* error) {
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        if (error) {
-            *error = tr("Invalid JSON: %1").arg(parseError.errorString());
-        }
-        return false;
+    DocumentData doc;
+    if (!parseDocument(data, doc, error)) {
+        return false;  // the current document is left untouched
     }
-    if (!doc.isObject()) {
-        if (error) {
-            *error = tr("Document root must be a JSON object.");
-        }
-        return false;
-    }
-
-    const QJsonObject root = doc.object();
-    const QString format = root.value(QStringLiteral("format")).toString();
-    if (format != QStringLiteral("LGM") && format != QStringLiteral("LinearGraphModeling")) {
-        if (error) {
-            *error = tr("Not an LGM document.");
-        }
-        return false;
-    }
-    const int version = root.value(QStringLiteral("version")).toInt();
-    switch (classifyDocumentVersion(version)) {
-    case DocVersionStatus::Invalid:
-        if (error) {
-            *error = tr("Unsupported document version %1.").arg(version);
-        }
-        return false;
-    case DocVersionStatus::TooNew:
-        if (error) {
-            *error = tr("Document version %1 is newer than this application supports "
-                        "(version %2). Please update the application.")
-                         .arg(version)
-                         .arg(kDocumentVersion);
-        }
-        return false;
-    case DocVersionStatus::Older: {
-        const QString note = tr("Document version %1 is older than the current version %2; "
-                                "loaded best-effort.")
-                                 .arg(version)
-                                 .arg(kDocumentVersion);
-        m_loadWarning = m_loadWarning.isEmpty() ? note : m_loadWarning + QLatin1Char('\n') + note;
-        break;
-    }
-    case DocVersionStatus::Ok:
-        break;
-    }
-
-    const QJsonObject settings = root.value(QStringLiteral("settings")).toObject();
-    std::vector<TwoPortLoadData> twoPorts;
-    std::vector<NodeSnapshot> nodes;
-    std::vector<BranchLoadData> branches;
-
-    for (const QJsonValue& value : root.value(QStringLiteral("twoPorts")).toArray()) {
-        twoPorts.push_back(twoPortFromJson(value.toObject()));
-    }
-    for (const QJsonValue& value : root.value(QStringLiteral("nodes")).toArray()) {
-        nodes.push_back(nodeFromJson(value.toObject()));
-    }
-    for (const QJsonValue& value : root.value(QStringLiteral("branches")).toArray()) {
-        branches.push_back(branchFromJson(value.toObject()));
-    }
-
-    std::vector<SavedNormalTree> savedNormalTrees;
-    for (const QJsonValue& value : root.value(QStringLiteral("normalTrees")).toArray()) {
-        savedNormalTrees.push_back(savedNormalTreeFromJson(value.toObject()));
-    }
-    const int activeNormalTreeIndex = root.value(QStringLiteral("activeNormalTreeIndex")).toInt(-1);
-    QStringList savedOutputVariables;
-    for (const QJsonValue& value : root.value(QStringLiteral("outputVariables")).toArray()) {
-        const QString symbol = value.toString().trimmed();
-        if (!symbol.isEmpty()) {
-            savedOutputVariables.push_back(symbol);
-        }
-    }
-
-    QSet<int> twoPortBranchSerialIds;
-    for (const TwoPortLoadData& data : twoPorts) {
-        if (data.leftBranch.serialId > 0) {
-            twoPortBranchSerialIds.insert(data.leftBranch.serialId);
-        }
-        if (data.rightBranch.serialId > 0) {
-            twoPortBranchSerialIds.insert(data.rightBranch.serialId);
-        }
-    }
-
-    const int savedNextNodeId = settings.value(QStringLiteral("nextNodeId")).toInt(1);
-    const int savedNextBranchId = settings.value(QStringLiteral("nextBranchId")).toInt(1);
-    const int savedNextSourceInputId = settings.value(QStringLiteral("nextSourceInputId")).toInt(1);
-    const int savedNextTwoPortId = settings.value(QStringLiteral("nextTwoPortId")).toInt(1);
 
     clearDocument();
+    m_defaultSystemType = doc.defaultSystemType;
+    m_snapToGrid = doc.snapToGrid;
+    m_showGrid = doc.showGrid;
+    m_gridSpacing = std::max<qreal>(1.0, doc.gridSpacing);
 
-    m_defaultSystemType =
-        static_cast<SystemType>(settings.value(QStringLiteral("defaultSystemType")).toInt());
-    m_snapToGrid = settings.value(QStringLiteral("snapToGrid")).toBool(true);
-    m_showGrid = settings.value(QStringLiteral("showGrid")).toBool(true);
-    m_gridSpacing = settings.value(QStringLiteral("gridSpacing")).toDouble(20.0);
-
-    // Reserve every serial id in the file first: a branch saved without one gets a fresh id that
-    // must not collide with an id loaded later (saved normal trees reference these ids).
-    for (const TwoPortLoadData& data : twoPorts) {
-        m_nextBranchId = std::max({m_nextBranchId, data.leftBranch.serialId + 1,
-                                   data.rightBranch.serialId + 1});
+    // Fresh ids handed out while items are created are overwritten by the stored ones; start the
+    // counters above every stored id so the two never collide.
+    for (const NodeSnapshot& node : doc.nodes) {
+        m_nextNodeId = std::max(m_nextNodeId, node.id + 1);
     }
-    for (const BranchLoadData& data : branches) {
-        m_nextBranchId = std::max(m_nextBranchId, data.serialId + 1);
+    for (const BranchSnapshot& branch : doc.branches) {
+        m_nextBranchId = std::max(m_nextBranchId, branch.serialId + 1);
+    }
+    for (const DocumentData::TwoPort& twoPort : doc.twoPorts) {
+        m_nextTwoPortId = std::max(m_nextTwoPortId, twoPort.key.id + 1);
     }
 
     m_suppressGraphChange = true;
-    for (const TwoPortLoadData& data : twoPorts) {
-        NodeItem* v1 = getOrCreateNodeAt(this, data.v1);
-        NodeItem* v2 = getOrCreateNodeAt(this, data.v2);
-        NodeItem* g1 = getOrCreateNodeAt(this, data.g1);
-        NodeItem* g2 = data.sharedRef ? g1 : getOrCreateNodeAt(this, data.g2);
-        if (!v1 || !v2 || !g1 || !g2) {
-            continue;
-        }
-        if (TwoPortItem* twoPort =
-                createTwoPortFromPorts(v1, v2, g1, g2, data.key.kind, data.key.modulus, data.key.name)) {
-            applyLoadedBranchData(this, twoPort->leftBranch(), data.leftBranch);
-            applyLoadedBranchData(this, twoPort->rightBranch(), data.rightBranch);
-            matchPortBranchDirection(this, twoPort->leftBranch(), data.leftBranch.snap);
-            matchPortBranchDirection(this, twoPort->rightBranch(), data.rightBranch.snap);
-            twoPort->refresh();
-        }
+    for (const NodeSnapshot& node : doc.nodes) {
+        createNodeFromSnapshot(node);
     }
 
-    for (const NodeSnapshot& snap : nodes) {
-        if (findNodeAt(this, snap.pos)) {
+    std::map<int, const BranchSnapshot*> branchById;
+    for (const BranchSnapshot& branch : doc.branches) {
+        branchById[branch.serialId] = &branch;
+    }
+    QSet<int> portBranchIds;
+    for (const DocumentData::TwoPort& data : doc.twoPorts) {
+        TwoPortItem* twoPort = createTwoPortFromPorts(nodeById(data.v1), nodeById(data.v2), nodeById(data.g1),
+                                                      nodeById(data.g2), data.key.kind, data.key.modulus,
+                                                      data.key.name);
+        if (!twoPort) {
             continue;
         }
-        createNodeFromSnapshot(snap);
+        twoPort->setSerialId(data.key.id);
+        applyBranchSnapshot(twoPort->leftBranch(), *branchById[data.leftBranch]);
+        applyBranchSnapshot(twoPort->rightBranch(), *branchById[data.rightBranch]);
+        portBranchIds.insert(data.leftBranch);
+        portBranchIds.insert(data.rightBranch);
+        twoPort->refresh();
     }
 
-    ensureSceneNodesForBranchEndpoints(this, branches);
-
-    std::sort(branches.begin(), branches.end(), [](const BranchLoadData& a, const BranchLoadData& b) {
-        if (a.snap.from != b.snap.from) {
-            return a.snap.from.x() < b.snap.from.x() ||
-                   (a.snap.from.x() == b.snap.from.x() && a.snap.from.y() < b.snap.from.y());
-        }
-        if (a.snap.to != b.snap.to) {
-            return a.snap.to.x() < b.snap.to.x() ||
-                   (a.snap.to.x() == b.snap.to.x() && a.snap.to.y() < b.snap.to.y());
-        }
-        return a.snap.index < b.snap.index;
-    });
-
-    for (const BranchLoadData& data : branches) {
-        if (data.serialId > 0 && twoPortBranchSerialIds.contains(data.serialId)) {
-            continue;
-        }
-        NodeItem* a = nodeAtPos(data.snap.from);
-        NodeItem* b = nodeAtPos(data.snap.to);
-        if (!a || !b) {
-            continue;
-        }
-        if (BranchItem* branch = createBranch(a, b, data.snap.bow)) {
-            applyLoadedBranchData(this, branch, data);
-            if (data.serialId >= m_nextBranchId) {
-                m_nextBranchId = data.serialId + 1;
-            }
+    for (const BranchSnapshot& branch : doc.branches) {
+        if (!portBranchIds.contains(branch.serialId)) {
+            createBranchFromSnapshot(branch);
         }
     }
     m_suppressGraphChange = false;
 
-    m_nextNodeId = std::max(m_nextNodeId, savedNextNodeId);
-    m_nextBranchId = std::max(m_nextBranchId, savedNextBranchId);
-    m_nextSourceInputId = std::max(m_nextSourceInputId, savedNextSourceInputId);
-    m_nextTwoPortId = std::max(m_nextTwoPortId, savedNextTwoPortId);
+    m_nextNodeId = std::max(m_nextNodeId, doc.nextNodeId);
+    m_nextBranchId = std::max(m_nextBranchId, doc.nextBranchId);
+    m_nextSourceInputId = std::max(m_nextSourceInputId, doc.nextSourceInputId);
+    m_nextTwoPortId = std::max(m_nextTwoPortId, doc.nextTwoPortId);
 
-    m_savedNormalTrees = std::move(savedNormalTrees);
+    m_savedNormalTrees = std::move(doc.normalTrees);
     m_activeSavedNormalTreeIndex = -1;
-    if (activeNormalTreeIndex >= 0 &&
-        activeNormalTreeIndex < static_cast<int>(m_savedNormalTrees.size())) {
-        if (!applySavedNormalTree(activeNormalTreeIndex)) {
+    if (doc.activeNormalTreeIndex >= 0 &&
+        doc.activeNormalTreeIndex < static_cast<int>(m_savedNormalTrees.size())) {
+        if (!applySavedNormalTree(doc.activeNormalTreeIndex)) {
             m_activeSavedNormalTreeIndex = -1;
         }
     }
 
     m_undoStack.clear();
-    m_outputVariables = std::move(savedOutputVariables);
+    m_outputVariables = std::move(doc.outputVariables);
     refreshAppearance();
     notifyGraphChanged();
     emit savedNormalTreesChanged();
