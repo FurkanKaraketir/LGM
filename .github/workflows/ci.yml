@@ -13,8 +13,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      # ponytail: manifest install runs in cmake; skip GHA binary cache (needs token in same step)
-      VCPKG_BINARY_SOURCES: clear
+      # ponytail: manifest install runs in cmake; local files cache instead of GHA binary cache (needs token)
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-cache,readwrite
       QT_ROOT: ${{ github.workspace }}/Qt
       QT_VERSION: "6.11.0"
     steps:
@@ -41,10 +41,37 @@ jobs:
         run: choco install innosetup -y
 
       - name: Setup vcpkg
+        id: vcpkg
+        continue-on-error: true
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
           runVcpkgInstall: false
+
+      # ponytail: one retry for transient github.com connect failures while cloning vcpkg
+      - name: Setup vcpkg (retry)
+        if: steps.vcpkg.outcome == 'failure'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
+          runVcpkgInstall: false
+
+      # ponytail: tag runs only restore caches saved on master, so keys match the CI workflow
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-windows-${{ hashFiles('vcpkg.json') }}-b322364f
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: windows
+          max-size: 500M
+
+      - name: Create vcpkg cache directory
+        shell: bash
+        run: mkdir -p vcpkg-cache
 
       - name: Configure
         shell: pwsh
@@ -52,7 +79,8 @@ jobs:
           cmake --preset ci-windows `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT/$env:QT_VERSION/mingw_64" `
             -DCMAKE_C_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/gcc.exe" `
-            -DCMAKE_CXX_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/g++.exe"
+            -DCMAKE_CXX_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/g++.exe" `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 

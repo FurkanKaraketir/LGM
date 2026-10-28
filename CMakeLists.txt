@@ -24,6 +24,7 @@ FetchContent_Declare(
     symengine
     GIT_REPOSITORY https://github.com/symengine/symengine.git
     GIT_TAG        v0.14.0
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(symengine)
 
@@ -39,6 +40,7 @@ FetchContent_Declare(
     jkqtplotter
     GIT_REPOSITORY https://github.com/jkriege2/JKQtPlotter.git
     GIT_TAG        v5.0.0-beta1
+    GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(jkqtplotter)
 

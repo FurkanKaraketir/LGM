@@ -13,7 +13,7 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     env:
-      VCPKG_BINARY_SOURCES: clear
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-cache,readwrite
       QT_ROOT: ${{ github.workspace }}/Qt
       QT_VERSION: "6.11.0"
     strategy:
@@ -79,17 +79,45 @@ jobs:
             file wget fuse libfuse2
 
       - name: Setup vcpkg
+        id: vcpkg
+        continue-on-error: true
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
           runVcpkgInstall: false
+
+      # ponytail: one retry for transient github.com connect failures while cloning vcpkg
+      - name: Setup vcpkg (retry)
+        if: steps.vcpkg.outcome == 'failure'
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
+          runVcpkgInstall: false
+
+      # ponytail: tag runs only restore caches saved on master, so keys match the CI workflow
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-${{ matrix.name }}-${{ hashFiles('vcpkg.json') }}-b322364f
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.name }}
+          max-size: 500M
+
+      - name: Create vcpkg cache directory
+        shell: bash
+        run: mkdir -p vcpkg-cache
 
       - name: Configure
         shell: bash
         if: matrix.name != 'windows'
         run: |
           cmake --preset ${{ matrix.preset }} ${{ matrix.extra_cmake || '' }} \
-            -DCMAKE_PREFIX_PATH="$QT_ROOT/$QT_VERSION/${{ matrix.qt_prefix }}"
+            -DCMAKE_PREFIX_PATH="$QT_ROOT/$QT_VERSION/${{ matrix.qt_prefix }}" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
@@ -101,6 +129,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT/$env:QT_VERSION/mingw_64" `
             -DCMAKE_C_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/gcc.exe" `
             -DCMAKE_CXX_COMPILER="$env:QT_ROOT/Tools/mingw1310_64/bin/g++.exe" `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
             ${{ matrix.extra_cmake || '' }}
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
