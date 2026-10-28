@@ -105,7 +105,7 @@ bool isTwoPortInternalBranch(const BranchItem& branch) {
     if (branch.isTwoPortPort()) {
         return true;
     }
-    // ponytail: shared transformer nodes keep only one NodeItem::twoPort; flag above is authoritative.
+    // ponytail: twoPort() is only the primary owner of a cascaded node; the port flag above is authoritative.
     const NodeItem* from = branch.from();
     if (!from) {
         return false;
