@@ -58,3 +58,9 @@ Compare after code changes:
 .\docs\publication\benchmarks\generate.ps1
 git diff docs/publication/benchmarks/golden
 ```
+
+Or check without touching the goldens (exits non-zero on any mismatch):
+
+```powershell
+.\docs\publication\benchmarks\check.ps1
+```
