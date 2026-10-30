@@ -31,7 +31,7 @@ const RawShortcutDef kRaw[] = {
     {"view.zoomOut", QT_TR_NOOP("Zoom Out"), "Ctrl+-"},
     {"analysis.normalTree", QT_TR_NOOP("Find Normal Tree"), "Ctrl+Shift+T"},
     {"analysis.selectNormalTree", QT_TR_NOOP("Select Normal Tree"), "Ctrl+Alt+T"},
-    {"analysis.stateSpace", QT_TR_NOOP("Compute State Space"), "Ctrl+Shift+S"},
+    {"analysis.stateSpace", QT_TR_NOOP("Compute State Space"), "Ctrl+Shift+E"},
 };
 
 const RawShortcutDef* findRaw(const QString& id) {

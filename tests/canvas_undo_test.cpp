@@ -1,5 +1,6 @@
 // Canvas regression tests: node/branch/two-port topology, merging, delete and undo/redo.
 // Build with -DLGM_BUILD_TESTS=ON and run headless: QT_QPA_PLATFORM=offscreen ctest
+#include "app_shortcuts.h"
 #include "canvas.h"
 #include "normal_tree.h"
 #include "normal_tree/normal_tree_detail.h"
@@ -636,6 +637,16 @@ void testAnalysis() {
     }
 }
 
+void testShortcutDefaultsUnique() {
+    // Every action is an application shortcut, so two equal defaults make Qt fire neither.
+    QStringList seen;
+    for (const ShortcutDef& def : AppShortcuts::defs()) {
+        const QString keys = def.defaultSequence.toString();
+        CHECK(!seen.contains(keys));
+        seen.push_back(keys);
+    }
+}
+
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     GraphScene scene;
@@ -667,6 +678,7 @@ int main(int argc, char** argv) {
         {"document format", testDocumentFormat},
         {"examples round trip", testExamplesRoundTrip},
         {"analysis", testAnalysis},
+        {"shortcut defaults unique", testShortcutDefaultsUnique},
     };
     for (const auto& [name, test] : tests) {
         const int before = g_failures;

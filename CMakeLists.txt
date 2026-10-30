@@ -193,13 +193,14 @@ option(LGM_BUILD_TESTS "Build the canvas regression tests" OFF)
 if(LGM_BUILD_TESTS)
     get_target_property(_lgm_sources LGM SOURCES)
     list(FILTER _lgm_sources INCLUDE REGEX "^src/(canvas|model)/")
-    add_executable(lgm_canvas_tests tests/canvas_undo_test.cpp ${_lgm_sources})
+    add_executable(lgm_canvas_tests tests/canvas_undo_test.cpp src/ui/app_shortcuts.cpp ${_lgm_sources})
     target_link_libraries(lgm_canvas_tests PRIVATE Qt6::Widgets symengine Boost::multiprecision)
     target_include_directories(lgm_canvas_tests PRIVATE
         src
         src/canvas
         src/canvas/items
         src/model
+        src/ui
         ${symengine_SOURCE_DIR}
         ${CMAKE_BINARY_DIR}/_deps/symengine-build
     )
