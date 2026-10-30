@@ -1,0 +1,2 @@
+# .lgm files are stored byte-for-byte as the app saves them (LF), whatever core.autocrlf says.
+*.lgm text eol=lf
