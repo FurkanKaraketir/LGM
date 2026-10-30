@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_REPO = "FurkanKaraketir/LGM"
-DEFAULT_BRANCH = "main"
+DEFAULT_BRANCH = "master"
 
 # Source path (repo-relative) -> wiki page basename (no .md)
 SYNCED_PAGES: dict[str, str] = {
@@ -64,6 +64,8 @@ WIKI_LINK_TARGETS: dict[str, str] = {
     "../Examples/README.md": "Examples",
     "Examples/": "Examples",
     "../Examples/": "Examples",
+    "LinearGrpahModelingBasics.txt": "Linear-graph-basics",
+    "TwoPortsBasics.txt": "Two-ports-basics",
 }
 
 EXAMPLE_LGM = re.compile(r"^(?:\.\./)?Examples/([\w.-]+\.lgm)$")
@@ -87,8 +89,13 @@ def rewrite_link_target(target: str, repo: str, branch: str) -> str:
     if target.startswith(("http://", "https://", "mailto:")):
         return target
 
-    if target in WIKI_LINK_TARGETS:
-        return WIKI_LINK_TARGETS[target]
+    path, hash_, anchor = target.partition("#")
+    if path in WIKI_LINK_TARGETS:
+        return WIKI_LINK_TARGETS[path] + hash_ + anchor
+
+    # docs/*.md links into docs/publication/
+    if target.startswith("publication/"):
+        return blob_url(repo, branch, f"docs/{target}")
 
     if EXAMPLE_LGM.match(target):
         return blob_url(repo, branch, target)

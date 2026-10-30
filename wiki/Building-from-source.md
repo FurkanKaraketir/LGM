@@ -55,6 +55,16 @@ cmake --build build
 
 AppImage packaging: `scripts/package-linux.sh` (see [Releases](Releases)).
 
+## Tests
+
+```bash
+cmake --preset <your-preset> -DLGM_BUILD_TESTS=ON
+cmake --build build --target lgm_canvas_tests
+ctest --test-dir build --output-on-failure
+```
+
+On a headless machine set `QT_QPA_PLATFORM=offscreen`. CI runs these on Linux for every push and pull request. The example analysis output is also pinned by golden files: run `docs/publication/benchmarks/check.ps1` (PowerShell) after `LGM` is built.
+
 ## CLI mode
 
 After building, you can run headless analysis:
@@ -63,7 +73,7 @@ After building, you can run headless analysis:
 LGM --analyze path/to/model.lgm [output_var ...]
 ```
 
-Loads the graph, finds a normal tree, computes state space, and prints results to stdout. See [FAQ](FAQ).
+Loads the graph, takes the first (best-ranked) normal tree, computes state space, and prints `key=value` lines to stdout (`state=`, `state_eq=`, `output_eq=`, `output_matrix=`, …). See [FAQ](FAQ).
 
 ## Project layout
 

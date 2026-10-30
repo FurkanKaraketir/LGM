@@ -9,9 +9,9 @@ What the app computes for **Examples/Motor.lgm**: find a normal tree, derive sta
 ## Workflow in the app
 
 1. **File → Open** **Examples/Motor.lgm**
-2. **Analyze → Find Normal Tree** (`Ctrl+Shift+T`) — tree twigs highlight **green**, co-tree links **gray**
+2. **Analysis → Find All Normal Trees** (`Ctrl+Shift+T`) — tree twigs highlight **green**, co-tree links **gray**
 3. **Analyze → Output variables (C and D matrices)** — check **`T_J through`**, **`i_L through`**, **`T_B through`**
-4. **Analyze → Compute State Space** (`Ctrl+Shift+S`) — results appear in the **State Space** dock
+4. **Analyze → Compute State Space** (`Ctrl+Shift+E`) — results appear in the **State Space** dock
 
 Optional CLI verification (after building):
 
@@ -371,7 +371,7 @@ For this walkthrough, select the textbook motor outputs **`T_J`**, **`i_L`**, **
 
 ## Diagnostic log map
 
-Run **Analyze → Compute State Space** (or `Ctrl+Shift+S`) from a terminal, or set `QT_LOGGING_RULES=*.debug=true`. Tags are printed as `[state_space] <tag> - <detail>`. On all platforms, every log line is also mirrored to **stderr** via `app_log.cpp` — useful on Windows where the GUI has no console.
+Run **Analyze → Compute State Space** (or `Ctrl+Shift+E`) from a terminal, or set `QT_LOGGING_RULES=*.debug=true`. Tags are printed as `[state_space] <tag> - <detail>`. On all platforms, every log line is also mirrored to **stderr** via `app_log.cpp` — useful on Windows where the GUI has no console.
 
 | Log tag | Phase | Meaning |
 |---------|-------|---------|

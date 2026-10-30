@@ -11,6 +11,7 @@ Keep these in sync when bumping a release:
 | `CMakeLists.txt` → `project(LGM VERSION …)` | `0.2.0` |
 | `vcpkg.json` → `"version"` | `0.2.0` |
 | Git tag | `v0.2.0` |
+| `README.md` and `wiki/Home.md` → download link and "latest" version | `v0.2.0` |
 
 The app reads its version from CMake via the `LGM_VERSION` compile definition (shown in **Help → About**).
 
@@ -24,8 +25,8 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
 
 ## Cut a release
 
-1. Update version in `CMakeLists.txt` and `vcpkg.json`.
-2. Commit and push to `master` (the Build workflow must pass).
+1. Update the version in every location in the table above.
+2. Commit and push to `master` (the Build workflow must pass). Optionally run `docs/publication/benchmarks/check.ps1` first to confirm the example analysis output still matches the goldens.
 3. Tag and push:
 
    ```bash
@@ -33,7 +34,7 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
    git push origin v0.2.0
    ```
 
-4. The [Build workflow](../.github/workflows/build.yml) builds all platforms with Qt **6.11.0** (same as local dev). CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
+4. The [Build workflow](../.github/workflows/build.yml) builds and packages all platforms with Qt **6.11.0** (same as local dev); for a `v*` tag it then publishes the GitHub Release with generated notes and the five artifacts below. Every push to `master` and every pull request runs the same build (tests on Linux) and keeps the packages as workflow artifacts versioned `0.0.0-ci`. CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
 
 ## Local packaging
 

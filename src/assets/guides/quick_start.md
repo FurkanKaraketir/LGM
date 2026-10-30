@@ -12,7 +12,8 @@ Linear Graph Modeling is a CAD-style editor for drawing **linear graphs**: nodes
 | Move node | Drag selected node |
 | Add node | **Add Node** tool, click empty canvas |
 | Connect nodes | **Add Branch** tool: click source, then target |
-| Add two-port | **Add Two-Port** tool: click two attachment nodes |
+| Add two-port | **Add Two-Port** tool: click empty canvas (places four nodes and two port branches) |
+| Combine nodes | Select two nodes and press **M**, or drop one node onto another |
 | Delete selection | **Delete** or **Backspace** |
 | Undo / Redo | **Ctrl+Z** / **Ctrl+Y** |
 
@@ -27,7 +28,7 @@ Branches bow to the left of the directed edge (`from → to`). Multiple branches
 
 ## Analysis
 
-- **Find Normal Tree** — automatic tree selection and highlight (green tree twigs, gray co-tree links).
+- **Find All Normal Trees** (**Ctrl+Shift+T**) — automatic tree search; lists the best-ranked trees and highlights the first (green tree twigs, gray co-tree links).
 - **Select Normal Tree** — click branches to build a manual tree, then apply. Use **Save** in Analyze to name and store the current twig set for later comparison.
 - **Compute State Space** — derives state equations (`ẋ = Ax + Bu`) from a **valid** committed normal tree; check **output variables** first to also get `y = Cx + Du`. If the highlighted tree fails validation, the Analyze status shows the reason — see the Analysis documentation on GitHub for details.
 - **Export MATLAB® Script** — after a successful computation, save state-space matrices as a `.m` file for MATLAB®.
@@ -40,4 +41,4 @@ MATLAB and Simulink are registered trademarks of The MathWorks, Inc. See [mathwo
 
 ## Files
 
-Graphs are saved as `.lgm` JSON documents. Use **File → Open / Save** as usual.
+Graphs are saved as `.lgm` JSON documents. Use **File → Open / Save** as usual; sample graphs are under **File → Examples**.

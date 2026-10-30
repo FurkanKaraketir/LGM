@@ -2,7 +2,7 @@
 
 A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branches, and two-port elements on a snapping grid, then derive **normal trees** and **state-space equations** from the model. LGM targets coursework-style system dynamics (mechanical, electrical, fluid, thermal, and rotational domains) following the linear graph formulation used in MIT 2.151.
 
-![LGM electrical example](https://raw.githubusercontent.com/FurkanKaraketir/LGM/main/src/assets/screenshot_electrical_example.png)
+![LGM electrical example](https://raw.githubusercontent.com/FurkanKaraketir/LGM/master/src/assets/screenshot_electrical_example.png)
 
 ## Download
 
@@ -22,7 +22,7 @@ All builds are on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/relea
 2. [Canvas-editor](Canvas-editor) — tools, shortcuts, docks, `.lgm` files
 3. [Graph-model](Graph-model) — domains, A/T/D types, two-ports
 4. [Analysis](Analysis) — normal trees, state-space derivation, MATLAB® export
-5. [Examples](Examples) — sample motor, pump–accumulator, RLC, transformer cascade, and gyrator graphs
+5. [Examples](Examples) — sample motor, pump–accumulator, RLC, gyrator, transformer cascade, floating-source, and multiple-normal-tree graphs
 
 ## Theory
 
@@ -42,7 +42,7 @@ All builds are on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/relea
 - [Source repository](https://github.com/FurkanKaraketir/LGM)
 - [Issues](https://github.com/FurkanKaraketir/LGM/issues)
 - [Releases](https://github.com/FurkanKaraketir/LGM/releases)
-- [License (GPL v3)](https://github.com/FurkanKaraketir/LGM/blob/main/COPYING)
+- [License (GPL v3)](https://github.com/FurkanKaraketir/LGM/blob/master/COPYING)
 - [FAQ](FAQ)
 
 Background: Altun, Kerem; Balkan, R. Tuna; & Platin, Bülent (2002), *Extraction of state variable representations of dynamic systems employing linear graph theory* ([doi:10.13140/RG.2.2.29940.96647](https://doi.org/10.13140/RG.2.2.29940.96647)). Symbolic elimination: Geddes, Czapor & Labahn (1992), *Algorithms for Computer Algebra*, Ch. 9 §9.2 ([Springer](https://link.springer.com/book/10.1007/b102438)).

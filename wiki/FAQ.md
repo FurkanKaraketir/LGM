@@ -29,7 +29,7 @@ First configure needs network access to fetch SymEngine and JKQtPlotter via CMak
 | `ForcedCycle` | A cycle prevents a valid spanning tree |
 | `Incomplete` | Tree selection could not be completed |
 | `TwoPortConstraint` | Transformer/gyrator causality rules violated — see [Graph-model](Graph-model) and [Analysis](Analysis) |
-| `Unsupported` / `SymbolicError` / `GraphError` | State-space derivation could not finish — check branch types, constants, and domain |
+| `Unsupported` / `SymbolicError` / `GraphError` | State-space derivation could not finish — e.g. sources or chosen states are not independent, or an output is not determined by the graph; check branch types, constants, and domain (the message names the cause) |
 
 Full pipeline: [Analysis](Analysis).
 
@@ -40,7 +40,7 @@ LGM --analyze Examples/Motor.lgm
 LGM --analyze mymodel.lgm OmegaJ i_L
 ```
 
-Optional arguments after the `.lgm` path are output variable names. Exit code is non-zero on failure. Useful for scripting and quick checks without opening the GUI. Log output (including `[state_space]` tags) is mirrored to **stderr** when run from a terminal.
+Optional arguments after the `.lgm` path are output variable names. Exit code is `2` when the file cannot be read or parsed, `1` when no normal tree is found or the derivation fails, `0` on success. The printed `status=` is the numeric result code (`0` Ok, `1` NeedNormalTree, `2` Unsupported, `3` SymbolicError, `4` GraphError). Useful for scripting and quick checks without opening the GUI. Log output (including `[state_space]` tags) is mirrored to **stderr** when run from a terminal.
 
 ## Element constants like `I` or `M`
 

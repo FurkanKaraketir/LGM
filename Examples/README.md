@@ -1,6 +1,6 @@
 # Example graphs
 
-Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or drag into the app.
+Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open**, or pick one from **File → Examples** (the app ships a copy next to the executable).
 
 | File | Description |
 |------|-------------|
@@ -10,11 +10,11 @@ Sample `.lgm` files for Linear Graph Modeling. Open with **File → Open** or dr
 | [TransformerCascade.lgm](TransformerCascade.lgm) | Multi-section graph with cascaded transformers and mixed mechanical/electrical elements (higher complexity). |
 | [PumpAccumulator.lgm](PumpAccumulator.lgm) | Multi-domain pump–accumulator model: fluid, electrical, and mechanical sections with cascaded transformers; good stress test after Motor.lgm. |
 | [FloatingSource.lgm](FloatingSource.lgm) | Minimal electrical graph: floating voltage source `Vs1` between two non-ground nodes (`Va`, `Vb`) with `R` and `L` loads to ground. Exercises the floating-source compatibility heuristic. |
-| [MultiNormalTree.lgm](MultiNormalTree.lgm) | Grounded `Vs1` with `R1`/`R2`/`C` mesh yielding multiple valid normal trees; use **Find All Normal Trees** to compare `TreeScore` tie-breaking. |
+| [MultiNormalTree.lgm](MultiNormalTree.lgm) | Grounded `Vs1` with `R1`/`R2`/`C` mesh yielding multiple valid normal trees; use **Find All Normal Trees** to list the equally ranked trees (`TreeScore` ties). |
 
 ## Tips
 
-- After opening, run **Find Normal Tree**, optionally select **output variables** in Analyze, then **Compute State Space**.
+- After opening, run **Find All Normal Trees** (`Ctrl+Shift+T`), optionally select **output variables** in Analyze, then **Compute State Space**.
 - Cascaded multi-domain graphs (e.g. PumpAccumulator) benefit from **reference-node merge** and **saved normal trees** for comparing formulations.
 - Rename branches and edit constants in **Properties** before analysis.
 - Use **Domain** on the toolbar if variable labels do not match your intended energy domain.

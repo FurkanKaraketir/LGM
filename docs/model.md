@@ -35,7 +35,7 @@ Element constants (`R`, `L`, `J`, …) can **infer** type when the branch is sti
 
 **Plain identifiers** (`R`, `L`, `I`, `M`, `R_leak`, …) parse as SymEngine **symbols**, not built-in math constants — so `I` is inertia, not the imaginary unit, and names like `E` or `pi` are not silently reinterpreted (`parseElementConstant` in `constants.cpp`).
 
-Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr`, `elementalEquationText` in `naming.cpp` and `constants.cpp`).
+Elemental equations are built from `elemental_equation/` (`branchNodeAcrossExpr` in `symbols.cpp`, `elementalEquationText` in `constants.cpp`).
 
 ## Two-port elements
 
@@ -50,7 +50,7 @@ Each two-port has two port branches attached to graph nodes, a modulus constant,
 
 **Same-span conflict** in normal-tree scoring applies when **both port branches of a transformer** are in the tree alongside a parallel user branch on that span — gyrators are not penalized by this rule (`scoreTree` in `normal_tree/build.cpp`).
 
-See `TwoPortsBasics.txt` in the repo root for theory.
+See [TwoPortsBasics.txt](TwoPortsBasics.txt) for theory.
 
 ## Nodes
 
@@ -65,9 +65,10 @@ Nodes are junctions (reference nodes for each energy domain). Multiple branches 
 | `normal_tree.h` | Normal-tree result types and public API |
 | `normal_tree/` | `build` (search), `enumerate`, `normal_tree` (API glue) |
 | `state_space.h` | Result types (`matrixForm`, `outputMatrixForm`, …) and `computeStateSpace` entry |
-| `state_space/` | `state_space` (orchestrator), `constraints` (elementals, display equations), `states` (linear system and solve), `matrix` (A/B/E and C/D/F) |
+| `state_space/` | `state_space` (orchestrator), `context` (shared derivation state: states, elementals, outputs), `constraints` (elementals, display equations), `states` (linear system and solve), `matrix` (A/B/E and C/D/F) |
 | `state_space_graph.cpp` | Graph walks (cut-sets), output variable choices |
 | `state_space_sym.cpp` | SymEngine linear solve `solveLinearTargets` (Geddes et al., 1992, Ch. 9 §9.2) |
 | `state_space_latex.cpp` | LaTeX matrix form |
+| `state_space_matlab.cpp` | MATLAB® `.m` script export |
 
 Symbolic math uses [SymEngine](https://github.com/symengine/symengine) with Boost.Multiprecision integers.

@@ -115,7 +115,7 @@ In `src/canvas/items/geometry.cpp`:
 
 ## Tests
 
-`tests/canvas_undo_test.cpp` checks node/branch/two-port invariants, cascade and three-terminal merges, delete/undo of every example two-port and node, save/load round trips, and a seeded random edit/undo/redo fuzz:
+`tests/canvas_undo_test.cpp` checks node/branch/two-port invariants, cascade and three-terminal merges, delete/undo of every example two-port and node, save/load round trips, a seeded random edit/undo/redo fuzz, and an `analysis` case (state selection, dependent storage through transformers, manual-tree validation, and that **Find All Normal Trees** lists only best-ranked trees for every example), plus a check that no two default keyboard shortcuts collide. Headless: set `QT_QPA_PLATFORM=offscreen`.
 
 ```bash
 cmake --preset <your-preset> -DLGM_BUILD_TESTS=ON
