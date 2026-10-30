@@ -143,7 +143,7 @@ For Motor, no equal-weight swap produces another valid tree (e.g. swapping `i_R`
 
 ### Step 5 — Scoring and validation
 
-Each candidate is ranked by [`TreeScore::betterThan`](../src/model/normal_tree/build.cpp) (lower conflict count first, then more A-type and D-type in tree, fewer T-type in tree). Equal scores fall back to the twigs' serial ids, so the first tree never depends on memory layout. [`validateManualNormalTree`](../src/model/normal_tree/normal_tree.cpp) checks:
+Each candidate is ranked by [`TreeScore::betterThan`](../src/model/normal_tree/build.cpp) (lower conflict count first, then more A-type and D-type in tree, fewer T-type in tree). Equal scores fall back to the twigs' serial ids, so the first tree never depends on memory layout. Only trees that tie the best score are kept. [`validateManualNormalTree`](../src/model/normal_tree/normal_tree.cpp) checks:
 
 - All active A-type sources in tree (no cycle); no active T-type source in tree
 - Transformer: exactly one port in tree; gyrator: zero or both

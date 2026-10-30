@@ -109,6 +109,7 @@ function ENUMERATE_NORMAL_TREES(G):
                     T' <- (T \ {t}) ∪ {l}
                     enqueue T' if novel
     sort trees by TreeScore (best first)
+    drop trees whose TreeScore is worse than trees[0]
     return trees
 ```
 
@@ -118,7 +119,7 @@ function ENUMERATE_NORMAL_TREES(G):
 
 - **Bound:** `MAX = 200` trees per port assignment (ponytail: coursework-scale graphs only).
 - **Completeness:** scoped to the finite graph of **equal-weight swaps** on fundamental loops; not a claim about all spanning trees of \(G\).
-- **Use:** **Analyze → Find All Normal Trees** lists both rows in §1; user can compare state equations for alternate formulations.
+- **Use:** **Analyze → Find All Normal Trees** lists only the best-ranked trees (the preferred row in §1); alternatives appear only when their `TreeScore` ties the best, so the user compares equally valid formulations.
 
 [`TransformerCascade.lgm`](../../Examples/TransformerCascade.lgm) adds transformer port-assignment enumeration (\(2^3\) transformer choices before BFS swaps).
 

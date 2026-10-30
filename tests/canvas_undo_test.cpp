@@ -2,6 +2,7 @@
 // Build with -DLGM_BUILD_TESTS=ON and run headless: QT_QPA_PLATFORM=offscreen ctest
 #include "canvas.h"
 #include "normal_tree.h"
+#include "normal_tree/normal_tree_detail.h"
 #include "state_space.h"
 
 #include <QAbstractButton>
@@ -617,6 +618,22 @@ void testAnalysis() {
     CHECK(validate({"Vs1", "i_C5", "i_R2", "i_L7"}) == Status::Ok);
     CHECK(validate({"Vs1", "i_C5", "i_L7", "i_L3"}) != Status::Ok);
     CHECK(validate({"Vs1", "i_C5", "i_R2", "Is2"}) != Status::Ok);
+
+    // Find All lists only the best-ranked trees: every alternative ties the first one.
+    for (const char* example : {"Electrical.lgm", "FloatingSource.lgm", "Gyrator.lgm", "Motor.lgm",
+                                "MultiNormalTree.lgm", "PumpAccumulator.lgm",
+                                "TransformerCascade.lgm"}) {
+        QFile file(QStringLiteral(EXAMPLES_SOURCE_DIR "/") + QLatin1String(example));
+        CHECK(file.open(QIODevice::ReadOnly) && g_scene->documentFromJson(file.readAll()));
+        const std::vector<lg::NormalTreeResult> trees = g_scene->findAllNormalTrees().trees;
+        CHECK(!trees.empty());
+        const auto score = [](const lg::NormalTreeResult& tree) {
+            return lg::nt::scoreTree(tree.treeBranches, itemsOf<BranchItem>(), itemsOf<TwoPortItem>());
+        };
+        for (const lg::NormalTreeResult& tree : trees) {
+            CHECK(!score(trees.front()).betterThan(score(tree)));
+        }
+    }
 }
 
 int main(int argc, char** argv) {

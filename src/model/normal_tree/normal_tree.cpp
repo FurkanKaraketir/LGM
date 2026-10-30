@@ -96,6 +96,14 @@ NormalTreeEnumerationResult enumerateNormalTrees(const std::vector<NodeItem*>& n
                   }
                   return serialKey(left) < serialKey(right);
               });
+    // Only the best-ranked trees are offered; alternatives must tie the first one.
+    const TreeScore bestScore = scoreTree(collected.front(), branches, orderedTwoPorts);
+    collected.erase(std::remove_if(collected.begin(), collected.end(),
+                                   [&](const std::vector<BranchItem*>& tree) {
+                                       return bestScore.betterThan(
+                                           scoreTree(tree, branches, orderedTwoPorts));
+                                   }),
+                    collected.end());
 
     result.trees.reserve(collected.size());
     for (const std::vector<BranchItem*>& tree : collected) {

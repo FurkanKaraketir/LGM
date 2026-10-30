@@ -102,7 +102,7 @@ For the current tree, each co-tree **link** defines a fundamental loop with the 
 
 ## In the app
 
-- **Find All Normal Trees** (Analyze panel) — enumerates normal trees via Kruskal seed and equivalent-branch replacement.
+- **Find All Normal Trees** (Analyze panel) — enumerates normal trees via Kruskal seed and equivalent-branch replacement, then lists only the best-ranked ones. A tree with more A-type (or fewer T-type) twigs hides the worse alternatives; several trees are shown only when they rank equally.
 - **Select Manually** — pick tree twigs yourself; the app validates the selection. Twig sets can be **saved** and recalled for comparison. Same-span conflict scoring applies to **transformers** only (port branch + parallel user branch on the same span).
 
 State-space derivation for a chosen tree is covered in **Help → Guides → State-Space Derivation**.
