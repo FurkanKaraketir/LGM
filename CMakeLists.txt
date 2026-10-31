@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Qt 6.11's minimum; without it the app requires the build machine's macOS version.
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
+
 project(LGM VERSION 0.4.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)

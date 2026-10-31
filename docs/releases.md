@@ -20,8 +20,8 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
 | Platform | Installer (recommended) | Portable |
 |----------|-------------------------|----------|
 | Windows | `LGM-x.y.z-win64-setup.exe` (Inno Setup) | `LGM-x.y.z-win64-portable.zip` |
-| macOS (Apple Silicon) | `LGM-x.y.z-macos-arm64.dmg` (drag to Applications) | `LGM-x.y.z-macos-arm64-portable.zip` |
-| macOS (Intel) | `LGM-x.y.z-macos-x86_64.dmg` | `LGM-x.y.z-macos-x86_64-portable.zip` |
+| macOS 13+ (Apple Silicon) | `LGM-x.y.z-macos-arm64.dmg` (drag to Applications) | `LGM-x.y.z-macos-arm64-portable.zip` |
+| macOS 13+ (Intel) | `LGM-x.y.z-macos-x86_64.dmg` | `LGM-x.y.z-macos-x86_64-portable.zip` |
 | Linux | `LGM-x.y.z-linux-x86_64.AppImage` (chmod +x, run; glibc 2.35+) | — |
 
 ## Cut a release
