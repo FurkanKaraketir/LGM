@@ -145,8 +145,11 @@ if(WIN32)
 endif()
 
 if(APPLE AND LGM_MACOS_BUNDLE)
+    target_sources(LGM PRIVATE src/assets/app_logo.icns)
+    set_source_files_properties(src/assets/app_logo.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     set_target_properties(LGM PROPERTIES
         MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_ICON_FILE app_logo.icns
         MACOSX_BUNDLE_BUNDLE_NAME "LGM"
         MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.furkankaraketir.lgm"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"

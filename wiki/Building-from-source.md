@@ -31,7 +31,7 @@ cmake --build build
 
 ## macOS
 
-CI uses the `ci-macos` preset with `VCPKG_ROOT` set and vcpkg triplet `arm64-osx`. Install Qt 6.11 and vcpkg, then:
+CI uses the `ci-macos` preset with `VCPKG_ROOT` set and vcpkg triplet `arm64-osx` (Intel builds add `-DVCPKG_TARGET_TRIPLET=x64-osx`). Install Qt 6.11 and vcpkg, then:
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg

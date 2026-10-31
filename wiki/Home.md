@@ -11,8 +11,9 @@ A Qt6 desktop editor for **MIT-style linear graphs**: draw nodes, directed branc
 | Platform | Installer | Portable |
 |----------|-----------|----------|
 | Windows | `LGM-x.y.z-win64-setup.exe` | `LGM-x.y.z-win64-portable.zip` |
-| macOS | `LGM-x.y.z-macos.dmg` | `LGM-x.y.z-macos-portable.zip` |
-| Linux | `LGM-x.y.z-linux-x86_64.AppImage` | — |
+| macOS (Apple Silicon) | `LGM-x.y.z-macos-arm64.dmg` | `LGM-x.y.z-macos-arm64-portable.zip` |
+| macOS (Intel) | `LGM-x.y.z-macos-x86_64.dmg` | `LGM-x.y.z-macos-x86_64-portable.zip` |
+| Linux (glibc 2.35+: Ubuntu 22.04, Debian 12 or newer) | `LGM-x.y.z-linux-x86_64.AppImage` | — |
 
 All builds are on [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases). In-app: **Help → Check for Updates**.
 

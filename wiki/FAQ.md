@@ -6,13 +6,13 @@ Release builds are not code-signed yet. Click **More info** → **Run anyway**, 
 
 ## macOS: “cannot be opened” or quarantine
 
-Right-click the app → **Open**, or remove quarantine:
+Release builds are not notarized by Apple. Open the app once, then allow it in **System Settings → Privacy & Security → Open Anyway** (on macOS 14 and older, right-click the app → **Open**), or remove quarantine:
 
 ```bash
 xattr -cr /path/to/LGM.app
 ```
 
-Use the `.dmg` or portable zip from [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
+Use the `arm64` build on Apple Silicon and `x86_64` on Intel Macs, as `.dmg` or portable zip from [GitHub Releases](https://github.com/FurkanKaraketir/LGM/releases).
 
 ## Build: Qt or vcpkg not found
 

@@ -42,8 +42,18 @@ jobs:
             qt_prefix: macos
             preset: ci-macos
             extra_cmake: -DLGM_MACOS_BUNDLE=ON
+          # ponytail: last GitHub Intel image (macos-15-intel); drop this entry when it is retired
+          - name: macos-intel
+            os: macos-15-intel
+            qt_host: mac
+            qt_arch: clang_64
+            qt_tools: ""
+            qt_prefix: macos
+            preset: ci-macos
+            extra_cmake: -DLGM_MACOS_BUNDLE=ON -DVCPKG_TARGET_TRIPLET=x64-osx
           - name: linux
-            os: ubuntu-latest
+            # The AppImage needs the build host's glibc or newer: build on the oldest supported Ubuntu.
+            os: ubuntu-22.04
             qt_host: linux
             qt_arch: linux_gcc_64
             qt_tools: ""
@@ -83,7 +93,7 @@ jobs:
             libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0 \
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
             libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
-            libxcb-xinerama0 libxcb-xinput0 libxcb-xkb1 \
+            libxcb-xinerama0 libxcb-xinput0 libxcb-xkb1 ninja-build \
             libfontconfig1-dev libfreetype6-dev libdbus-1-dev \
             file wget fuse libfuse2
 
@@ -157,7 +167,7 @@ jobs:
           ./scripts/package-windows.ps1 -Version $env:PACKAGE_VERSION.TrimStart('v') -BuildDir build
 
       - name: Package
-        if: matrix.name == 'macos'
+        if: runner.os == 'macOS'
         run: |
           bash ./scripts/package-macos.sh "${PACKAGE_VERSION#v}" build
 
@@ -180,9 +190,9 @@ jobs:
         with:
           name: lgm-${{ matrix.name }}
           path: |
-            dist/LGM-*-macos.dmg
-            dist/LGM-*-macos-portable.zip
-        if: matrix.name == 'macos'
+            dist/LGM-*-macos-*.dmg
+            dist/LGM-*-macos-*-portable.zip
+        if: runner.os == 'macOS'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -210,6 +220,6 @@ jobs:
           files: |
             dist/**/LGM-*-win64-setup.exe
             dist/**/LGM-*-win64-portable.zip
-            dist/**/LGM-*-macos.dmg
-            dist/**/LGM-*-macos-portable.zip
+            dist/**/LGM-*-macos-*.dmg
+            dist/**/LGM-*-macos-*-portable.zip
             dist/**/LGM-*-linux-x86_64.AppImage

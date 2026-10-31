@@ -7,7 +7,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/$BUILD_DIR/LGM.app"
 DIST="$ROOT/dist"
 STAGING="$DIST/dmg-staging"
-DMG="$DIST/LGM-${VERSION}-macos.dmg"
+ARCH="$(uname -m)" # arm64 or x86_64; builds are native, not universal
+DMG="$DIST/LGM-${VERSION}-macos-${ARCH}.dmg"
 
 if [[ ! -d "$APP" ]]; then
   echo "LGM.app not found in $BUILD_DIR — build with -DLGM_MACOS_BUNDLE=ON first." >&2
@@ -62,7 +63,7 @@ rm -rf "$STAGING"
 echo "Created $DMG"
 
 # ponytail: optional zip for portable use without mounting a disk image
-ZIP="$DIST/LGM-${VERSION}-macos-portable.zip"
+ZIP="$DIST/LGM-${VERSION}-macos-${ARCH}-portable.zip"
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 echo "Created $ZIP"

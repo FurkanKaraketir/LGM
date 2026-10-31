@@ -20,8 +20,9 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
 | Platform | Installer (recommended) | Portable |
 |----------|-------------------------|----------|
 | Windows | `LGM-x.y.z-win64-setup.exe` (Inno Setup) | `LGM-x.y.z-win64-portable.zip` |
-| macOS | `LGM-x.y.z-macos.dmg` (drag to Applications) | `LGM-x.y.z-macos-portable.zip` |
-| Linux | `LGM-x.y.z-linux-x86_64.AppImage` (chmod +x, run) | — |
+| macOS (Apple Silicon) | `LGM-x.y.z-macos-arm64.dmg` (drag to Applications) | `LGM-x.y.z-macos-arm64-portable.zip` |
+| macOS (Intel) | `LGM-x.y.z-macos-x86_64.dmg` | `LGM-x.y.z-macos-x86_64-portable.zip` |
+| Linux | `LGM-x.y.z-linux-x86_64.AppImage` (chmod +x, run; glibc 2.35+) | — |
 
 ## Cut a release
 
@@ -34,7 +35,7 @@ The app reads its version from CMake via the `LGM_VERSION` compile definition (s
    git push origin v0.2.0
    ```
 
-4. The [Build workflow](../.github/workflows/build.yml) builds and packages all platforms with Qt **6.11.0** (same as local dev); for a `v*` tag it then publishes the GitHub Release with generated notes and the five artifacts below. Every push to `master` and every pull request runs the same build (tests on Linux) and keeps the packages as workflow artifacts versioned `0.0.0-ci`. CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
+4. The [Build workflow](../.github/workflows/build.yml) builds and packages all platforms with Qt **6.11.0** (same as local dev); for a `v*` tag it then publishes the GitHub Release with generated notes and the seven artifacts below. Every push to `master` and every pull request runs the same build (tests on Linux) and keeps the packages as workflow artifacts versioned `0.0.0-ci`. CI installs Qt via [aqt](https://github.com/miurahr/aqtinstall) from `master` because the released aqt 3.3.0 does not yet support Qt 6.11’s repository layout.
 
 ## Local packaging
 
